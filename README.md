@@ -3,16 +3,19 @@ pyModbusTCP
 
 A simple Modbus/TCP library for Python (beta release, use only for test).
 
-## Setup (for Linux):
+## Setup :
 
-1. clone repository
+You can install this package from:
 
-    pi@raspberrypi ~ $ git clone https://github.com/sourceperl/pyModbusTCP.git  
-    pi@raspberrypi ~ $ cd pyModbusTCP  
+PyPI, the easy way:
 
-2. launch install with sudo
+    sudo pip install pyModbusTCP  
 
-    pi@raspberrypi ~ $ sudo python setup.py install  
+GitHub:
+
+    git clone https://github.com/sourceperl/pyModbusTCP.git  
+    cd pyModbusTCP  
+    sudo python setup.py install  
 
 ## Usage example
 
