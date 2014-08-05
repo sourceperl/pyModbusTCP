@@ -200,12 +200,13 @@ class ModbusClient:
             return None
         # register extract
         rx_byte_count = struct.unpack("B", f_body[0:1])
-        # frame with regs value
+        # frame with bits value -> bits[] list
         f_bits = f_body[1:]
         bits = []
-        for f_byte in f_bits:
+        for f_byte in bytearray(f_bits):
             for pos in range(8):
-                bits.append(bool(ord(f_byte)>>pos&0x01))
+                bits.append(bool(f_byte>>pos&0x01))
+        # return only bit_nb bits
         return bits[:int(bit_nb)]
 
     def read_discrete_inputs(self, bit_addr, bit_nb):
@@ -340,7 +341,8 @@ class ModbusClient:
         # build frame
         bit_value = 0xFF if bit_value else 0x00
         tx_buffer = self._mbus_frame(const.WRITE_SINGLE_COIL,
-                                     struct.pack(">HB", bit_addr, bit_value))
+                                     struct.pack(">HBB",
+                                                 bit_addr, bit_value, 0))
         # send request
         s_send = self._send_mbus(tx_buffer)
         # check error
@@ -352,7 +354,8 @@ class ModbusClient:
         if not f_body:
             return None
         # register extract
-        (rx_bit_addr, rx_bit_value) = struct.unpack(">HB", f_body[:2])
+        (rx_bit_addr, rx_bit_value, rx_padding) = struct.unpack(">HBB",
+                                                                f_body[:4])
         # check bit write
         is_ok = (rx_bit_addr == bit_addr) and (rx_bit_value == bit_value)
         return True if is_ok else None
