@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # Python module: Client ModBus / TCP class 1
-#       Version: 0.0.1
+#       Version: 0.0.2
 #       Website: https://github.com/sourceperl/pyModbusTCP
 #          Date: 2014-08-04
 #       License: MIT (http://http://opensource.org/licenses/mit-license.php)
@@ -13,8 +13,7 @@
 # TODO
 #   - update the code to deal with IPv6
 #   - add Sphinx docstring
-#   - add exceptions
-#   - check Python3 support
+#   - add exception ?
 
 from pyModbusTCP import const
 import re
