@@ -8,7 +8,7 @@
 #   Description: Client ModBus / TCP
 #                Support functions 3 and 16 (class 0)
 #                1,2,4,5,6 (Class 1)
-#       Charset: us-ascii, unix end of line
+#       Charset: utf-8
 
 # TODO
 #   - update the code to deal with IPv6
@@ -24,10 +24,14 @@ import struct
 import random
 
 class ModbusClient:
-    """Client Modbus TCP"""
+    """
+    Client Modbus TCP
+    """
 
     def __init__(self):
-        """Constructor"""
+        """
+        Constructor
+        """
         # public
         self.HOST          = "localhost"       #
         self.PORT          = const.MODBUS_PORT #
@@ -76,7 +80,9 @@ class ModbusClient:
             return None
 
     def port(self, port=None):
-        """Get or set TCP port field"""
+        """
+        Get or set TCP port field
+        """
         if port is None:
             return self.PORT
         if (0 < int(port) < 65536):
@@ -95,7 +101,9 @@ class ModbusClient:
         return self.__debug
 
     def unit_id(self, unit_id=None):
-        """Get or set unit ID field"""
+        """
+        Get or set unit ID field
+        """
         if unit_id is None:
             return self.UNIT_ID
         if (0 <= int(unit_id) < 256):
@@ -105,7 +113,9 @@ class ModbusClient:
             return None
 
     def mode(self, mode=None):
-        """Get or set modbus mode (TCP or RTU)"""
+        """
+        Get or set modbus mode (TCP or RTU)
+        """
         if mode is None:
             return self.MODE
         if (mode == const.MODBUS_TCP or mode == const.MODBUS_RTU):
@@ -115,7 +125,9 @@ class ModbusClient:
             return None
 
     def open(self):
-        """Connect to modbus server"""
+        """
+        Connect to modbus server
+        """
         self.__debug_msg("call open()")
         # restart TCP if already open
         if self.is_open():
@@ -159,10 +171,10 @@ class ModbusClient:
 
     def read_coils(self, bit_addr, bit_nb):
         """
-         Modbus function READ_COILS (0x01).
-           read_coils(bit_addr, bit_number)
-           return a ref to result array
-                  or undef if error
+        Modbus function READ_COILS (0x01).
+          read_coils(bit_addr, bit_number)
+          return a ref to result array
+                 or undef if error
         """
         # check params
         if not (0 <= int(bit_addr) <= 65535):
@@ -188,7 +200,7 @@ class ModbusClient:
         if not f_body:
             return None
         # register extract
-        rx_byte_count = struct.unpack("B", f_body[0])
+        rx_byte_count = struct.unpack("B", f_body[0:1])
         # frame with regs value
         f_bits = f_body[1:]
         bits = []
@@ -199,10 +211,10 @@ class ModbusClient:
 
     def read_discrete_inputs(self, bit_addr, bit_nb):
         """
-         Modbus function READ_DISCRETE_INPUTS (0x02).
-           read_coils(bit_addr, bit_number)
-           return a ref to result array
-                  or undef if error
+        Modbus function READ_DISCRETE_INPUTS (0x02).
+          read_coils(bit_addr, bit_number)
+          return a ref to result array
+                 or undef if error
         """
         # check params
         if not (0 <= int(bit_addr) <= 65535):
@@ -228,7 +240,7 @@ class ModbusClient:
         if not f_body:
             return None
         # register extract
-        rx_byte_count = struct.unpack("B", f_body[0])
+        rx_byte_count = struct.unpack("B", f_body[0:1])
         # frame with regs value
         f_bits = f_body[1:]
         bits = []
@@ -268,7 +280,7 @@ class ModbusClient:
         if not f_body:
             return None
         # register extract
-        rx_reg_count = struct.unpack("B", f_body[0])
+        rx_reg_count = struct.unpack("B", f_body[0:1])
         # frame with regs value
         f_regs = f_body[1:]
         # split f_regs in 2 bytes blocs
@@ -307,7 +319,7 @@ class ModbusClient:
         if not f_body:
             return None
         # register extract
-        rx_reg_count = struct.unpack("B", f_body[0])
+        rx_reg_count = struct.unpack("B", f_body[0:1])
         # frame with regs value
         f_regs = f_body[1:]
         # split f_regs in 2 bytes blocs
@@ -329,7 +341,7 @@ class ModbusClient:
         # build frame
         bit_value = 0xFF if bit_value else 0x00
         tx_buffer = self._mbus_frame(const.WRITE_SINGLE_COIL,
-                                       struct.pack(">HB", bit_addr, bit_value))
+                                     struct.pack(">HB", bit_addr, bit_value))
         # send request
         s_send = self._send_mbus(tx_buffer)
         # check error
@@ -403,7 +415,7 @@ class ModbusClient:
             return None
         # build frame
         # format reg value string
-        regs_val_str = ""
+        regs_val_str = b""
         for reg in regs_value:
             # check current register value
             if not (0 <= int(reg) <= 65535):
@@ -469,10 +481,11 @@ class ModbusClient:
             return send_l
 
     def _recv(self, max_size):
-        """ Recv data over current socket.
-           _recv(max_size)
-           return the receive buffer
-                  or None if error
+        """ 
+        Recv data over current socket.
+          _recv(max_size)
+          return the receive buffer
+                 or None if error
         """
         # wait for read
         if not self._can_read():
@@ -544,7 +557,7 @@ class ModbusClient:
             if self.__debug:
                 self._pretty_dump('Rx', rx_frame)
             # body decode
-            rx_bd_fc = struct.unpack("B", rx_buffer[0])[0]
+            rx_bd_fc = struct.unpack("B", rx_buffer[0:1])[0]
             f_body = rx_buffer[1:]
         # modbus RTU receive
         elif self.MODE == const.MODBUS_RTU:
@@ -565,7 +578,7 @@ class ModbusClient:
         # check except
         if rx_bd_fc > 0x80:
             # except code
-            exp_code = struct.unpack("B", f_body[0])[0]
+            exp_code = struct.unpack("B", f_body[0:1])[0]
             self.__last_error  = const.MB_EXCEPT_ERR
             self.__last_except = exp_code
             self.__debug_msg("except (code"+str(exp_code)+")")
@@ -577,9 +590,9 @@ class ModbusClient:
 
     def _mbus_frame(self, fc, body):
         """
-         Build modbus frame.
-           _mbus_frame(function code, body)
-           return modbus frame
+        Build modbus frame.
+          _mbus_frame(function code, body)
+          return modbus frame
         """
         # build frame body
         f_body = struct.pack("B", fc) + body
@@ -603,7 +616,7 @@ class ModbusClient:
         Print modbus/TCP frame ("[header]body") or RTU ("body[CRC]")
         """
         # split data string items to a list of hex value
-        dump = ["%02X" % ord(c) for c in list(data)]
+        dump = ["%02X" % c for c in bytearray(data)]
         # format for TCP or RTU
         if self.MODE == const.MODBUS_TCP:
             if len(dump) > 6:
