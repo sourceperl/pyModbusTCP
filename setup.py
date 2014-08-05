@@ -10,5 +10,4 @@ setup(
     license = "MIT",
     url="https://github.com/sourceperl/pyModbusTCP",
     packages=["pyModbusTCP"],
-    package_dir={"pyModbusTCP": "pyModbusTCP"},
     )

@@ -1,0 +1,6 @@
+include README.md
+include setup.py
+include LICENSE
+
+recursive-include pyModbusTCP *.py
+recursive-include examples *.py
