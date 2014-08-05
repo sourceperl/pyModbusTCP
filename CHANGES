@@ -1,5 +1,10 @@
 Revision history for pyModbusTCP
 
+0.0.3 2014-08-05
+
+    - Fix padding problem in write_single_coil().
+    - Add new examples.
+
 0.0.2 2014-08-05
 
     - Compatibility with Python 3 and 2.7.
