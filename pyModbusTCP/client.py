@@ -583,7 +583,7 @@ class ModbusClient:
             exp_code = struct.unpack("B", f_body[0:1])[0]
             self.__last_error  = const.MB_EXCEPT_ERR
             self.__last_except = exp_code
-            self.__debug_msg("except (code"+str(exp_code)+")")
+            self.__debug_msg("except (code "+str(exp_code)+")")
             return None
         else:
             # return
