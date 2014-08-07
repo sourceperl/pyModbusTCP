@@ -1,5 +1,10 @@
 Revision history for pyModbusTCP
 
+0.0.4 2014-08-07
+
+    - Add class documentation (add doc/ and sphinx/ directory)
+    - Add sphinx docstring in client.py
+
 0.0.3 2014-08-05
 
     - Fix padding problem in write_single_coil().

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # Python module: Client ModBus / TCP class 1
-#       Version: 0.0.3
+#       Version: 0.0.4
 #       Website: https://github.com/sourceperl/pyModbusTCP
 #          Date: 2014-08-04
 #       License: MIT (http://http://opensource.org/licenses/mit-license.php)
