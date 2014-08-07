@@ -238,6 +238,12 @@ class ModbusClient:
         # check error
         if not f_body:
             return None
+        # check min frame body size
+        if len(f_body) < 2:
+            self.__last_error = const.MB_RECV_ERR
+            self.__debug_msg("read_coils(): rx frame under min size")
+            self.close()
+            return None
         # register extract
         rx_byte_count = struct.unpack("B", f_body[0:1])
         # frame with bits value -> bits[] list
@@ -282,6 +288,12 @@ class ModbusClient:
         # check error
         if not f_body:
             return None
+        # check min frame body size
+        if len(f_body) < 2:
+            self.__last_error = const.MB_RECV_ERR
+            self.__debug_msg("read_discrete_inputs(): rx frame under min size")
+            self.close()
+            return None
         # register extract
         rx_byte_count = struct.unpack("B", f_body[0:1])
         # frame with regs value
@@ -325,6 +337,13 @@ class ModbusClient:
         # check error
         if not f_body:
             return None
+        # check min frame body size
+        if len(f_body) < 2:
+            self.__last_error = const.MB_RECV_ERR
+            self.__debug_msg("read_holding_registers(): "+
+                             "rx frame under min size")
+            self.close()
+            return None
         # register extract
         rx_reg_count = struct.unpack("B", f_body[0:1])
         # frame with regs value
@@ -332,7 +351,7 @@ class ModbusClient:
         # split f_regs in 2 bytes blocs
         registers = [f_regs[i:i+2] for i in range(0, len(f_regs), 2)]
         registers = [struct.unpack(">H", i)[0] for i in registers]
-        return registers
+        return registers[:int(reg_nb)]
 
     def read_input_registers(self, reg_addr, reg_nb=1):
         """Modbus function READ_INPUT_REGISTERS (0x04)
@@ -367,6 +386,12 @@ class ModbusClient:
         # check error
         if not f_body:
             return None
+        # check min frame body size
+        if len(f_body) < 2:
+            self.__last_error = const.MB_RECV_ERR
+            self.__debug_msg("read_input_registers(): rx frame under min size")
+            self.close()
+            return None
         # register extract
         rx_reg_count = struct.unpack("B", f_body[0:1])
         # frame with regs value
@@ -374,7 +399,7 @@ class ModbusClient:
         # split f_regs in 2 bytes blocs
         registers = [f_regs[i:i+2] for i in range(0, len(f_regs), 2)]
         registers = [struct.unpack(">H", i)[0] for i in registers]
-        return registers
+        return registers[:int(reg_nb)]
 
     def write_single_coil(self, bit_addr, bit_value):
         """Modbus function WRITE_SINGLE_COIL (0x05)
@@ -404,6 +429,12 @@ class ModbusClient:
         f_body = self._recv_mbus()
         # check error
         if not f_body:
+            return None
+        # check fix frame size
+        if len(f_body) != 4:
+            self.__last_error = const.MB_RECV_ERR
+            self.__debug_msg("write_single_coil(): rx frame size error")
+            self.close()
             return None
         # register extract
         (rx_bit_addr, rx_bit_value, rx_padding) = struct.unpack(">HBB",
@@ -441,6 +472,12 @@ class ModbusClient:
         f_body = self._recv_mbus()
         # check error
         if not f_body:
+            return None
+        # check fix frame size
+        if len(f_body) != 4:
+            self.__last_error = const.MB_RECV_ERR
+            self.__debug_msg("write_single_register(): rx frame size error")
+            self.close()
             return None
         # register extract
         rx_reg_addr, rx_reg_value = struct.unpack(">HH", f_body)
@@ -497,6 +534,12 @@ class ModbusClient:
         f_body = self._recv_mbus()
         # check error
         if not f_body:
+            return None
+        # check fix frame size
+        if len(f_body) != 4:
+            self.__last_error = const.MB_RECV_ERR
+            self.__debug_msg("write_multiple_registers(): rx frame size error")
+            self.close()
             return None
         # register extract
         (rx_reg_addr, rx_reg_nb) = struct.unpack(">HH", f_body[:4])
@@ -652,13 +695,14 @@ class ModbusClient:
                 return None
             # body decode
             (rx_unit_id, rx_bd_fc) = struct.unpack("BB", rx_frame[:2])
-            f_body = rx_frame[2:]
             # check
             if not (rx_unit_id == self.__unit_id):
                 self.__last_error = const.MB_RECV_ERR
                 self.__debug_msg("unit ID mismatch error")
                 self.close()
                 return None
+            # format f_body: remove unit ID, function code and CRC 2 last bytes
+            f_body = rx_frame[2:-2]
         # check except
         if rx_bd_fc > 0x80:
             # except code
