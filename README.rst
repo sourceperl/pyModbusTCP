@@ -9,8 +9,8 @@ dependency.
 
 I test it under Python 2.7 and 3.2.
 
-Setup :
--------
+Setup
+-----
 
 You can install this package from:
 
@@ -58,3 +58,9 @@ Write value 44 and 55 to registers at modbus address 10 :
 
     if c.write_multiple_registers(10, [44,55]):
         print("write ok !")
+
+Documentation
+-------------
+
+Documentation available online at http://pythonhosted.org/pyModbusTCP and on
+doc/html/index.html in the archive.
