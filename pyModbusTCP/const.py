@@ -3,8 +3,6 @@
 VERSION                                     = "0.0.4"
 ## ModBus/TCP
 MODBUS_PORT                                 = 502
-## ModBus RTU
-FRAME_RTU_MAXSIZE                           = 512
 ## Modbus mode
 MODBUS_TCP                                  = 1
 MODBUS_RTU                                  = 2
@@ -37,3 +35,4 @@ MB_RECV_ERR                                 = 4
 MB_TIMEOUT_ERR                              = 5
 MB_FRAME_ERR                                = 6
 MB_EXCEPT_ERR                               = 7
+MB_CRC_ERR                                  = 8

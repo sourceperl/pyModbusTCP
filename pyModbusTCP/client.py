@@ -590,7 +590,7 @@ class ModbusClient:
         ## receive
         # modbus TCP receive
         if self.__mode == const.MODBUS_TCP:
-            # 7 bytes header
+            # 7 bytes header (mbap)
             rx_buffer = self._recv(7)
             # check recv
             if not (rx_buffer and len(rx_buffer) == 7):
@@ -613,7 +613,9 @@ class ModbusClient:
                 return None
             # end of frame
             rx_buffer = self._recv(rx_hd_length-1)
-            if not (rx_buffer and (len(rx_buffer) == rx_hd_length-1)):
+            if not (rx_buffer and
+                    (len(rx_buffer) == rx_hd_length-1) and
+                    (len(rx_buffer) >= 2)):
                 self.__last_error = const.MB_RECV_ERR
                 self.__debug_msg("_recv frame body error")
                 self.close()
@@ -627,20 +629,36 @@ class ModbusClient:
             f_body = rx_buffer[1:]
         # modbus RTU receive
         elif self.__mode == const.MODBUS_RTU:
-            rx_buffer = self._recv(const.FRAME_RTU_MAXSIZE)
+            # receive modbus RTU frame (max size is 256 bytes)
+            rx_buffer = self._recv(256)
+            # on _recv error
             if not rx_buffer:
                 return None
             rx_frame = rx_buffer
             # dump frame
             if self.__debug:
                 self._pretty_dump('Rx', rx_frame)
+            # RTU frame min size is 5 bytes
+            if len(rx_buffer) < 5:
+                self.__last_error = const.MB_RECV_ERR
+                self.__debug_msg("short frame error")
+                self.close()
+                return None
+            # check CRC
+            if not self._crc_is_ok(rx_frame):
+                self.__last_error = const.MB_CRC_ERR
+                self.__debug_msg("CRC error")
+                self.close()
+                return None
             # body decode
             (rx_unit_id, rx_bd_fc) = struct.unpack("BB", rx_frame[:2])
             f_body = rx_frame[2:]
             # check
             if not (rx_unit_id == self.__unit_id):
-              self.close()
-              return None
+                self.__last_error = const.MB_RECV_ERR
+                self.__debug_msg("unit ID mismatch error")
+                self.close()
+                return None
         # check except
         if rx_bd_fc > 0x80:
             # except code
@@ -719,8 +737,8 @@ class ModbusClient:
         :rtype: int
         """
         crc = 0xFFFF
-        for index, item in enumerate(frame):
-            next_byte = ord(item)
+        for index, item in enumerate(bytearray(frame)):
+            next_byte = item
             crc ^= next_byte
             for i in range(8):
                 lsb = crc & 1
