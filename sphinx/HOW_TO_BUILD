@@ -1,0 +1,6 @@
+- dirs:
+    source/   every files need to build documentation
+    doc/html/ target for HTML doc
+
+- generate HTML on documentation directory:
+    sphinx-build -b html ./source ../doc/html/

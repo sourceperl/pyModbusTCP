@@ -1,0 +1,493 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Class of pyModbusTCP.client &mdash; pyModbusTCP 0.0.3 documentation</title>
+    
+    <link rel="stylesheet" href="_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.0.3',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="pyModbusTCP 0.0.3 documentation" href="index.html" />
+    <link rel="prev" title="Welcome to pyModbusTCP’s documentation!" href="index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to pyModbusTCP’s documentation!"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">pyModbusTCP 0.0.3 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="module-pyModbusTCP.client">
+<span id="class-of-pymodbustcp-client"></span><h1>Class of pyModbusTCP.client<a class="headerlink" href="#module-pyModbusTCP.client" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="pymodbustcp-client-modbusclient">
+<h2>pyModbusTCP.client.ModbusClient<a class="headerlink" href="#pymodbustcp-client-modbusclient" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="pyModbusTCP.client.ModbusClient">
+<em class="property">class </em><tt class="descclassname">pyModbusTCP.client.</tt><tt class="descname">ModbusClient</tt><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient" title="Permalink to this definition">¶</a></dt>
+<dd><p>Client Modbus TCP</p>
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.__init__">
+<tt class="descname">__init__</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.__init__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Constructor</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">Object ModbusClient</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">ModbusClient</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.close">
+<tt class="descname">close</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.close"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.close" title="Permalink to this definition">¶</a></dt>
+<dd><p>Close TCP connection</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">close status (True for close/None if already close)</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">bool or None</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.debug">
+<tt class="descname">debug</tt><big>(</big><em>debug=None</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.debug"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.debug" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get or set debug mode</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>debug</strong> (<em>bool or None</em>) &#8211; debug state or None for get value</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">debug state or None if set fail</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">bool or None</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.host">
+<tt class="descname">host</tt><big>(</big><em>hostname=None</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.host"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.host" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get or set host (IPv4 or hostname like &#8216;plc.domain.net&#8217;)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>hostname</strong> (<em>str or None</em>) &#8211; hostname/IPv4 address or None for get value</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">hostname or None if set fail</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">str or None</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.is_open">
+<tt class="descname">is_open</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.is_open"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.is_open" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get status of TCP connection</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">status (True for open)</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">bool</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.last_error">
+<tt class="descname">last_error</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.last_error"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.last_error" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get last error code</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">last error code</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">int</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.last_except">
+<tt class="descname">last_except</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.last_except"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.last_except" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get last except code</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">last except code</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">int</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.mode">
+<tt class="descname">mode</tt><big>(</big><em>mode=None</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.mode"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.mode" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get or set modbus mode (TCP or RTU)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>mode</strong> (<em>int</em>) &#8211; mode (MODBUS_TCP/MODBUS_RTU) to set or None for get value</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">mode or None if set fail</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">int or None</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.open">
+<tt class="descname">open</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.open"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.open" title="Permalink to this definition">¶</a></dt>
+<dd><p>Connect to modbus server (open TCP connection)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">True if connect or None if error</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">bool or None if error</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.port">
+<tt class="descname">port</tt><big>(</big><em>port=None</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.port"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.port" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get or set TCP port</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>port</strong> (<em>int or None</em>) &#8211; TCP port number or None for get value</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">TCP port or None if set fail</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">int or None</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.read_coils">
+<tt class="descname">read_coils</tt><big>(</big><em>bit_addr</em>, <em>bit_nb=1</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.read_coils"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.read_coils" title="Permalink to this definition">¶</a></dt>
+<dd><p>Modbus function READ_COILS (0x01)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>bit_addr</strong> (<em>int</em>) &#8211; bit address (0 to 65535)</li>
+<li><strong>bit_nb</strong> (<em>int</em>) &#8211; number of bits to read (1 to 125)</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">bits list or None if error</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">list of bool or None</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.read_discrete_inputs">
+<tt class="descname">read_discrete_inputs</tt><big>(</big><em>bit_addr</em>, <em>bit_nb=1</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.read_discrete_inputs"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.read_discrete_inputs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Modbus function READ_DISCRETE_INPUTS (0x02)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>bit_addr</strong> (<em>int</em>) &#8211; bit address (0 to 65535)</li>
+<li><strong>bit_nb</strong> (<em>int</em>) &#8211; number of bits to read (1 to 125)</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">bits list or None if error</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">list of bool or None</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.read_holding_registers">
+<tt class="descname">read_holding_registers</tt><big>(</big><em>reg_addr</em>, <em>reg_nb=1</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.read_holding_registers"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.read_holding_registers" title="Permalink to this definition">¶</a></dt>
+<dd><p>Modbus function READ_HOLDING_REGISTERS (0x03)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>reg_addr</strong> (<em>int</em>) &#8211; register address (0 to 65535)</li>
+<li><strong>reg_nb</strong> (<em>int</em>) &#8211; number of registers to read (1 to 125)</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">registers list or None if fail</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">list of int or None</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.read_input_registers">
+<tt class="descname">read_input_registers</tt><big>(</big><em>reg_addr</em>, <em>reg_nb=1</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.read_input_registers"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.read_input_registers" title="Permalink to this definition">¶</a></dt>
+<dd><p>Modbus function READ_INPUT_REGISTERS (0x04)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>reg_addr</strong> (<em>int</em>) &#8211; register address (0 to 65535)</li>
+<li><strong>reg_nb</strong> (<em>int</em>) &#8211; number of registers to read (1 to 125)</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">registers list or None if fail</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">list of int or None</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.unit_id">
+<tt class="descname">unit_id</tt><big>(</big><em>unit_id=None</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.unit_id"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.unit_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get or set unit ID field</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>unit_id</strong> (<em>int or None</em>) &#8211; unit ID (0 to 255) or None for get value</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">unit ID or None if set fail</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">int or None</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.version">
+<tt class="descname">version</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.version"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.version" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get package version</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">Current version of the package (like &#8220;0.0.1&#8221;)</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">str</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.write_multiple_registers">
+<tt class="descname">write_multiple_registers</tt><big>(</big><em>reg_addr</em>, <em>regs_value</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.write_multiple_registers"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.write_multiple_registers" title="Permalink to this definition">¶</a></dt>
+<dd><p>Modbus function WRITE_MULTIPLE_REGISTERS (0x10)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>reg_addr</strong> (<em>int</em>) &#8211; registers address (0 to 65535)</li>
+<li><strong>reg_value</strong> (<em>list</em>) &#8211; registers value to write</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">True if write ok or None if fail</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">bool or None</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.write_single_coil">
+<tt class="descname">write_single_coil</tt><big>(</big><em>bit_addr</em>, <em>bit_value</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.write_single_coil"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.write_single_coil" title="Permalink to this definition">¶</a></dt>
+<dd><p>Modbus function WRITE_SINGLE_COIL (0x05)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>bit_addr</strong> (<em>int</em>) &#8211; bit address (0 to 65535)</li>
+<li><strong>bit_value</strong> (<em>bool</em>) &#8211; bit value to write</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">True if write ok or None if fail</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">bool or None</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.write_single_register">
+<tt class="descname">write_single_register</tt><big>(</big><em>reg_addr</em>, <em>reg_value</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.write_single_register"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.write_single_register" title="Permalink to this definition">¶</a></dt>
+<dd><p>Modbus function WRITE_SINGLE_REGISTER (0x06)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>reg_addr</strong> (<em>int</em>) &#8211; register address (0 to 65535)</li>
+<li><strong>reg_value</strong> (<em>int</em>) &#8211; register value to write</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">True if write ok or None if fail</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">bool or None</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Class of pyModbusTCP.client</a><ul>
+<li><a class="reference internal" href="#pymodbustcp-client-modbusclient">pyModbusTCP.client.ModbusClient</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">Welcome to pyModbusTCP&#8217;s documentation!</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/class_doc.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to pyModbusTCP’s documentation!"
+             >previous</a> |</li>
+        <li><a href="index.html">pyModbusTCP 0.0.3 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, Loic Lefebvre.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    </div>
+  </body>
+</html>
