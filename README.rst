@@ -7,7 +7,7 @@ test).
 pyModbusTCP is pure Python code without any extension or external module
 dependency.
 
-I test it under Python 2.7 and 3.2.
+I test it under Python 2.6, 2.7 and 3.2.
 
 Setup
 -----

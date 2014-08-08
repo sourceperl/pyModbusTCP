@@ -1,5 +1,9 @@
 Revision history for pyModbusTCP
 
+0.0.6 (in progress)
+
+    - Fix "socket error" message when call open() on dual stack IPv6/4 host.
+
 0.0.5 2014-08-08
 
     - Now deal with IPv6 host.

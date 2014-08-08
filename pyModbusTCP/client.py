@@ -18,9 +18,7 @@ import struct
 import random
 
 class ModbusClient:
-    """
-    Client Modbus TCP
-    """
+    """Client Modbus TCP"""
 
     def __init__(self):
         """Constructor
@@ -159,10 +157,9 @@ class ModbusClient:
     def open(self):
         """Connect to modbus server (open TCP connection)
 
-        :returns: True if connect or None if error
-        :rtype: bool or None if error
+        :returns: connect status (True if open)
+        :rtype: bool
         """
-        self.__debug_msg("call open()")
         # restart TCP if already open
         if self.is_open():
             self.close()
@@ -178,19 +175,21 @@ class ModbusClient:
                 self.__sock = socket.socket(af, socktype, proto)
             except socket.error:
                 self.__sock = None
-                self.__last_error = const.MB_CONNECT_ERR
-                self.__debug_msg("init socket error")
                 continue
             try:
                 self.__sock.connect(sa)
             except socket.error:
                 self.__sock.close()
                 self.__sock = None
-                self.__last_error = const.MB_CONNECT_ERR
-                self.__debug_msg("socket error")
                 continue
             break
-        return self.__sock is not None
+        # check connect status
+        if self.__sock is not None:
+            return True
+        else:
+            self.__last_error = const.MB_CONNECT_ERR
+            self.__debug_msg("connect error")
+            return False
 
     def is_open(self):
         """Get status of TCP connection
