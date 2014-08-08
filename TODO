@@ -1,2 +1,4 @@
 - add unit test scripts (check coverage on Py2.6/2.7/3) ?
 - add exception (function status good enough) ?
+- add a quick start doc.
+- add a sample for modbus RTU.

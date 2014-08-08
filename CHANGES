@@ -1,6 +1,6 @@
 Revision history for pyModbusTCP
 
-0.0.5 (in progress)
+0.0.5 2014-08-08
 
     - Now deal with IPv6 host.
     - Fix Python3 issue in _crc().
