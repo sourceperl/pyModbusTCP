@@ -10,10 +10,6 @@
 #                1,2,4,5,6 (Class 1)
 #       Charset: utf-8
 
-# TODO
-#   - update the code to deal with IPv6
-#   - add exception ?
-
 from pyModbusTCP import const
 import re
 import socket
@@ -34,7 +30,7 @@ class ModbusClient:
         """
         self.__hostname    = "localhost"
         self.__port        = const.MODBUS_PORT
-        self.__unit_id     = 1                 #
+        self.__unit_id     = 1
         self.__mode        = const.MODBUS_TCP  # default is Modbus/TCP
         self.__sock        = None              # socket handle
         self.__timeout     = 30                # socket timeout
@@ -47,7 +43,7 @@ class ModbusClient:
     def version(self):
         """Get package version
 
-        :return: Current version of the package (like "0.0.1")
+        :return: current version of the package (like "0.0.1")
         :rtype: str
         """
         return self.__version
@@ -69,19 +65,31 @@ class ModbusClient:
         return self.__last_except
 
     def host(self, hostname=None):
-        """Get or set host (IPv4 or hostname like 'plc.domain.net')
+        """Get or set host (IPv4/IPv6 or hostname like 'plc.domain.net')
 
-        :param hostname: hostname/IPv4 address or None for get value
+        :param hostname: hostname or IPv4/IPv6 address or None for get value
         :type hostname: str or None
         :returns: hostname or None if set fail
         :rtype: str or None
         """
-        # return last hostname if no arg
         if hostname is None:
             return self.__hostname
-        # if host is IPv4 address or valid URL
-        if (re.match("^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", hostname) or
-           (re.match("^[a-z][a-z0-9\.\-]+$", hostname))):
+        # IPv4 ?
+        try:
+            socket.inet_pton(socket.AF_INET, hostname)
+            self.__hostname = hostname
+            return self.__hostname
+        except socket.error:
+            pass
+        # IPv6 ?
+        try:
+            socket.inet_pton(socket.AF_INET6, hostname)
+            self.__hostname = hostname
+            return self.__hostname
+        except socket.error:
+            pass
+        # hostname ?
+        if re.match("^[a-z][a-z0-9\.\-]+$", hostname):
             self.__hostname = hostname
             return self.__hostname
         else:
@@ -103,17 +111,17 @@ class ModbusClient:
         else:
             return None
 
-    def debug(self, debug=None):
+    def debug(self, state=None):
         """Get or set debug mode
 
-        :param debug: debug state or None for get value
-        :type debug: bool or None
+        :param state: debug state or None for get value
+        :type state: bool or None
         :returns: debug state or None if set fail
         :rtype: bool or None
         """
-        if debug is None:
+        if state is None:
             return self.__debug
-        self.__debug = bool(debug)
+        self.__debug = bool(state)
         return self.__debug
 
     def unit_id(self, unit_id=None):
@@ -160,11 +168,11 @@ class ModbusClient:
             self.close()
         # init socket and connect
         # list available sockets on the target host/port
-        # set AF_xxx : AF_INET -> IPv4, AF_INET6 -> IPv6,
-        #              AF_UNSPEC -> IPv6 (priority on some system) or 4
-        # now just accept IPv4: fix this
+        # AF_xxx : AF_INET -> IPv4, AF_INET6 -> IPv6,
+        #          AF_UNSPEC -> IPv6 (priority on some system) or 4
+        # list available socket on target host
         for res in socket.getaddrinfo(self.__hostname, self.__port,
-                                      socket.AF_INET, socket.SOCK_STREAM):
+                                      socket.AF_UNSPEC, socket.SOCK_STREAM):
             af, socktype, proto, canonname, sa = res
             try:
                 self.__sock = socket.socket(af, socktype, proto)

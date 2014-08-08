@@ -59,10 +59,6 @@
 <span class="c">#                1,2,4,5,6 (Class 1)</span>
 <span class="c">#       Charset: utf-8</span>
 
-<span class="c"># TODO</span>
-<span class="c">#   - update the code to deal with IPv6</span>
-<span class="c">#   - add exception ?</span>
-
 <span class="kn">from</span> <span class="nn">pyModbusTCP</span> <span class="kn">import</span> <span class="n">const</span>
 <span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">import</span> <span class="nn">socket</span>
@@ -83,7 +79,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__hostname</span>    <span class="o">=</span> <span class="s">&quot;localhost&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__port</span>        <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MODBUS_PORT</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__unit_id</span>     <span class="o">=</span> <span class="mi">1</span>                 <span class="c">#</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__unit_id</span>     <span class="o">=</span> <span class="mi">1</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__mode</span>        <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MODBUS_TCP</span>  <span class="c"># default is Modbus/TCP</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span>        <span class="o">=</span> <span class="bp">None</span>              <span class="c"># socket handle</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__timeout</span>     <span class="o">=</span> <span class="mi">30</span>                <span class="c"># socket timeout</span>
@@ -96,7 +92,7 @@
 <div class="viewcode-block" id="ModbusClient.version"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.version">[docs]</a>    <span class="k">def</span> <span class="nf">version</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get package version</span>
 
-<span class="sd">        :return: Current version of the package (like &quot;0.0.1&quot;)</span>
+<span class="sd">        :return: current version of the package (like &quot;0.0.1&quot;)</span>
 <span class="sd">        :rtype: str</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__version</span>
@@ -118,19 +114,31 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__last_except</span>
 </div>
 <div class="viewcode-block" id="ModbusClient.host"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.host">[docs]</a>    <span class="k">def</span> <span class="nf">host</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hostname</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Get or set host (IPv4 or hostname like &#39;plc.domain.net&#39;)</span>
+        <span class="sd">&quot;&quot;&quot;Get or set host (IPv4/IPv6 or hostname like &#39;plc.domain.net&#39;)</span>
 
-<span class="sd">        :param hostname: hostname/IPv4 address or None for get value</span>
+<span class="sd">        :param hostname: hostname or IPv4/IPv6 address or None for get value</span>
 <span class="sd">        :type hostname: str or None</span>
 <span class="sd">        :returns: hostname or None if set fail</span>
 <span class="sd">        :rtype: str or None</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c"># return last hostname if no arg</span>
         <span class="k">if</span> <span class="n">hostname</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__hostname</span>
-        <span class="c"># if host is IPv4 address or valid URL</span>
-        <span class="k">if</span> <span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="s">&quot;^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$&quot;</span><span class="p">,</span> <span class="n">hostname</span><span class="p">)</span> <span class="ow">or</span>
-           <span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="s">&quot;^[a-z][a-z0-9\.\-]+$&quot;</span><span class="p">,</span> <span class="n">hostname</span><span class="p">))):</span>
+        <span class="c"># IPv4 ?</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">socket</span><span class="o">.</span><span class="n">inet_pton</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">hostname</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__hostname</span> <span class="o">=</span> <span class="n">hostname</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__hostname</span>
+        <span class="k">except</span> <span class="n">socket</span><span class="o">.</span><span class="n">error</span><span class="p">:</span>
+            <span class="k">pass</span>
+        <span class="c"># IPv6 ?</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">socket</span><span class="o">.</span><span class="n">inet_pton</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET6</span><span class="p">,</span> <span class="n">hostname</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__hostname</span> <span class="o">=</span> <span class="n">hostname</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__hostname</span>
+        <span class="k">except</span> <span class="n">socket</span><span class="o">.</span><span class="n">error</span><span class="p">:</span>
+            <span class="k">pass</span>
+        <span class="c"># hostname ?</span>
+        <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="s">&quot;^[a-z][a-z0-9\.\-]+$&quot;</span><span class="p">,</span> <span class="n">hostname</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__hostname</span> <span class="o">=</span> <span class="n">hostname</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__hostname</span>
         <span class="k">else</span><span class="p">:</span>
@@ -152,17 +160,17 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">None</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.debug"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.debug">[docs]</a>    <span class="k">def</span> <span class="nf">debug</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.debug"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.debug">[docs]</a>    <span class="k">def</span> <span class="nf">debug</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get or set debug mode</span>
 
-<span class="sd">        :param debug: debug state or None for get value</span>
-<span class="sd">        :type debug: bool or None</span>
+<span class="sd">        :param state: debug state or None for get value</span>
+<span class="sd">        :type state: bool or None</span>
 <span class="sd">        :returns: debug state or None if set fail</span>
 <span class="sd">        :rtype: bool or None</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">debug</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">state</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__debug</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__debug</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">debug</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__debug</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__debug</span>
 </div>
 <div class="viewcode-block" id="ModbusClient.unit_id"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.unit_id">[docs]</a>    <span class="k">def</span> <span class="nf">unit_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">unit_id</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
@@ -209,11 +217,11 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
         <span class="c"># init socket and connect</span>
         <span class="c"># list available sockets on the target host/port</span>
-        <span class="c"># set AF_xxx : AF_INET -&gt; IPv4, AF_INET6 -&gt; IPv6,</span>
-        <span class="c">#              AF_UNSPEC -&gt; IPv6 (priority on some system) or 4</span>
-        <span class="c"># now just accept IPv4: fix this</span>
+        <span class="c"># AF_xxx : AF_INET -&gt; IPv4, AF_INET6 -&gt; IPv6,</span>
+        <span class="c">#          AF_UNSPEC -&gt; IPv6 (priority on some system) or 4</span>
+        <span class="c"># list available socket on target host</span>
         <span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">socket</span><span class="o">.</span><span class="n">getaddrinfo</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__hostname</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">__port</span><span class="p">,</span>
-                                      <span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span><span class="p">):</span>
+                                      <span class="n">socket</span><span class="o">.</span><span class="n">AF_UNSPEC</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_STREAM</span><span class="p">):</span>
             <span class="n">af</span><span class="p">,</span> <span class="n">socktype</span><span class="p">,</span> <span class="n">proto</span><span class="p">,</span> <span class="n">canonname</span><span class="p">,</span> <span class="n">sa</span> <span class="o">=</span> <span class="n">res</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">af</span><span class="p">,</span> <span class="n">socktype</span><span class="p">,</span> <span class="n">proto</span><span class="p">)</span>
@@ -287,6 +295,12 @@
         <span class="c"># check error</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">f_body</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">None</span>
+        <span class="c"># check min frame body size</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">f_body</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_RECV_ERR</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;read_coils(): rx frame under min size&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">return</span> <span class="bp">None</span>
         <span class="c"># register extract</span>
         <span class="n">rx_byte_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])</span>
         <span class="c"># frame with bits value -&gt; bits[] list</span>
@@ -331,6 +345,12 @@
         <span class="c"># check error</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">f_body</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">None</span>
+        <span class="c"># check min frame body size</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">f_body</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_RECV_ERR</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;read_discrete_inputs(): rx frame under min size&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">return</span> <span class="bp">None</span>
         <span class="c"># register extract</span>
         <span class="n">rx_byte_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])</span>
         <span class="c"># frame with regs value</span>
@@ -374,6 +394,13 @@
         <span class="c"># check error</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">f_body</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">None</span>
+        <span class="c"># check min frame body size</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">f_body</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_RECV_ERR</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;read_holding_registers(): &quot;</span><span class="o">+</span>
+                             <span class="s">&quot;rx frame under min size&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">return</span> <span class="bp">None</span>
         <span class="c"># register extract</span>
         <span class="n">rx_reg_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])</span>
         <span class="c"># frame with regs value</span>
@@ -381,7 +408,7 @@
         <span class="c"># split f_regs in 2 bytes blocs</span>
         <span class="n">registers</span> <span class="o">=</span> <span class="p">[</span><span class="n">f_regs</span><span class="p">[</span><span class="n">i</span><span class="p">:</span><span class="n">i</span><span class="o">+</span><span class="mi">2</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">f_regs</span><span class="p">),</span> <span class="mi">2</span><span class="p">)]</span>
         <span class="n">registers</span> <span class="o">=</span> <span class="p">[</span><span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;&gt;H&quot;</span><span class="p">,</span> <span class="n">i</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">registers</span><span class="p">]</span>
-        <span class="k">return</span> <span class="n">registers</span>
+        <span class="k">return</span> <span class="n">registers</span><span class="p">[:</span><span class="nb">int</span><span class="p">(</span><span class="n">reg_nb</span><span class="p">)]</span>
 </div>
 <div class="viewcode-block" id="ModbusClient.read_input_registers"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.read_input_registers">[docs]</a>    <span class="k">def</span> <span class="nf">read_input_registers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reg_addr</span><span class="p">,</span> <span class="n">reg_nb</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Modbus function READ_INPUT_REGISTERS (0x04)</span>
@@ -416,6 +443,12 @@
         <span class="c"># check error</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">f_body</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">None</span>
+        <span class="c"># check min frame body size</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">f_body</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_RECV_ERR</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;read_input_registers(): rx frame under min size&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">return</span> <span class="bp">None</span>
         <span class="c"># register extract</span>
         <span class="n">rx_reg_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])</span>
         <span class="c"># frame with regs value</span>
@@ -423,7 +456,7 @@
         <span class="c"># split f_regs in 2 bytes blocs</span>
         <span class="n">registers</span> <span class="o">=</span> <span class="p">[</span><span class="n">f_regs</span><span class="p">[</span><span class="n">i</span><span class="p">:</span><span class="n">i</span><span class="o">+</span><span class="mi">2</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">f_regs</span><span class="p">),</span> <span class="mi">2</span><span class="p">)]</span>
         <span class="n">registers</span> <span class="o">=</span> <span class="p">[</span><span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;&gt;H&quot;</span><span class="p">,</span> <span class="n">i</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">registers</span><span class="p">]</span>
-        <span class="k">return</span> <span class="n">registers</span>
+        <span class="k">return</span> <span class="n">registers</span><span class="p">[:</span><span class="nb">int</span><span class="p">(</span><span class="n">reg_nb</span><span class="p">)]</span>
 </div>
 <div class="viewcode-block" id="ModbusClient.write_single_coil"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.write_single_coil">[docs]</a>    <span class="k">def</span> <span class="nf">write_single_coil</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bit_addr</span><span class="p">,</span> <span class="n">bit_value</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Modbus function WRITE_SINGLE_COIL (0x05)</span>
@@ -453,6 +486,12 @@
         <span class="n">f_body</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv_mbus</span><span class="p">()</span>
         <span class="c"># check error</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">f_body</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">None</span>
+        <span class="c"># check fix frame size</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">f_body</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_RECV_ERR</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;write_single_coil(): rx frame size error&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">return</span> <span class="bp">None</span>
         <span class="c"># register extract</span>
         <span class="p">(</span><span class="n">rx_bit_addr</span><span class="p">,</span> <span class="n">rx_bit_value</span><span class="p">,</span> <span class="n">rx_padding</span><span class="p">)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;&gt;HBB&quot;</span><span class="p">,</span>
@@ -490,6 +529,12 @@
         <span class="n">f_body</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv_mbus</span><span class="p">()</span>
         <span class="c"># check error</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">f_body</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">None</span>
+        <span class="c"># check fix frame size</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">f_body</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_RECV_ERR</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;write_single_register(): rx frame size error&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">return</span> <span class="bp">None</span>
         <span class="c"># register extract</span>
         <span class="n">rx_reg_addr</span><span class="p">,</span> <span class="n">rx_reg_value</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;&gt;HH&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">)</span>
@@ -546,6 +591,12 @@
         <span class="n">f_body</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv_mbus</span><span class="p">()</span>
         <span class="c"># check error</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">f_body</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">None</span>
+        <span class="c"># check fix frame size</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">f_body</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_RECV_ERR</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;write_multiple_registers(): rx frame size error&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">return</span> <span class="bp">None</span>
         <span class="c"># register extract</span>
         <span class="p">(</span><span class="n">rx_reg_addr</span><span class="p">,</span> <span class="n">rx_reg_nb</span><span class="p">)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;&gt;HH&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[:</span><span class="mi">4</span><span class="p">])</span>
@@ -639,7 +690,7 @@
         <span class="c">## receive</span>
         <span class="c"># modbus TCP receive</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__mode</span> <span class="o">==</span> <span class="n">const</span><span class="o">.</span><span class="n">MODBUS_TCP</span><span class="p">:</span>
-            <span class="c"># 7 bytes header</span>
+            <span class="c"># 7 bytes header (mbap)</span>
             <span class="n">rx_buffer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv</span><span class="p">(</span><span class="mi">7</span><span class="p">)</span>
             <span class="c"># check recv</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">rx_buffer</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">rx_buffer</span><span class="p">)</span> <span class="o">==</span> <span class="mi">7</span><span class="p">):</span>
@@ -662,7 +713,9 @@
                 <span class="k">return</span> <span class="bp">None</span>
             <span class="c"># end of frame</span>
             <span class="n">rx_buffer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv</span><span class="p">(</span><span class="n">rx_hd_length</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">rx_buffer</span> <span class="ow">and</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">rx_buffer</span><span class="p">)</span> <span class="o">==</span> <span class="n">rx_hd_length</span><span class="o">-</span><span class="mi">1</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">rx_buffer</span> <span class="ow">and</span>
+                    <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">rx_buffer</span><span class="p">)</span> <span class="o">==</span> <span class="n">rx_hd_length</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="ow">and</span>
+                    <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">rx_buffer</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">)):</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_RECV_ERR</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;_recv frame body error&quot;</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
@@ -676,20 +729,37 @@
             <span class="n">f_body</span> <span class="o">=</span> <span class="n">rx_buffer</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
         <span class="c"># modbus RTU receive</span>
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">__mode</span> <span class="o">==</span> <span class="n">const</span><span class="o">.</span><span class="n">MODBUS_RTU</span><span class="p">:</span>
-            <span class="n">rx_buffer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv</span><span class="p">(</span><span class="n">const</span><span class="o">.</span><span class="n">FRAME_RTU_MAXSIZE</span><span class="p">)</span>
+            <span class="c"># receive modbus RTU frame (max size is 256 bytes)</span>
+            <span class="n">rx_buffer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv</span><span class="p">(</span><span class="mi">256</span><span class="p">)</span>
+            <span class="c"># on _recv error</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">rx_buffer</span><span class="p">:</span>
                 <span class="k">return</span> <span class="bp">None</span>
             <span class="n">rx_frame</span> <span class="o">=</span> <span class="n">rx_buffer</span>
             <span class="c"># dump frame</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__debug</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_pretty_dump</span><span class="p">(</span><span class="s">&#39;Rx&#39;</span><span class="p">,</span> <span class="n">rx_frame</span><span class="p">)</span>
+            <span class="c"># RTU frame min size is 5 bytes</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">rx_buffer</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">5</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_RECV_ERR</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;short frame error&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+                <span class="k">return</span> <span class="bp">None</span>
+            <span class="c"># check CRC</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_crc_is_ok</span><span class="p">(</span><span class="n">rx_frame</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_CRC_ERR</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;CRC error&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+                <span class="k">return</span> <span class="bp">None</span>
             <span class="c"># body decode</span>
             <span class="p">(</span><span class="n">rx_unit_id</span><span class="p">,</span> <span class="n">rx_bd_fc</span><span class="p">)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;BB&quot;</span><span class="p">,</span> <span class="n">rx_frame</span><span class="p">[:</span><span class="mi">2</span><span class="p">])</span>
-            <span class="n">f_body</span> <span class="o">=</span> <span class="n">rx_frame</span><span class="p">[</span><span class="mi">2</span><span class="p">:]</span>
             <span class="c"># check</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">rx_unit_id</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">__unit_id</span><span class="p">):</span>
-              <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
-              <span class="k">return</span> <span class="bp">None</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_RECV_ERR</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;unit ID mismatch error&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+                <span class="k">return</span> <span class="bp">None</span>
+            <span class="c"># format f_body: remove unit ID, function code and CRC 2 last bytes</span>
+            <span class="n">f_body</span> <span class="o">=</span> <span class="n">rx_frame</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>
         <span class="c"># check except</span>
         <span class="k">if</span> <span class="n">rx_bd_fc</span> <span class="o">&gt;</span> <span class="mh">0x80</span><span class="p">:</span>
             <span class="c"># except code</span>
@@ -768,8 +838,8 @@
 <span class="sd">        :rtype: int</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">crc</span> <span class="o">=</span> <span class="mh">0xFFFF</span>
-        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">frame</span><span class="p">):</span>
-            <span class="n">next_byte</span> <span class="o">=</span> <span class="nb">ord</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">bytearray</span><span class="p">(</span><span class="n">frame</span><span class="p">)):</span>
+            <span class="n">next_byte</span> <span class="o">=</span> <span class="n">item</span>
             <span class="n">crc</span> <span class="o">^=</span> <span class="n">next_byte</span>
             <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">8</span><span class="p">):</span>
                 <span class="n">lsb</span> <span class="o">=</span> <span class="n">crc</span> <span class="o">&amp;</span> <span class="mi">1</span>
