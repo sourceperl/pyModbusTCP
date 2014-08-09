@@ -251,7 +251,7 @@ class ModbusClient:
             self.__debug_msg("read_coils(): rx frame under min size")
             self.close()
             return None
-        # register extract
+        # extract field "byte count"
         rx_byte_count = struct.unpack("B", f_body[0:1])
         # frame with bits value -> bits[] list
         f_bits = f_body[1:]
@@ -301,14 +301,15 @@ class ModbusClient:
             self.__debug_msg("read_discrete_inputs(): rx frame under min size")
             self.close()
             return None
-        # register extract
+        # extract field "byte count"
         rx_byte_count = struct.unpack("B", f_body[0:1])
-        # frame with regs value
+        # frame with bits value -> bits[] list
         f_bits = f_body[1:]
         bits = []
         for f_byte in f_bits:
             for pos in range(8):
                 bits.append(bool(ord(f_byte)>>pos&0x01))
+        # return only bit_nb bits
         return bits[:int(bit_nb)]
 
     def read_holding_registers(self, reg_addr, reg_nb=1):
@@ -351,13 +352,14 @@ class ModbusClient:
                              "rx frame under min size")
             self.close()
             return None
-        # register extract
-        rx_reg_count = struct.unpack("B", f_body[0:1])
+        # extract field "byte count"
+        rx_byte_count = struct.unpack("B", f_body[0:1])
         # frame with regs value
         f_regs = f_body[1:]
         # split f_regs in 2 bytes blocs
         registers = [f_regs[i:i+2] for i in range(0, len(f_regs), 2)]
         registers = [struct.unpack(">H", i)[0] for i in registers]
+        # return only reg_nb registers
         return registers[:int(reg_nb)]
 
     def read_input_registers(self, reg_addr, reg_nb=1):
@@ -399,13 +401,14 @@ class ModbusClient:
             self.__debug_msg("read_input_registers(): rx frame under min size")
             self.close()
             return None
-        # register extract
-        rx_reg_count = struct.unpack("B", f_body[0:1])
+        # extract field "byte count"
+        rx_byte_count = struct.unpack("B", f_body[0:1])
         # frame with regs value
         f_regs = f_body[1:]
         # split f_regs in 2 bytes blocs
         registers = [f_regs[i:i+2] for i in range(0, len(f_regs), 2)]
         registers = [struct.unpack(">H", i)[0] for i in registers]
+        # return only reg_nb registers
         return registers[:int(reg_nb)]
 
     def write_single_coil(self, bit_addr, bit_value):
