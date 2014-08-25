@@ -69,4 +69,4 @@ Documentation
 -------------
 
 Documentation available online at http://pythonhosted.org/pyModbusTCP and on
-doc/html/index.html in the archive.
+doc/html/index.html.

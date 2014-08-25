@@ -4,5 +4,3 @@ include CHANGES
 include LICENSE
 
 recursive-include pyModbusTCP *.py
-recursive-include examples *
-recursive-include doc/html *
