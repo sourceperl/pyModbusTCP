@@ -49,7 +49,11 @@ Read 2x 16 bits registers at modbus address 0 :
 
 ::
 
-    print c.read_holding_registers(0, 2)
+    regs = c.read_holding_registers(0, 2)
+    if regs:
+        print(regs)
+    else:
+        print("read error")
 
 Write value 44 and 55 to registers at modbus address 10 :
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -57,7 +61,9 @@ Write value 44 and 55 to registers at modbus address 10 :
 ::
 
     if c.write_multiple_registers(10, [44,55]):
-        print("write ok !")
+        print("write ok")
+    else:
+        print("write error")
 
 Documentation
 -------------
