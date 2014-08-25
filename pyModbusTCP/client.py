@@ -20,12 +20,25 @@ import random
 class ModbusClient:
     """Client Modbus TCP"""
 
-    def __init__(self):
+    def __init__(self, host=None, port=None, debug=None):
         """Constructor
 
+        Modbus server params (host, port) can be set here or with host(), port()
+        functions. Same for debug option. 
+
+        Use functions avoid to launch ValueError except if params is incorrect.
+
+        :param host: hostname or IPv4/IPv6 address server address (optional)
+        :type host: str
+        :param port: TCP port number (optional)
+        :type port: int
+        :param debug: debug state (optional)
+        :type debug: bool
         :return: Object ModbusClient
         :rtype: ModbusClient
+        :raises ValueError: host, port or debug value is set but incorrect
         """
+        # object vars
         self.__hostname    = "localhost"
         self.__port        = const.MODBUS_PORT
         self.__unit_id     = 1
@@ -37,6 +50,18 @@ class ModbusClient:
         self.__version     = const.VERSION     # version number
         self.__last_error  = const.MB_NO_ERR   # last error code
         self.__last_except = 0                 # last expect code
+        # set host
+        if host:
+            if not self.host(host):
+                raise ValueError("host value error")
+        # set port
+        if port:
+            if not self.port(port):
+                raise ValueError("port value error")
+        # set hostname
+        if debug:
+            if not self.debug(debug):
+                raise ValueError("debug value error")
 
     def version(self):
         """Get package version

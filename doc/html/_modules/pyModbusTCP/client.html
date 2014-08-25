@@ -69,12 +69,25 @@
 <div class="viewcode-block" id="ModbusClient"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient">[docs]</a><span class="k">class</span> <span class="nc">ModbusClient</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;Client Modbus TCP&quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="ModbusClient.__init__"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.__init__"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Constructor</span>
 
+<span class="sd">        Modbus server params (host, port) can be set here or with host(), port()</span>
+<span class="sd">        functions. Same for debug option. </span>
+
+<span class="sd">        Use functions avoid to launch ValueError except if params is incorrect.</span>
+
+<span class="sd">        :param host: hostname or IPv4/IPv6 address server address (optional)</span>
+<span class="sd">        :type host: str</span>
+<span class="sd">        :param port: TCP port number (optional)</span>
+<span class="sd">        :type port: int</span>
+<span class="sd">        :param debug: debug state (optional)</span>
+<span class="sd">        :type debug: bool</span>
 <span class="sd">        :return: Object ModbusClient</span>
 <span class="sd">        :rtype: ModbusClient</span>
+<span class="sd">        :raises ValueError: host, port or debug value is set but incorrect</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c"># object vars</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__hostname</span>    <span class="o">=</span> <span class="s">&quot;localhost&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__port</span>        <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MODBUS_PORT</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__unit_id</span>     <span class="o">=</span> <span class="mi">1</span>
@@ -86,6 +99,18 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">__version</span>     <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">VERSION</span>     <span class="c"># version number</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span>  <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_NO_ERR</span>   <span class="c"># last error code</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__last_except</span> <span class="o">=</span> <span class="mi">0</span>                 <span class="c"># last expect code</span>
+        <span class="c"># set host</span>
+        <span class="k">if</span> <span class="n">host</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">(</span><span class="n">host</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;host value error&quot;</span><span class="p">)</span>
+        <span class="c"># set port</span>
+        <span class="k">if</span> <span class="n">port</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">port</span><span class="p">(</span><span class="n">port</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;port value error&quot;</span><span class="p">)</span>
+        <span class="c"># set hostname</span>
+        <span class="k">if</span> <span class="n">debug</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">debug</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;debug value error&quot;</span><span class="p">)</span>
 </div>
 <div class="viewcode-block" id="ModbusClient.version"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.version">[docs]</a>    <span class="k">def</span> <span class="nf">version</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get package version</span>
