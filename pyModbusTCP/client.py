@@ -10,7 +10,7 @@
 #                1,2,4,5,6 (Class 1)
 #       Charset: utf-8
 
-from pyModbusTCP import const
+from pyModbusTCP import constants as const
 import re
 import socket
 import select

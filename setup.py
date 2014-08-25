@@ -1,4 +1,4 @@
-from pyModbusTCP import const
+from pyModbusTCP import constants
 from distutils.core import setup
 
 with open('README.rst') as f:
@@ -6,7 +6,7 @@ with open('README.rst') as f:
 
 setup(
     name="pyModbusTCP",
-    version=const.VERSION,
+    version=constants.VERSION,
     description="A simple Modbus/TCP library for Python",
     long_description=readme,
     author="Loic Lefebvre",

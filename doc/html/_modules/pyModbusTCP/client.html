@@ -59,7 +59,7 @@
 <span class="c">#                1,2,4,5,6 (Class 1)</span>
 <span class="c">#       Charset: utf-8</span>
 
-<span class="kn">from</span> <span class="nn">pyModbusTCP</span> <span class="kn">import</span> <span class="n">const</span>
+<span class="kn">from</span> <span class="nn">pyModbusTCP</span> <span class="kn">import</span> <span class="n">constants</span> <span class="k">as</span> <span class="n">const</span>
 <span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">import</span> <span class="nn">socket</span>
 <span class="kn">import</span> <span class="nn">select</span>
@@ -67,9 +67,7 @@
 <span class="kn">import</span> <span class="nn">random</span>
 
 <div class="viewcode-block" id="ModbusClient"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient">[docs]</a><span class="k">class</span> <span class="nc">ModbusClient</span><span class="p">:</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Client Modbus TCP</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="sd">&quot;&quot;&quot;Client Modbus TCP&quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="ModbusClient.__init__"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Constructor</span>
@@ -208,10 +206,9 @@
 <div class="viewcode-block" id="ModbusClient.open"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.open">[docs]</a>    <span class="k">def</span> <span class="nf">open</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Connect to modbus server (open TCP connection)</span>
 
-<span class="sd">        :returns: True if connect or None if error</span>
-<span class="sd">        :rtype: bool or None if error</span>
+<span class="sd">        :returns: connect status (True if open)</span>
+<span class="sd">        :rtype: bool</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;call open()&quot;</span><span class="p">)</span>
         <span class="c"># restart TCP if already open</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_open</span><span class="p">():</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
@@ -227,19 +224,21 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">af</span><span class="p">,</span> <span class="n">socktype</span><span class="p">,</span> <span class="n">proto</span><span class="p">)</span>
             <span class="k">except</span> <span class="n">socket</span><span class="o">.</span><span class="n">error</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span> <span class="o">=</span> <span class="bp">None</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_CONNECT_ERR</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;init socket error&quot;</span><span class="p">)</span>
                 <span class="k">continue</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">sa</span><span class="p">)</span>
             <span class="k">except</span> <span class="n">socket</span><span class="o">.</span><span class="n">error</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span> <span class="o">=</span> <span class="bp">None</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_CONNECT_ERR</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;socket error&quot;</span><span class="p">)</span>
                 <span class="k">continue</span>
             <span class="k">break</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span>
+        <span class="c"># check connect status</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">True</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_CONNECT_ERR</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;connect error&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">False</span>
 </div>
 <div class="viewcode-block" id="ModbusClient.is_open"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.is_open">[docs]</a>    <span class="k">def</span> <span class="nf">is_open</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get status of TCP connection</span>
@@ -301,7 +300,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;read_coils(): rx frame under min size&quot;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">return</span> <span class="bp">None</span>
-        <span class="c"># register extract</span>
+        <span class="c"># extract field &quot;byte count&quot;</span>
         <span class="n">rx_byte_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])</span>
         <span class="c"># frame with bits value -&gt; bits[] list</span>
         <span class="n">f_bits</span> <span class="o">=</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
@@ -351,14 +350,15 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;read_discrete_inputs(): rx frame under min size&quot;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">return</span> <span class="bp">None</span>
-        <span class="c"># register extract</span>
+        <span class="c"># extract field &quot;byte count&quot;</span>
         <span class="n">rx_byte_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])</span>
-        <span class="c"># frame with regs value</span>
+        <span class="c"># frame with bits value -&gt; bits[] list</span>
         <span class="n">f_bits</span> <span class="o">=</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
         <span class="n">bits</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">f_byte</span> <span class="ow">in</span> <span class="n">f_bits</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">8</span><span class="p">):</span>
                 <span class="n">bits</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">bool</span><span class="p">(</span><span class="nb">ord</span><span class="p">(</span><span class="n">f_byte</span><span class="p">)</span><span class="o">&gt;&gt;</span><span class="n">pos</span><span class="o">&amp;</span><span class="mh">0x01</span><span class="p">))</span>
+        <span class="c"># return only bit_nb bits</span>
         <span class="k">return</span> <span class="n">bits</span><span class="p">[:</span><span class="nb">int</span><span class="p">(</span><span class="n">bit_nb</span><span class="p">)]</span>
 </div>
 <div class="viewcode-block" id="ModbusClient.read_holding_registers"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.read_holding_registers">[docs]</a>    <span class="k">def</span> <span class="nf">read_holding_registers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reg_addr</span><span class="p">,</span> <span class="n">reg_nb</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
@@ -401,13 +401,14 @@
                              <span class="s">&quot;rx frame under min size&quot;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">return</span> <span class="bp">None</span>
-        <span class="c"># register extract</span>
-        <span class="n">rx_reg_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])</span>
+        <span class="c"># extract field &quot;byte count&quot;</span>
+        <span class="n">rx_byte_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])</span>
         <span class="c"># frame with regs value</span>
         <span class="n">f_regs</span> <span class="o">=</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
         <span class="c"># split f_regs in 2 bytes blocs</span>
         <span class="n">registers</span> <span class="o">=</span> <span class="p">[</span><span class="n">f_regs</span><span class="p">[</span><span class="n">i</span><span class="p">:</span><span class="n">i</span><span class="o">+</span><span class="mi">2</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">f_regs</span><span class="p">),</span> <span class="mi">2</span><span class="p">)]</span>
         <span class="n">registers</span> <span class="o">=</span> <span class="p">[</span><span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;&gt;H&quot;</span><span class="p">,</span> <span class="n">i</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">registers</span><span class="p">]</span>
+        <span class="c"># return only reg_nb registers</span>
         <span class="k">return</span> <span class="n">registers</span><span class="p">[:</span><span class="nb">int</span><span class="p">(</span><span class="n">reg_nb</span><span class="p">)]</span>
 </div>
 <div class="viewcode-block" id="ModbusClient.read_input_registers"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.read_input_registers">[docs]</a>    <span class="k">def</span> <span class="nf">read_input_registers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reg_addr</span><span class="p">,</span> <span class="n">reg_nb</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
@@ -449,13 +450,14 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;read_input_registers(): rx frame under min size&quot;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">return</span> <span class="bp">None</span>
-        <span class="c"># register extract</span>
-        <span class="n">rx_reg_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])</span>
+        <span class="c"># extract field &quot;byte count&quot;</span>
+        <span class="n">rx_byte_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])</span>
         <span class="c"># frame with regs value</span>
         <span class="n">f_regs</span> <span class="o">=</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
         <span class="c"># split f_regs in 2 bytes blocs</span>
         <span class="n">registers</span> <span class="o">=</span> <span class="p">[</span><span class="n">f_regs</span><span class="p">[</span><span class="n">i</span><span class="p">:</span><span class="n">i</span><span class="o">+</span><span class="mi">2</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">f_regs</span><span class="p">),</span> <span class="mi">2</span><span class="p">)]</span>
         <span class="n">registers</span> <span class="o">=</span> <span class="p">[</span><span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;&gt;H&quot;</span><span class="p">,</span> <span class="n">i</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">registers</span><span class="p">]</span>
+        <span class="c"># return only reg_nb registers</span>
         <span class="k">return</span> <span class="n">registers</span><span class="p">[:</span><span class="nb">int</span><span class="p">(</span><span class="n">reg_nb</span><span class="p">)]</span>
 </div>
 <div class="viewcode-block" id="ModbusClient.write_single_coil"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.write_single_coil">[docs]</a>    <span class="k">def</span> <span class="nf">write_single_coil</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bit_addr</span><span class="p">,</span> <span class="n">bit_value</span><span class="p">):</span>

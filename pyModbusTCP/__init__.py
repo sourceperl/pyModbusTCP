@@ -1,3 +1,3 @@
 # -*- coding: utf-8 -*-
 
-__all__       = ["const", "client"]
+__all__       = ["constants", "client"]
