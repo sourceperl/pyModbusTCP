@@ -266,7 +266,7 @@
 
 <span class="sd">        :param bit_addr: bit address (0 to 65535)</span>
 <span class="sd">        :type bit_addr: int</span>
-<span class="sd">        :param bit_nb: number of bits to read (1 to 125)</span>
+<span class="sd">        :param bit_nb: number of bits to read (1 to 2000)</span>
 <span class="sd">        :type bit_nb: int</span>
 <span class="sd">        :returns: bits list or None if error</span>
 <span class="sd">        :rtype: list of bool or None</span>
@@ -275,7 +275,7 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="nb">int</span><span class="p">(</span><span class="n">bit_addr</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">65535</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;read_coils() : bit_addr out of range&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="bp">None</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">1</span> <span class="o">&lt;=</span> <span class="nb">int</span><span class="p">(</span><span class="n">bit_nb</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">125</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">1</span> <span class="o">&lt;=</span> <span class="nb">int</span><span class="p">(</span><span class="n">bit_nb</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">2000</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;read_coils() : bit_nb out of range&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="bp">None</span>
         <span class="k">if</span> <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">bit_addr</span><span class="p">)</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">bit_nb</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mi">65536</span><span class="p">:</span>
@@ -301,22 +301,30 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">return</span> <span class="bp">None</span>
         <span class="c"># extract field &quot;byte count&quot;</span>
-        <span class="n">rx_byte_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">rx_byte_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
         <span class="c"># frame with bits value -&gt; bits[] list</span>
-        <span class="n">f_bits</span> <span class="o">=</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
-        <span class="n">bits</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">f_byte</span> <span class="ow">in</span> <span class="nb">bytearray</span><span class="p">(</span><span class="n">f_bits</span><span class="p">):</span>
-            <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">8</span><span class="p">):</span>
-                <span class="n">bits</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">bool</span><span class="p">(</span><span class="n">f_byte</span><span class="o">&gt;&gt;</span><span class="n">pos</span><span class="o">&amp;</span><span class="mh">0x01</span><span class="p">))</span>
-        <span class="c"># return only bit_nb bits</span>
-        <span class="k">return</span> <span class="n">bits</span><span class="p">[:</span><span class="nb">int</span><span class="p">(</span><span class="n">bit_nb</span><span class="p">)]</span>
+        <span class="n">f_bits</span> <span class="o">=</span> <span class="nb">bytearray</span><span class="p">(</span><span class="n">f_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+        <span class="c"># check rx_byte_count: match nb of bits request and check buffer size</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">((</span><span class="n">rx_byte_count</span> <span class="o">==</span> <span class="nb">int</span><span class="p">((</span><span class="n">bit_nb</span><span class="o">+</span><span class="mi">7</span><span class="p">)</span><span class="o">/</span><span class="mi">8</span><span class="p">))</span> <span class="ow">or</span>
+                <span class="p">(</span><span class="n">rx_byte_count</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">f_bits</span><span class="p">))):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_RECV_ERR</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;read_coils(): rx byte count mismatch&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">return</span> <span class="bp">None</span>
+        <span class="c"># allocate a bit_nb size list</span>
+        <span class="n">bits</span> <span class="o">=</span> <span class="p">[</span><span class="bp">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">bit_nb</span>
+        <span class="c"># fill bits list with bit items</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">bits</span><span class="p">):</span>
+            <span class="n">bits</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">f_bits</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="o">/</span><span class="mi">8</span><span class="p">)]</span><span class="o">&gt;&gt;</span><span class="p">(</span><span class="n">i</span><span class="o">%</span><span class="mi">8</span><span class="p">)</span><span class="o">&amp;</span><span class="mh">0x01</span><span class="p">)</span>
+        <span class="c"># return bits list</span>
+        <span class="k">return</span> <span class="n">bits</span>
 </div>
 <div class="viewcode-block" id="ModbusClient.read_discrete_inputs"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.read_discrete_inputs">[docs]</a>    <span class="k">def</span> <span class="nf">read_discrete_inputs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bit_addr</span><span class="p">,</span> <span class="n">bit_nb</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Modbus function READ_DISCRETE_INPUTS (0x02)</span>
 
 <span class="sd">        :param bit_addr: bit address (0 to 65535)</span>
 <span class="sd">        :type bit_addr: int</span>
-<span class="sd">        :param bit_nb: number of bits to read (1 to 125)</span>
+<span class="sd">        :param bit_nb: number of bits to read (1 to 2000)</span>
 <span class="sd">        :type bit_nb: int</span>
 <span class="sd">        :returns: bits list or None if error</span>
 <span class="sd">        :rtype: list of bool or None</span>
@@ -325,7 +333,7 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="nb">int</span><span class="p">(</span><span class="n">bit_addr</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">65535</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;read_discrete_inputs() : bit_addr out of range&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="bp">None</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">1</span> <span class="o">&lt;=</span> <span class="nb">int</span><span class="p">(</span><span class="n">bit_nb</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">125</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">1</span> <span class="o">&lt;=</span> <span class="nb">int</span><span class="p">(</span><span class="n">bit_nb</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">2000</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;read_discrete_inputs() : bit_nb out of range&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="bp">None</span>
         <span class="k">if</span> <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">bit_addr</span><span class="p">)</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">bit_nb</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mi">65536</span><span class="p">:</span>
@@ -351,15 +359,23 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">return</span> <span class="bp">None</span>
         <span class="c"># extract field &quot;byte count&quot;</span>
-        <span class="n">rx_byte_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">rx_byte_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
         <span class="c"># frame with bits value -&gt; bits[] list</span>
-        <span class="n">f_bits</span> <span class="o">=</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
-        <span class="n">bits</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">f_byte</span> <span class="ow">in</span> <span class="n">f_bits</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">8</span><span class="p">):</span>
-                <span class="n">bits</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">bool</span><span class="p">(</span><span class="nb">ord</span><span class="p">(</span><span class="n">f_byte</span><span class="p">)</span><span class="o">&gt;&gt;</span><span class="n">pos</span><span class="o">&amp;</span><span class="mh">0x01</span><span class="p">))</span>
-        <span class="c"># return only bit_nb bits</span>
-        <span class="k">return</span> <span class="n">bits</span><span class="p">[:</span><span class="nb">int</span><span class="p">(</span><span class="n">bit_nb</span><span class="p">)]</span>
+        <span class="n">f_bits</span> <span class="o">=</span> <span class="nb">bytearray</span><span class="p">(</span><span class="n">f_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+        <span class="c"># check rx_byte_count: match nb of bits request and check buffer size</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">((</span><span class="n">rx_byte_count</span> <span class="o">==</span> <span class="nb">int</span><span class="p">((</span><span class="n">bit_nb</span><span class="o">+</span><span class="mi">7</span><span class="p">)</span><span class="o">/</span><span class="mi">8</span><span class="p">))</span> <span class="ow">or</span>
+                <span class="p">(</span><span class="n">rx_byte_count</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">f_bits</span><span class="p">))):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_RECV_ERR</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;read_discrete_inputs(): rx byte count mismatch&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">return</span> <span class="bp">None</span>
+        <span class="c"># allocate a bit_nb size list</span>
+        <span class="n">bits</span> <span class="o">=</span> <span class="p">[</span><span class="bp">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">bit_nb</span>
+        <span class="c"># fill bits list with bit items</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">bits</span><span class="p">):</span>
+            <span class="n">bits</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">f_bits</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="o">/</span><span class="mi">8</span><span class="p">)]</span><span class="o">&gt;&gt;</span><span class="p">(</span><span class="n">i</span><span class="o">%</span><span class="mi">8</span><span class="p">)</span><span class="o">&amp;</span><span class="mh">0x01</span><span class="p">)</span>
+        <span class="c"># return bits list</span>
+        <span class="k">return</span> <span class="n">bits</span>
 </div>
 <div class="viewcode-block" id="ModbusClient.read_holding_registers"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.read_holding_registers">[docs]</a>    <span class="k">def</span> <span class="nf">read_holding_registers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reg_addr</span><span class="p">,</span> <span class="n">reg_nb</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Modbus function READ_HOLDING_REGISTERS (0x03)</span>
@@ -402,14 +418,23 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">return</span> <span class="bp">None</span>
         <span class="c"># extract field &quot;byte count&quot;</span>
-        <span class="n">rx_byte_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">rx_byte_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
         <span class="c"># frame with regs value</span>
         <span class="n">f_regs</span> <span class="o">=</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
-        <span class="c"># split f_regs in 2 bytes blocs</span>
-        <span class="n">registers</span> <span class="o">=</span> <span class="p">[</span><span class="n">f_regs</span><span class="p">[</span><span class="n">i</span><span class="p">:</span><span class="n">i</span><span class="o">+</span><span class="mi">2</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">f_regs</span><span class="p">),</span> <span class="mi">2</span><span class="p">)]</span>
-        <span class="n">registers</span> <span class="o">=</span> <span class="p">[</span><span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;&gt;H&quot;</span><span class="p">,</span> <span class="n">i</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">registers</span><span class="p">]</span>
-        <span class="c"># return only reg_nb registers</span>
-        <span class="k">return</span> <span class="n">registers</span><span class="p">[:</span><span class="nb">int</span><span class="p">(</span><span class="n">reg_nb</span><span class="p">)]</span>
+        <span class="c"># check rx_byte_count: match nb of bits request and check buffer size</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">((</span><span class="n">rx_byte_count</span> <span class="o">==</span> <span class="mi">2</span><span class="o">*</span><span class="n">reg_nb</span><span class="p">)</span> <span class="ow">or</span>
+                <span class="p">(</span><span class="n">rx_byte_count</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">f_regs</span><span class="p">))):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_RECV_ERR</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;read_holding_registers(): rx byte count mismatch&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">return</span> <span class="bp">None</span>
+        <span class="c"># allocate a reg_nb size list</span>
+        <span class="n">registers</span> <span class="o">=</span> <span class="p">[</span><span class="bp">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">reg_nb</span>
+        <span class="c"># fill registers list with register items</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">registers</span><span class="p">):</span>
+            <span class="n">registers</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;&gt;H&quot;</span><span class="p">,</span> <span class="n">f_regs</span><span class="p">[</span><span class="n">i</span><span class="o">*</span><span class="mi">2</span><span class="p">:</span><span class="n">i</span><span class="o">*</span><span class="mi">2</span><span class="o">+</span><span class="mi">2</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="c"># return registers list</span>
+        <span class="k">return</span> <span class="n">registers</span>
 </div>
 <div class="viewcode-block" id="ModbusClient.read_input_registers"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.read_input_registers">[docs]</a>    <span class="k">def</span> <span class="nf">read_input_registers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reg_addr</span><span class="p">,</span> <span class="n">reg_nb</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Modbus function READ_INPUT_REGISTERS (0x04)</span>
@@ -451,14 +476,23 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">return</span> <span class="bp">None</span>
         <span class="c"># extract field &quot;byte count&quot;</span>
-        <span class="n">rx_byte_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">rx_byte_count</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;B&quot;</span><span class="p">,</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
         <span class="c"># frame with regs value</span>
         <span class="n">f_regs</span> <span class="o">=</span> <span class="n">f_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
-        <span class="c"># split f_regs in 2 bytes blocs</span>
-        <span class="n">registers</span> <span class="o">=</span> <span class="p">[</span><span class="n">f_regs</span><span class="p">[</span><span class="n">i</span><span class="p">:</span><span class="n">i</span><span class="o">+</span><span class="mi">2</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">f_regs</span><span class="p">),</span> <span class="mi">2</span><span class="p">)]</span>
-        <span class="n">registers</span> <span class="o">=</span> <span class="p">[</span><span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;&gt;H&quot;</span><span class="p">,</span> <span class="n">i</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">registers</span><span class="p">]</span>
-        <span class="c"># return only reg_nb registers</span>
-        <span class="k">return</span> <span class="n">registers</span><span class="p">[:</span><span class="nb">int</span><span class="p">(</span><span class="n">reg_nb</span><span class="p">)]</span>
+        <span class="c"># check rx_byte_count: match nb of bits request and check buffer size</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">((</span><span class="n">rx_byte_count</span> <span class="o">==</span> <span class="mi">2</span><span class="o">*</span><span class="n">reg_nb</span><span class="p">)</span> <span class="ow">or</span>
+                <span class="p">(</span><span class="n">rx_byte_count</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">f_regs</span><span class="p">))):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_RECV_ERR</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;read_input_registers(): rx byte count mismatch&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">return</span> <span class="bp">None</span>
+        <span class="c"># allocate a reg_nb size list</span>
+        <span class="n">registers</span> <span class="o">=</span> <span class="p">[</span><span class="bp">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">reg_nb</span>
+        <span class="c"># fill registers list with register items</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">registers</span><span class="p">):</span>
+            <span class="n">registers</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;&gt;H&quot;</span><span class="p">,</span> <span class="n">f_regs</span><span class="p">[</span><span class="n">i</span><span class="o">*</span><span class="mi">2</span><span class="p">:</span><span class="n">i</span><span class="o">*</span><span class="mi">2</span><span class="o">+</span><span class="mi">2</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="c"># return registers list</span>
+        <span class="k">return</span> <span class="n">registers</span>
 </div>
 <div class="viewcode-block" id="ModbusClient.write_single_coil"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.write_single_coil">[docs]</a>    <span class="k">def</span> <span class="nf">write_single_coil</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bit_addr</span><span class="p">,</span> <span class="n">bit_value</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Modbus function WRITE_SINGLE_COIL (0x05)</span>
@@ -632,6 +666,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c"># check link, open if need</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;call _send on close socket&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="bp">None</span>
         <span class="c"># send data</span>
         <span class="n">data_l</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
