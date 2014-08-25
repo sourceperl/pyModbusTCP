@@ -217,7 +217,7 @@ class ModbusClient:
 
         :param bit_addr: bit address (0 to 65535)
         :type bit_addr: int
-        :param bit_nb: number of bits to read (1 to 125)
+        :param bit_nb: number of bits to read (1 to 2000)
         :type bit_nb: int
         :returns: bits list or None if error
         :rtype: list of bool or None
@@ -226,7 +226,7 @@ class ModbusClient:
         if not (0 <= int(bit_addr) <= 65535):
             self.__debug_msg("read_coils() : bit_addr out of range")
             return None
-        if not (1 <= int(bit_nb) <= 125):
+        if not (1 <= int(bit_nb) <= 2000):
             self.__debug_msg("read_coils() : bit_nb out of range")
             return None
         if (int(bit_addr) + int(bit_nb)) > 65536:
@@ -252,22 +252,30 @@ class ModbusClient:
             self.close()
             return None
         # extract field "byte count"
-        rx_byte_count = struct.unpack("B", f_body[0:1])
+        rx_byte_count = struct.unpack("B", f_body[0:1])[0]
         # frame with bits value -> bits[] list
-        f_bits = f_body[1:]
-        bits = []
-        for f_byte in bytearray(f_bits):
-            for pos in range(8):
-                bits.append(bool(f_byte>>pos&0x01))
-        # return only bit_nb bits
-        return bits[:int(bit_nb)]
+        f_bits = bytearray(f_body[1:])
+        # check rx_byte_count: match nb of bits request and check buffer size
+        if not ((rx_byte_count == int((bit_nb+7)/8)) or
+                (rx_byte_count == len(f_bits))):
+            self.__last_error = const.MB_RECV_ERR
+            self.__debug_msg("read_coils(): rx byte count mismatch")
+            self.close()
+            return None
+        # allocate a bit_nb size list
+        bits = [None] * bit_nb
+        # fill bits list with bit items
+        for i, item in enumerate(bits):
+            bits[i] = bool(f_bits[int(i/8)]>>(i%8)&0x01)
+        # return bits list
+        return bits
 
     def read_discrete_inputs(self, bit_addr, bit_nb=1):
         """Modbus function READ_DISCRETE_INPUTS (0x02)
 
         :param bit_addr: bit address (0 to 65535)
         :type bit_addr: int
-        :param bit_nb: number of bits to read (1 to 125)
+        :param bit_nb: number of bits to read (1 to 2000)
         :type bit_nb: int
         :returns: bits list or None if error
         :rtype: list of bool or None
@@ -276,7 +284,7 @@ class ModbusClient:
         if not (0 <= int(bit_addr) <= 65535):
             self.__debug_msg("read_discrete_inputs() : bit_addr out of range")
             return None
-        if not (1 <= int(bit_nb) <= 125):
+        if not (1 <= int(bit_nb) <= 2000):
             self.__debug_msg("read_discrete_inputs() : bit_nb out of range")
             return None
         if (int(bit_addr) + int(bit_nb)) > 65536:
@@ -302,15 +310,23 @@ class ModbusClient:
             self.close()
             return None
         # extract field "byte count"
-        rx_byte_count = struct.unpack("B", f_body[0:1])
+        rx_byte_count = struct.unpack("B", f_body[0:1])[0]
         # frame with bits value -> bits[] list
-        f_bits = f_body[1:]
-        bits = []
-        for f_byte in f_bits:
-            for pos in range(8):
-                bits.append(bool(ord(f_byte)>>pos&0x01))
-        # return only bit_nb bits
-        return bits[:int(bit_nb)]
+        f_bits = bytearray(f_body[1:])
+        # check rx_byte_count: match nb of bits request and check buffer size
+        if not ((rx_byte_count == int((bit_nb+7)/8)) or
+                (rx_byte_count == len(f_bits))):
+            self.__last_error = const.MB_RECV_ERR
+            self.__debug_msg("read_discrete_inputs(): rx byte count mismatch")
+            self.close()
+            return None
+        # allocate a bit_nb size list
+        bits = [None] * bit_nb
+        # fill bits list with bit items
+        for i, item in enumerate(bits):
+            bits[i] = bool(f_bits[int(i/8)]>>(i%8)&0x01)
+        # return bits list
+        return bits
 
     def read_holding_registers(self, reg_addr, reg_nb=1):
         """Modbus function READ_HOLDING_REGISTERS (0x03)
@@ -353,14 +369,23 @@ class ModbusClient:
             self.close()
             return None
         # extract field "byte count"
-        rx_byte_count = struct.unpack("B", f_body[0:1])
+        rx_byte_count = struct.unpack("B", f_body[0:1])[0]
         # frame with regs value
         f_regs = f_body[1:]
-        # split f_regs in 2 bytes blocs
-        registers = [f_regs[i:i+2] for i in range(0, len(f_regs), 2)]
-        registers = [struct.unpack(">H", i)[0] for i in registers]
-        # return only reg_nb registers
-        return registers[:int(reg_nb)]
+        # check rx_byte_count: match nb of bits request and check buffer size
+        if not ((rx_byte_count == 2*reg_nb) or
+                (rx_byte_count == len(f_regs))):
+            self.__last_error = const.MB_RECV_ERR
+            self.__debug_msg("read_holding_registers(): rx byte count mismatch")
+            self.close()
+            return None
+        # allocate a reg_nb size list
+        registers = [None] * reg_nb
+        # fill registers list with register items
+        for i, item in enumerate(registers):
+            registers[i] = struct.unpack(">H", f_regs[i*2:i*2+2])[0]
+        # return registers list
+        return registers
 
     def read_input_registers(self, reg_addr, reg_nb=1):
         """Modbus function READ_INPUT_REGISTERS (0x04)
@@ -402,14 +427,23 @@ class ModbusClient:
             self.close()
             return None
         # extract field "byte count"
-        rx_byte_count = struct.unpack("B", f_body[0:1])
+        rx_byte_count = struct.unpack("B", f_body[0:1])[0]
         # frame with regs value
         f_regs = f_body[1:]
-        # split f_regs in 2 bytes blocs
-        registers = [f_regs[i:i+2] for i in range(0, len(f_regs), 2)]
-        registers = [struct.unpack(">H", i)[0] for i in registers]
-        # return only reg_nb registers
-        return registers[:int(reg_nb)]
+        # check rx_byte_count: match nb of bits request and check buffer size
+        if not ((rx_byte_count == 2*reg_nb) or
+                (rx_byte_count == len(f_regs))):
+            self.__last_error = const.MB_RECV_ERR
+            self.__debug_msg("read_input_registers(): rx byte count mismatch")
+            self.close()
+            return None
+        # allocate a reg_nb size list
+        registers = [None] * reg_nb
+        # fill registers list with register items
+        for i, item in enumerate(registers):
+            registers[i] = struct.unpack(">H", f_regs[i*2:i*2+2])[0]
+        # return registers list
+        return registers
 
     def write_single_coil(self, bit_addr, bit_value):
         """Modbus function WRITE_SINGLE_COIL (0x05)
@@ -583,6 +617,7 @@ class ModbusClient:
         """
         # check link, open if need
         if self.__sock is None:
+            self.__debug_msg("call _send on close socket")
             return None
         # send data
         data_l = len(data)

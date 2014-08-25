@@ -3,4 +3,3 @@
 - add a quick start doc.
 - add a sample for modbus RTU.
 - add a sample with a modbus polling thread and a curses CLI interface.
-- use receive "byte count" field in func 1 to 4 to enumerate bit/reg rx buffer.
