@@ -1,8 +1,14 @@
 Revision history for pyModbusTCP
 
-0.0.6 (in progress)
+0.0.6 2014-08-25
 
     - Fix "socket error" message when call open() on dual stack IPv6/4 host.
+    - Check rx byte count field in functions 1 to 4.
+    - Fix max bit number problem in functions 1 and 2 (from 125 to 2000).
+    - Add debug message, if _send() call on close socket.
+    - Rename module name from const to constants.
+    - Update MANIFEST.in to remove docs and examples from sdist archive.
+    - Update README.rst sample code for Python3.
 
 0.0.5 2014-08-08
 
