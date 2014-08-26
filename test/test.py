@@ -11,6 +11,10 @@ class TestModbusClient(unittest.TestCase):
         # should raise an exception for bad port
         self.assertRaises(ValueError, ModbusClient, port=-1)
 
+    def test_except_unit_id(self):
+        # should raise an exception for bad unit_id
+        self.assertRaises(ValueError, ModbusClient, unit_id=420)
+
     def test_host(self):
         # test valid/invalid cases for host()
         c = ModbusClient()
@@ -33,4 +37,11 @@ class TestModbusClient(unittest.TestCase):
         self.assertEqual(c.debug(), False, "debug default is off")
         self.assertEqual(c.debug(False), False)
         self.assertEqual(c.debug(True), True)
+
+    def test_unit_id(self):
+        # test valid/invalid cases for debug()
+        c = ModbusClient()
+        self.assertEqual(c.unit_id(), 1, "default unit_id is 1")
+        self.assertEqual(c.unit_id(42), 42)
+        self.assertEqual(c.unit_id(420), None)
 

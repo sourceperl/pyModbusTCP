@@ -54,11 +54,11 @@
 <h2>pyModbusTCP.client.ModbusClient<a class="headerlink" href="#pymodbustcp-client-modbusclient" title="Permalink to this headline">¶</a></h2>
 <dl class="class">
 <dt id="pyModbusTCP.client.ModbusClient">
-<em class="property">class </em><tt class="descclassname">pyModbusTCP.client.</tt><tt class="descname">ModbusClient</tt><big>(</big><em>host=None</em>, <em>port=None</em>, <em>debug=None</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><tt class="descclassname">pyModbusTCP.client.</tt><tt class="descname">ModbusClient</tt><big>(</big><em>host=None</em>, <em>port=None</em>, <em>unit_id=None</em>, <em>debug=None</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient" title="Permalink to this definition">¶</a></dt>
 <dd><p>Client Modbus TCP</p>
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.__init__">
-<tt class="descname">__init__</tt><big>(</big><em>host=None</em>, <em>port=None</em>, <em>debug=None</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.__init__" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">__init__</tt><big>(</big><em>host=None</em>, <em>port=None</em>, <em>unit_id=None</em>, <em>debug=None</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/client.html#ModbusClient.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.__init__" title="Permalink to this definition">¶</a></dt>
 <dd><p>Constructor</p>
 <p>Modbus server params (host, port) can be set here or with host(), port()
 functions. Same for debug option.</p>
@@ -70,6 +70,7 @@ functions. Same for debug option.</p>
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
 <li><strong>host</strong> (<em>str</em>) &#8211; hostname or IPv4/IPv6 address server address (optional)</li>
 <li><strong>port</strong> (<em>int</em>) &#8211; TCP port number (optional)</li>
+<li><strong>unit_id</strong> (<em>int</em>) &#8211; unit ID (optional)</li>
 <li><strong>debug</strong> (<em>bool</em>) &#8211; debug state (optional)</li>
 </ul>
 </td>
@@ -81,7 +82,7 @@ functions. Same for debug option.</p>
 </td>
 </tr>
 <tr class="field-even field"><th class="field-name" colspan="2">Raises ValueError:</th></tr>
-<tr class="field-even field"><td>&nbsp;</td><td class="field-body"><p class="first last">host, port or debug value is set but incorrect</p>
+<tr class="field-even field"><td>&nbsp;</td><td class="field-body"><p class="first last">if a set parameter value is incorrect</p>
 </td>
 </tr>
 </tbody>

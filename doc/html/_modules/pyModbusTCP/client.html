@@ -69,7 +69,7 @@
 <div class="viewcode-block" id="ModbusClient"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient">[docs]</a><span class="k">class</span> <span class="nc">ModbusClient</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;Client Modbus TCP&quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="ModbusClient.__init__"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.__init__"><a class="viewcode-back" href="../../class_doc.html#pyModbusTCP.client.ModbusClient.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">unit_id</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Constructor</span>
 
 <span class="sd">        Modbus server params (host, port) can be set here or with host(), port()</span>
@@ -81,11 +81,13 @@
 <span class="sd">        :type host: str</span>
 <span class="sd">        :param port: TCP port number (optional)</span>
 <span class="sd">        :type port: int</span>
+<span class="sd">        :param unit_id: unit ID (optional)</span>
+<span class="sd">        :type unit_id: int</span>
 <span class="sd">        :param debug: debug state (optional)</span>
 <span class="sd">        :type debug: bool</span>
 <span class="sd">        :return: Object ModbusClient</span>
 <span class="sd">        :rtype: ModbusClient</span>
-<span class="sd">        :raises ValueError: host, port or debug value is set but incorrect</span>
+<span class="sd">        :raises ValueError: if a set parameter value is incorrect</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c"># object vars</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__hostname</span>    <span class="o">=</span> <span class="s">&quot;localhost&quot;</span>
@@ -107,7 +109,11 @@
         <span class="k">if</span> <span class="n">port</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">port</span><span class="p">(</span><span class="n">port</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;port value error&quot;</span><span class="p">)</span>
-        <span class="c"># set hostname</span>
+        <span class="c"># set unit_id</span>
+        <span class="k">if</span> <span class="n">unit_id</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">unit_id</span><span class="p">(</span><span class="n">unit_id</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;unit_id value error&quot;</span><span class="p">)</span>
+        <span class="c"># set debug</span>
         <span class="k">if</span> <span class="n">debug</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">debug</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;debug value error&quot;</span><span class="p">)</span>

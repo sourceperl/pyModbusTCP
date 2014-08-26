@@ -20,7 +20,7 @@ import random
 class ModbusClient:
     """Client Modbus TCP"""
 
-    def __init__(self, host=None, port=None, debug=None):
+    def __init__(self, host=None, port=None, unit_id=None, debug=None):
         """Constructor
 
         Modbus server params (host, port) can be set here or with host(), port()
@@ -32,11 +32,13 @@ class ModbusClient:
         :type host: str
         :param port: TCP port number (optional)
         :type port: int
+        :param unit_id: unit ID (optional)
+        :type unit_id: int
         :param debug: debug state (optional)
         :type debug: bool
         :return: Object ModbusClient
         :rtype: ModbusClient
-        :raises ValueError: host, port or debug value is set but incorrect
+        :raises ValueError: if a set parameter value is incorrect
         """
         # object vars
         self.__hostname    = "localhost"
@@ -58,7 +60,11 @@ class ModbusClient:
         if port:
             if not self.port(port):
                 raise ValueError("port value error")
-        # set hostname
+        # set unit_id
+        if unit_id:
+            if not self.unit_id(unit_id):
+                raise ValueError("unit_id value error")
+        # set debug
         if debug:
             if not self.debug(debug):
                 raise ValueError("debug value error")
