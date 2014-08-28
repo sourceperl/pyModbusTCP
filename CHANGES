@@ -4,6 +4,7 @@ Revision history for pyModbusTCP
 
     - Add unit test (see test/).
     - Add params host/port/unit_id/debug on ModbusClient constructor.
+    - Add utils module for modbus data mangling.
 
 0.0.6 2014-08-25
 
