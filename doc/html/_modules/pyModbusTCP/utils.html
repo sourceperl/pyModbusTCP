@@ -51,14 +51,44 @@
 
 <span class="c"># Python module: Some functions for modbus data mangling</span>
 
-<span class="c">##################################</span>
-<span class="c"># modbus to 32bits signed/unsigned</span>
-<span class="c">##################################</span>
+<span class="kn">import</span> <span class="nn">struct</span>
 
-<div class="viewcode-block" id="wlist2long"><a class="viewcode-back" href="../../module_utils.html#pyModbusTCP.utils.wlist2long">[docs]</a><span class="k">def</span> <span class="nf">wlist2long</span><span class="p">(</span><span class="n">val_list</span><span class="p">,</span> <span class="n">big_endian</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+<span class="c">################</span>
+<span class="c"># floating-point</span>
+<span class="c">################</span>
+
+<div class="viewcode-block" id="decodeIEEE"><a class="viewcode-back" href="../../module_utils.html#pyModbusTCP.utils.decodeIEEE">[docs]</a><span class="k">def</span> <span class="nf">decodeIEEE</span><span class="p">(</span><span class="n">val_int</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Decode Python int (32 bits integer) as an IEEE single precision format</span>
+
+<span class="sd">        Support NaN.</span>
+
+<span class="sd">        :param val_int: a 32 bit integer as an int Python value</span>
+<span class="sd">        :type val_int: int</span>
+<span class="sd">        :returns: float result</span>
+<span class="sd">        :rtype: float</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;f&quot;</span><span class="p">,</span><span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s">&quot;I&quot;</span><span class="p">,</span> <span class="n">val_int</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+</div>
+<div class="viewcode-block" id="encodeIEEE"><a class="viewcode-back" href="../../module_utils.html#pyModbusTCP.utils.encodeIEEE">[docs]</a><span class="k">def</span> <span class="nf">encodeIEEE</span><span class="p">(</span><span class="n">val_float</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Encode Python float to int (32 bits integer) as an IEEE single precision</span>
+
+<span class="sd">        Support NaN.</span>
+
+<span class="sd">        :param val_float: float value to convert</span>
+<span class="sd">        :type val_float: float</span>
+<span class="sd">        :returns: IEEE 32 bits (single precision) as Python int</span>
+<span class="sd">        :rtype: int</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;I&quot;</span><span class="p">,</span><span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s">&quot;f&quot;</span><span class="p">,</span> <span class="n">val_float</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="c">#######################</span>
+<span class="c"># long format (32 bits)</span>
+<span class="c">#######################</span>
+</div>
+<div class="viewcode-block" id="wordList2long"><a class="viewcode-back" href="../../module_utils.html#pyModbusTCP.utils.wordList2long">[docs]</a><span class="k">def</span> <span class="nf">wordList2long</span><span class="p">(</span><span class="n">val_list</span><span class="p">,</span> <span class="n">big_endian</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Word list (16 bits int) to long list (32 bits int)</span>
 
-<span class="sd">        By default wlist2long() use big endian order. For use little endian, set</span>
+<span class="sd">        By default word_list2long() use big endian order. For use little endian, set</span>
 <span class="sd">        big_endian param to False.</span>
 
 <span class="sd">        :param val_list: list of 16 bits int value</span>
@@ -83,8 +113,8 @@
 <span class="c"># 2&#39;s complement of int value (scalar and list)</span>
 <span class="c">###############################################</span>
 </div>
-<div class="viewcode-block" id="int2comp"><a class="viewcode-back" href="../../module_utils.html#pyModbusTCP.utils.int2comp">[docs]</a><span class="k">def</span> <span class="nf">int2comp</span><span class="p">(</span><span class="n">val_int</span><span class="p">,</span> <span class="n">val_size</span><span class="o">=</span><span class="mi">16</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Compute the 2&#39;s complement of val_int</span>
+<div class="viewcode-block" id="get2comp"><a class="viewcode-back" href="../../module_utils.html#pyModbusTCP.utils.get2comp">[docs]</a><span class="k">def</span> <span class="nf">get2comp</span><span class="p">(</span><span class="n">val_int</span><span class="p">,</span> <span class="n">val_size</span><span class="o">=</span><span class="mi">16</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Get the 2&#39;s complement of Python int val_int</span>
 
 <span class="sd">        :param val_int: int value to apply 2&#39;s complement</span>
 <span class="sd">        :type val_int: int</span>
@@ -99,8 +129,8 @@
         <span class="n">val_int</span> <span class="o">=</span> <span class="n">val_int</span> <span class="o">-</span> <span class="p">(</span><span class="mi">1</span><span class="o">&lt;&lt;</span><span class="n">val_size</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">val_int</span>
 </div>
-<div class="viewcode-block" id="list2comp"><a class="viewcode-back" href="../../module_utils.html#pyModbusTCP.utils.list2comp">[docs]</a><span class="k">def</span> <span class="nf">list2comp</span><span class="p">(</span><span class="n">val_list</span><span class="p">,</span> <span class="n">val_size</span><span class="o">=</span><span class="mi">16</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Compute the 2&#39;s complement of val_list</span>
+<div class="viewcode-block" id="getList2comp"><a class="viewcode-back" href="../../module_utils.html#pyModbusTCP.utils.getList2comp">[docs]</a><span class="k">def</span> <span class="nf">getList2comp</span><span class="p">(</span><span class="n">val_list</span><span class="p">,</span> <span class="n">val_size</span><span class="o">=</span><span class="mi">16</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Get the 2&#39;s complement of Python list val_list</span>
 
 <span class="sd">        :param val_list: list of int value to apply 2&#39;s complement</span>
 <span class="sd">        :type val_list: list</span>
@@ -109,7 +139,7 @@
 <span class="sd">        :returns: 2&#39;s complement result</span>
 <span class="sd">        :rtype: list</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="p">[</span><span class="n">int2comp</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">val_size</span><span class="p">)</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">val_list</span><span class="p">]</span></div>
+    <span class="k">return</span> <span class="p">[</span><span class="n">get2comp</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">val_size</span><span class="p">)</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">val_list</span><span class="p">]</span></div>
 </pre></div>
 
           </div>

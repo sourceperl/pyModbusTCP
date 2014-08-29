@@ -2,14 +2,44 @@
 
 # Python module: Some functions for modbus data mangling
 
-##################################
-# modbus to 32bits signed/unsigned
-##################################
+import struct
 
-def wlist2long(val_list, big_endian=True):
+################
+# floating-point
+################
+
+def decodeIEEE(val_int):
+    """Decode Python int (32 bits integer) as an IEEE single precision format
+
+        Support NaN.
+
+        :param val_int: a 32 bit integer as an int Python value
+        :type val_int: int
+        :returns: float result
+        :rtype: float
+    """
+    return struct.unpack("f",struct.pack("I", val_int))[0]
+
+def encodeIEEE(val_float):
+    """Encode Python float to int (32 bits integer) as an IEEE single precision
+
+        Support NaN.
+
+        :param val_float: float value to convert
+        :type val_float: float
+        :returns: IEEE 32 bits (single precision) as Python int
+        :rtype: int
+    """
+    return struct.unpack("I",struct.pack("f", val_float))[0]
+
+#######################
+# long format (32 bits)
+#######################
+
+def wordList2long(val_list, big_endian=True):
     """Word list (16 bits int) to long list (32 bits int)
 
-        By default wlist2long() use big endian order. For use little endian, set
+        By default word_list2long() use big endian order. For use little endian, set
         big_endian param to False.
 
         :param val_list: list of 16 bits int value
@@ -34,8 +64,8 @@ def wlist2long(val_list, big_endian=True):
 # 2's complement of int value (scalar and list)
 ###############################################
 
-def int2comp(val_int, val_size=16):
-    """Compute the 2's complement of val_int
+def get2comp(val_int, val_size=16):
+    """Get the 2's complement of Python int val_int
 
         :param val_int: int value to apply 2's complement
         :type val_int: int
@@ -50,8 +80,8 @@ def int2comp(val_int, val_size=16):
         val_int = val_int - (1<<val_size)
     return val_int
 
-def list2comp(val_list, val_size=16):
-    """Compute the 2's complement of val_list
+def getList2comp(val_list, val_size=16):
+    """Get the 2's complement of Python list val_list
 
         :param val_list: list of int value to apply 2's complement
         :type val_list: list
@@ -60,4 +90,4 @@ def list2comp(val_list, val_size=16):
         :returns: 2's complement result
         :rtype: list
     """
-    return [int2comp(val, val_size) for val in val_list]
+    return [get2comp(val, val_size) for val in val_list]

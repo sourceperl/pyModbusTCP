@@ -51,9 +51,47 @@
   <div class="section" id="module-pyModbusTCP.utils">
 <span id="module-pymodbustcp-utils"></span><h1>Module pyModbusTCP.utils<a class="headerlink" href="#module-pyModbusTCP.utils" title="Permalink to this headline">¶</a></h1>
 <dl class="function">
-<dt id="pyModbusTCP.utils.int2comp">
-<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">int2comp</tt><big>(</big><em>val_int</em>, <em>val_size=16</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/utils.html#int2comp"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.int2comp" title="Permalink to this definition">¶</a></dt>
-<dd><p>Compute the 2&#8217;s complement of val_int</p>
+<dt id="pyModbusTCP.utils.decodeIEEE">
+<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">decodeIEEE</tt><big>(</big><em>val_int</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/utils.html#decodeIEEE"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.decodeIEEE" title="Permalink to this definition">¶</a></dt>
+<dd><p>Decode Python int (32 bits integer) as an IEEE single precision format</p>
+<p>Support NaN.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>val_int</strong> (<em>int</em>) &#8211; a 32 bit integer as an int Python value</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">float result</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">float</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="pyModbusTCP.utils.encodeIEEE">
+<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">encodeIEEE</tt><big>(</big><em>val_float</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/utils.html#encodeIEEE"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.encodeIEEE" title="Permalink to this definition">¶</a></dt>
+<dd><p>Encode Python float to int (32 bits integer) as an IEEE single precision</p>
+<p>Support NaN.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>val_float</strong> (<em>float</em>) &#8211; float value to convert</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">IEEE 32 bits (single precision) as Python int</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">int</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="pyModbusTCP.utils.get2comp">
+<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">get2comp</tt><big>(</big><em>val_int</em>, <em>val_size=16</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/utils.html#get2comp"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.get2comp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the 2&#8217;s complement of Python int val_int</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -75,9 +113,9 @@
 </dd></dl>
 
 <dl class="function">
-<dt id="pyModbusTCP.utils.list2comp">
-<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">list2comp</tt><big>(</big><em>val_list</em>, <em>val_size=16</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/utils.html#list2comp"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.list2comp" title="Permalink to this definition">¶</a></dt>
-<dd><p>Compute the 2&#8217;s complement of val_list</p>
+<dt id="pyModbusTCP.utils.getList2comp">
+<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">getList2comp</tt><big>(</big><em>val_list</em>, <em>val_size=16</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/utils.html#getList2comp"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.getList2comp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the 2&#8217;s complement of Python list val_list</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -99,10 +137,10 @@
 </dd></dl>
 
 <dl class="function">
-<dt id="pyModbusTCP.utils.wlist2long">
-<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">wlist2long</tt><big>(</big><em>val_list</em>, <em>big_endian=True</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/utils.html#wlist2long"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.wlist2long" title="Permalink to this definition">¶</a></dt>
+<dt id="pyModbusTCP.utils.wordList2long">
+<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">wordList2long</tt><big>(</big><em>val_list</em>, <em>big_endian=True</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/utils.html#wordList2long"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.wordList2long" title="Permalink to this definition">¶</a></dt>
 <dd><p>Word list (16 bits int) to long list (32 bits int)</p>
-<p>By default wlist2long() use big endian order. For use little endian, set
+<p>By default word_list2long() use big endian order. For use little endian, set
 big_endian param to False.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
