@@ -4,6 +4,17 @@ from pyModbusTCP import utils
 
 class TestUtils(unittest.TestCase):
 
+    def test_get_bits_from_int(self):
+        # default bits list size is 16
+        self.assertEqual(len(utils.get_bits_from_int(0)), 16)
+        # for 8 size (positional arg)
+        self.assertEqual(len(utils.get_bits_from_int(0, 8)), 8)
+        # for 32 size (named arg)
+        self.assertEqual(len(utils.get_bits_from_int(0, val_size=32)), 32)
+        # test binary decode
+        self.assertEqual(utils.get_bits_from_int(6, 4),
+                         [False, True, True, False])
+
     def test_decode_ieee(self):
         # test IEEE NaN
         self.assertTrue(math.isnan(utils.decode_ieee(0x7fffffff)))

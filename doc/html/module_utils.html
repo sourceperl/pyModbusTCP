@@ -113,6 +113,32 @@
 </dd></dl>
 
 <dl class="function">
+<dt id="pyModbusTCP.utils.get_bits_from_int">
+<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">get_bits_from_int</tt><big>(</big><em>val_int</em>, <em>val_size=16</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/utils.html#get_bits_from_int"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.get_bits_from_int" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the list of bits of val_int integer (default size is 16 bits)</p>
+<p>Return bits list, least significant bit first. Use list.reverse() if
+need.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>val_int</strong> (<em>int</em>) &#8211; integer value</li>
+<li><strong>val_size</strong> (<em>int</em>) &#8211; bit size of integer (word = 16, long = 32) (optional)</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">list of boolean &#8220;bits&#8221; (least significant first)</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">list</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
 <dt id="pyModbusTCP.utils.get_list_2comp">
 <tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">get_list_2comp</tt><big>(</big><em>val_list</em>, <em>val_size=16</em><big>)</big><a class="reference internal" href="_modules/pyModbusTCP/utils.html#get_list_2comp"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.get_list_2comp" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get the 2&#8217;s complement of Python list val_list</p>
