@@ -8,7 +8,7 @@ import struct
 # floating-point
 ################
 
-def decodeIEEE(val_int):
+def decode_ieee(val_int):
     """Decode Python int (32 bits integer) as an IEEE single precision format
 
         Support NaN.
@@ -20,7 +20,7 @@ def decodeIEEE(val_int):
     """
     return struct.unpack("f",struct.pack("I", val_int))[0]
 
-def encodeIEEE(val_float):
+def encode_ieee(val_float):
     """Encode Python float to int (32 bits integer) as an IEEE single precision
 
         Support NaN.
@@ -36,7 +36,7 @@ def encodeIEEE(val_float):
 # long format (32 bits)
 #######################
 
-def wordList2long(val_list, big_endian=True):
+def word_list_to_long(val_list, big_endian=True):
     """Word list (16 bits int) to long list (32 bits int)
 
         By default word_list2long() use big endian order. For use little endian, set
@@ -64,7 +64,7 @@ def wordList2long(val_list, big_endian=True):
 # 2's complement of int value (scalar and list)
 ###############################################
 
-def get2comp(val_int, val_size=16):
+def get_2comp(val_int, val_size=16):
     """Get the 2's complement of Python int val_int
 
         :param val_int: int value to apply 2's complement
@@ -80,7 +80,7 @@ def get2comp(val_int, val_size=16):
         val_int = val_int - (1<<val_size)
     return val_int
 
-def getList2comp(val_list, val_size=16):
+def get_list_2comp(val_list, val_size=16):
     """Get the 2's complement of Python list val_list
 
         :param val_list: list of int value to apply 2's complement
@@ -90,4 +90,4 @@ def getList2comp(val_list, val_size=16):
         :returns: 2's complement result
         :rtype: list
     """
-    return [get2comp(val, val_size) for val in val_list]
+    return [get_2comp(val, val_size) for val in val_list]
