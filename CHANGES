@@ -1,6 +1,6 @@
 Revision history for pyModbusTCP
 
-0.0.7 (in progress)
+0.0.7 2014-08-31
 
     - Add unit test (see test/).
     - Add params host/port/unit_id/debug on ModbusClient constructor.

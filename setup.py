@@ -14,4 +14,5 @@ setup(
     license = "MIT",
     url="https://github.com/sourceperl/pyModbusTCP",
     packages=["pyModbusTCP"],
+    platforms="any",
     )
