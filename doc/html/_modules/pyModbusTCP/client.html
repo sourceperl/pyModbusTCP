@@ -58,10 +58,10 @@
 <span class="kn">import</span> <span class="nn">struct</span>
 <span class="kn">import</span> <span class="nn">random</span>
 
-<div class="viewcode-block" id="ModbusClient"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient">[docs]</a><span class="k">class</span> <span class="nc">ModbusClient</span><span class="p">:</span>
+<div class="viewcode-block" id="ModbusClient"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient">[docs]</a><span class="k">class</span> <span class="nc">ModbusClient</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;Client Modbus TCP&quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="ModbusClient.__init__"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">unit_id</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.__init__"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">unit_id</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Constructor</span>
 
 <span class="sd">        Modbus server params (host, port) can be set here or with host(), port()</span>
@@ -110,7 +110,7 @@
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">debug</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;debug value error&quot;</span><span class="p">)</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.version"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.version">[docs]</a>    <span class="k">def</span> <span class="nf">version</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.version"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.version">[docs]</a>    <span class="k">def</span> <span class="nf">version</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get package version</span>
 
 <span class="sd">        :return: current version of the package (like &quot;0.0.1&quot;)</span>
@@ -118,7 +118,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__version</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.last_error"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.last_error">[docs]</a>    <span class="k">def</span> <span class="nf">last_error</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.last_error"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.last_error">[docs]</a>    <span class="k">def</span> <span class="nf">last_error</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get last error code</span>
 
 <span class="sd">        :return: last error code</span>
@@ -126,7 +126,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.last_except"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.last_except">[docs]</a>    <span class="k">def</span> <span class="nf">last_except</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.last_except"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.last_except">[docs]</a>    <span class="k">def</span> <span class="nf">last_except</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get last except code</span>
 
 <span class="sd">        :return: last except code</span>
@@ -134,7 +134,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__last_except</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.host"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.host">[docs]</a>    <span class="k">def</span> <span class="nf">host</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hostname</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.host"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.host">[docs]</a>    <span class="k">def</span> <span class="nf">host</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hostname</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get or set host (IPv4/IPv6 or hostname like &#39;plc.domain.net&#39;)</span>
 
 <span class="sd">        :param hostname: hostname or IPv4/IPv6 address or None for get value</span>
@@ -165,7 +165,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">None</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.port"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.port">[docs]</a>    <span class="k">def</span> <span class="nf">port</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.port"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.port">[docs]</a>    <span class="k">def</span> <span class="nf">port</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get or set TCP port</span>
 
 <span class="sd">        :param port: TCP port number or None for get value</span>
@@ -181,7 +181,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">None</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.debug"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.debug">[docs]</a>    <span class="k">def</span> <span class="nf">debug</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.debug"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.debug">[docs]</a>    <span class="k">def</span> <span class="nf">debug</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get or set debug mode</span>
 
 <span class="sd">        :param state: debug state or None for get value</span>
@@ -194,7 +194,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">__debug</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__debug</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.unit_id"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.unit_id">[docs]</a>    <span class="k">def</span> <span class="nf">unit_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">unit_id</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.unit_id"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.unit_id">[docs]</a>    <span class="k">def</span> <span class="nf">unit_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">unit_id</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get or set unit ID field</span>
 
 <span class="sd">        :param unit_id: unit ID (0 to 255) or None for get value</span>
@@ -210,7 +210,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">None</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.mode"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.mode">[docs]</a>    <span class="k">def</span> <span class="nf">mode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.mode"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.mode">[docs]</a>    <span class="k">def</span> <span class="nf">mode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get or set modbus mode (TCP or RTU)</span>
 
 <span class="sd">        :param mode: mode (MODBUS_TCP/MODBUS_RTU) to set or None for get value</span>
@@ -226,7 +226,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">None</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.open"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.open">[docs]</a>    <span class="k">def</span> <span class="nf">open</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.open"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.open">[docs]</a>    <span class="k">def</span> <span class="nf">open</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Connect to modbus server (open TCP connection)</span>
 
 <span class="sd">        :returns: connect status (True if open)</span>
@@ -263,7 +263,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;connect error&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="bp">False</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.is_open"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.is_open">[docs]</a>    <span class="k">def</span> <span class="nf">is_open</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.is_open"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.is_open">[docs]</a>    <span class="k">def</span> <span class="nf">is_open</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get status of TCP connection</span>
 
 <span class="sd">        :returns: status (True for open)</span>
@@ -271,7 +271,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.close"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.close">[docs]</a>    <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.close"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.close">[docs]</a>    <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Close TCP connection</span>
 
 <span class="sd">        :returns: close status (True for close/None if already close)</span>
@@ -284,7 +284,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">None</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.read_coils"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.read_coils">[docs]</a>    <span class="k">def</span> <span class="nf">read_coils</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bit_addr</span><span class="p">,</span> <span class="n">bit_nb</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.read_coils"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.read_coils">[docs]</a>    <span class="k">def</span> <span class="nf">read_coils</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bit_addr</span><span class="p">,</span> <span class="n">bit_nb</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Modbus function READ_COILS (0x01)</span>
 
 <span class="sd">        :param bit_addr: bit address (0 to 65535)</span>
@@ -342,7 +342,7 @@
         <span class="c"># return bits list</span>
         <span class="k">return</span> <span class="n">bits</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.read_discrete_inputs"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.read_discrete_inputs">[docs]</a>    <span class="k">def</span> <span class="nf">read_discrete_inputs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bit_addr</span><span class="p">,</span> <span class="n">bit_nb</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.read_discrete_inputs"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.read_discrete_inputs">[docs]</a>    <span class="k">def</span> <span class="nf">read_discrete_inputs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bit_addr</span><span class="p">,</span> <span class="n">bit_nb</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Modbus function READ_DISCRETE_INPUTS (0x02)</span>
 
 <span class="sd">        :param bit_addr: bit address (0 to 65535)</span>
@@ -400,7 +400,7 @@
         <span class="c"># return bits list</span>
         <span class="k">return</span> <span class="n">bits</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.read_holding_registers"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.read_holding_registers">[docs]</a>    <span class="k">def</span> <span class="nf">read_holding_registers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reg_addr</span><span class="p">,</span> <span class="n">reg_nb</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.read_holding_registers"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.read_holding_registers">[docs]</a>    <span class="k">def</span> <span class="nf">read_holding_registers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reg_addr</span><span class="p">,</span> <span class="n">reg_nb</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Modbus function READ_HOLDING_REGISTERS (0x03)</span>
 
 <span class="sd">        :param reg_addr: register address (0 to 65535)</span>
@@ -459,7 +459,7 @@
         <span class="c"># return registers list</span>
         <span class="k">return</span> <span class="n">registers</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.read_input_registers"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.read_input_registers">[docs]</a>    <span class="k">def</span> <span class="nf">read_input_registers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reg_addr</span><span class="p">,</span> <span class="n">reg_nb</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.read_input_registers"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.read_input_registers">[docs]</a>    <span class="k">def</span> <span class="nf">read_input_registers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reg_addr</span><span class="p">,</span> <span class="n">reg_nb</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Modbus function READ_INPUT_REGISTERS (0x04)</span>
 
 <span class="sd">        :param reg_addr: register address (0 to 65535)</span>
@@ -517,7 +517,7 @@
         <span class="c"># return registers list</span>
         <span class="k">return</span> <span class="n">registers</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.write_single_coil"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.write_single_coil">[docs]</a>    <span class="k">def</span> <span class="nf">write_single_coil</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bit_addr</span><span class="p">,</span> <span class="n">bit_value</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.write_single_coil"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.write_single_coil">[docs]</a>    <span class="k">def</span> <span class="nf">write_single_coil</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bit_addr</span><span class="p">,</span> <span class="n">bit_value</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Modbus function WRITE_SINGLE_COIL (0x05)</span>
 
 <span class="sd">        :param bit_addr: bit address (0 to 65535)</span>
@@ -559,7 +559,7 @@
         <span class="n">is_ok</span> <span class="o">=</span> <span class="p">(</span><span class="n">rx_bit_addr</span> <span class="o">==</span> <span class="n">bit_addr</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">rx_bit_value</span> <span class="o">==</span> <span class="n">bit_value</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">True</span> <span class="k">if</span> <span class="n">is_ok</span> <span class="k">else</span> <span class="bp">None</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.write_single_register"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.write_single_register">[docs]</a>    <span class="k">def</span> <span class="nf">write_single_register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reg_addr</span><span class="p">,</span> <span class="n">reg_value</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.write_single_register"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.write_single_register">[docs]</a>    <span class="k">def</span> <span class="nf">write_single_register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reg_addr</span><span class="p">,</span> <span class="n">reg_value</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Modbus function WRITE_SINGLE_REGISTER (0x06)</span>
 
 <span class="sd">        :param reg_addr: register address (0 to 65535)</span>
@@ -601,7 +601,7 @@
         <span class="n">is_ok</span> <span class="o">=</span> <span class="p">(</span><span class="n">rx_reg_addr</span> <span class="o">==</span> <span class="n">reg_addr</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">rx_reg_value</span> <span class="o">==</span> <span class="n">reg_value</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">True</span> <span class="k">if</span> <span class="n">is_ok</span> <span class="k">else</span> <span class="bp">None</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.write_multiple_registers"><a class="viewcode-back" href="../../class_ModbusClient.html#pyModbusTCP.client.ModbusClient.write_multiple_registers">[docs]</a>    <span class="k">def</span> <span class="nf">write_multiple_registers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reg_addr</span><span class="p">,</span> <span class="n">regs_value</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.write_multiple_registers"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.write_multiple_registers">[docs]</a>    <span class="k">def</span> <span class="nf">write_multiple_registers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reg_addr</span><span class="p">,</span> <span class="n">regs_value</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Modbus function WRITE_MULTIPLE_REGISTERS (0x10)</span>
 
 <span class="sd">        :param reg_addr: registers address (0 to 65535)</span>
