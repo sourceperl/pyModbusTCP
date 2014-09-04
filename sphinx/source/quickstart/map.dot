@@ -1,0 +1,16 @@
+/* 
+generate pyModbusTCP map as PNG
+(need sudo apt-get install graphviz)
+
+command:
+dot -Tpng map.dot > map.png
+*/
+
+digraph pyModbusTCP_map {
+    "pyModbusTCP" -> "client";
+    "pyModbusTCP" -> "utils";
+    "pyModbusTCP" -> "constants";
+    "client"      -> "class ModbusClient";
+    "utils"       -> "data mangling functions";
+    "constants"   -> "all package constants";
+}

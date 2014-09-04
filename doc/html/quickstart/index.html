@@ -1,0 +1,297 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Quickstart &mdash; pyModbusTCP 0.0.7 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.0.7',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="pyModbusTCP 0.0.7 documentation" href="../index.html" />
+    <link rel="next" title="pyModbusTCP modules documentation" href="../package/index.html" />
+    <link rel="prev" title="Welcome to pyModbusTCP’s documentation" href="../index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../package/index.html" title="pyModbusTCP modules documentation"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="../index.html" title="Welcome to pyModbusTCP’s documentation"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">pyModbusTCP 0.0.7 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="quickstart">
+<h1>Quickstart<a class="headerlink" href="#quickstart" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="overview-of-the-package">
+<h2>Overview of the package<a class="headerlink" href="#overview-of-the-package" title="Permalink to this headline">¶</a></h2>
+<p>pyModbusTCP give access to modbus/TCP server through the ModbusClient object:
+this class is define in the client module.</p>
+<p>To deal with frequent need of modbus data mangling (for example 32 bits IEEE
+float to 2x16 bits words convertion) a special module named utils provide some
+helful functions.</p>
+<p><strong>Package map:</strong></p>
+<a class="reference internal image-reference" href="../_images/map.png"><img alt="../_images/map.png" src="../_images/map.png" style="width: 726.0px; height: 188.25px;" /></a>
+</div>
+<div class="section" id="package-setup">
+<h2>Package setup<a class="headerlink" href="#package-setup" title="Permalink to this headline">¶</a></h2>
+<p>from PyPi:</p>
+<div class="highlight-python"><div class="highlight"><pre># for Python 2.7
+sudo pip-2.7 install pyModbusTCP
+# or for Python 3.2
+sudo pip-3.2 install pyModbusTCP
+# or upgrade from an older release
+sudo pip-3.2 install pyModbusTCP --upgrade
+</pre></div>
+</div>
+<p>from Github:</p>
+<div class="highlight-python"><div class="highlight"><pre>git clone https://github.com/sourceperl/pyModbusTCP.git
+cd pyModbusTCP
+# here change &quot;python&quot; by your python target(s) version(s) (like python3.2)
+sudo python setup.py install
+</pre></div>
+</div>
+</div>
+<div class="section" id="init-object-modbusclient">
+<h2>init object ModbusClient<a class="headerlink" href="#init-object-modbusclient" title="Permalink to this headline">¶</a></h2>
+<p>init module from constructor (raise ValueError if host/port error):</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pyModbusTCP.client</span> <span class="kn">import</span> <span class="n">ModbusClient</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">c</span> <span class="o">=</span> <span class="n">ModbusClient</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s">&quot;localhost&quot;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">502</span><span class="p">)</span>
+<span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+    <span class="k">print</span><span class="p">(</span><span class="s">&quot;Error with host or port params&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>you can also init module from functions host/port return None if error:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pyModbusTCP.client</span> <span class="kn">import</span> <span class="n">ModbusClient</span>
+<span class="n">c</span> <span class="o">=</span> <span class="n">ModbusClient</span><span class="p">()</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="n">c</span><span class="o">.</span><span class="n">host</span><span class="p">(</span><span class="s">&quot;localhost&quot;</span><span class="p">):</span>
+    <span class="k">print</span><span class="p">(</span><span class="s">&quot;host error&quot;</span><span class="p">)</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="n">c</span><span class="o">.</span><span class="n">port</span><span class="p">(</span><span class="mi">502</span><span class="p">):</span>
+    <span class="k">print</span><span class="p">(</span><span class="s">&quot;port error&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="modbusclient-manage-tcp-link">
+<h2>ModbusClient manage TCP link<a class="headerlink" href="#modbusclient-manage-tcp-link" title="Permalink to this headline">¶</a></h2>
+<p>Before each request, the TCP link need to be manualy open:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">open</span><span class="p">():</span>
+    <span class="n">regs_list_1</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">read_holding_registers</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+    <span class="n">regs_list_2</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">read_holding_registers</span><span class="p">(</span><span class="mi">55</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+    <span class="n">c</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>In a loop:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">is_open</span><span class="p">():</span>
+        <span class="n">regs_list_1</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">read_holding_registers</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+        <span class="n">regs_list_2</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">read_holding_registers</span><span class="p">(</span><span class="mi">55</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">c</span><span class="o">.</span><span class="n">open</span><span class="p">()</span>
+    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="modbusclient-available-functions-table">
+<h2>ModbusClient available functions table<a class="headerlink" href="#modbusclient-available-functions-table" title="Permalink to this headline">¶</a></h2>
+<p>See <a class="reference external" href="http://en.wikipedia.org/wiki/Modbus">http://en.wikipedia.org/wiki/Modbus</a> for full table.</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="45%" />
+<col width="19%" />
+<col width="36%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">Function name</th>
+<th class="head">Function code</th>
+<th class="head">ModbusClient function</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>Read Discrete Inputs</td>
+<td>2</td>
+<td>read_discrete_inputs</td>
+</tr>
+<tr class="row-odd"><td>Read Coils</td>
+<td>1</td>
+<td>read_coils</td>
+</tr>
+<tr class="row-even"><td>Write Single Coil</td>
+<td>5</td>
+<td>write_single_coil</td>
+</tr>
+<tr class="row-odd"><td>Write Multiple Coils</td>
+<td>15</td>
+<td>n/a</td>
+</tr>
+<tr class="row-even"><td>Read Input Registers</td>
+<td>4</td>
+<td>read_input_registers</td>
+</tr>
+<tr class="row-odd"><td>Read Holding Registers</td>
+<td>3</td>
+<td>read_holding_registers</td>
+</tr>
+<tr class="row-even"><td>Write Single Register</td>
+<td>6</td>
+<td>write_single_register</td>
+</tr>
+<tr class="row-odd"><td>Write Multiple Registers</td>
+<td>16</td>
+<td>write_multiple_registers</td>
+</tr>
+<tr class="row-even"><td>Read/Write Multiple Registers</td>
+<td>23</td>
+<td>n/a</td>
+</tr>
+<tr class="row-odd"><td>Mask Write Register</td>
+<td>22</td>
+<td>n/a</td>
+</tr>
+<tr class="row-even"><td>Read FIFO Queue</td>
+<td>24</td>
+<td>n/a</td>
+</tr>
+<tr class="row-odd"><td>Read File Record</td>
+<td>20</td>
+<td>n/a</td>
+</tr>
+<tr class="row-even"><td>Write File Record</td>
+<td>21</td>
+<td>n/a</td>
+</tr>
+<tr class="row-odd"><td>Read Exception Status</td>
+<td>7</td>
+<td>n/a</td>
+</tr>
+<tr class="row-even"><td>Diagnostic</td>
+<td>8</td>
+<td>n/a</td>
+</tr>
+<tr class="row-odd"><td>Get Com Event Counter</td>
+<td>11</td>
+<td>n/a</td>
+</tr>
+<tr class="row-even"><td>Get Com Event Log</td>
+<td>12</td>
+<td>n/a</td>
+</tr>
+<tr class="row-odd"><td>Report Slave ID</td>
+<td>17</td>
+<td>n/a</td>
+</tr>
+<tr class="row-even"><td>Read Device Identification</td>
+<td>43</td>
+<td>n/a</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="modbus-data-mangling">
+<h2>Modbus data mangling<a class="headerlink" href="#modbus-data-mangling" title="Permalink to this headline">¶</a></h2>
+<p><em>Coming soon.</em></p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Quickstart</a><ul>
+<li><a class="reference internal" href="#overview-of-the-package">Overview of the package</a></li>
+<li><a class="reference internal" href="#package-setup">Package setup</a></li>
+<li><a class="reference internal" href="#init-object-modbusclient">init object ModbusClient</a></li>
+<li><a class="reference internal" href="#modbusclient-manage-tcp-link">ModbusClient manage TCP link</a></li>
+<li><a class="reference internal" href="#modbusclient-available-functions-table">ModbusClient available functions table</a></li>
+<li><a class="reference internal" href="#modbus-data-mangling">Modbus data mangling</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="../index.html"
+                        title="previous chapter">Welcome to pyModbusTCP&#8217;s documentation</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="../package/index.html"
+                        title="next chapter">pyModbusTCP modules documentation</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="../_sources/quickstart/index.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../package/index.html" title="pyModbusTCP modules documentation"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="../index.html" title="Welcome to pyModbusTCP’s documentation"
+             >previous</a> |</li>
+        <li><a href="../index.html">pyModbusTCP 0.0.7 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, Loic Lefebvre.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    </div>
+  </body>
+</html>
