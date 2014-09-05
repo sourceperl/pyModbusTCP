@@ -56,8 +56,8 @@
 <h1>Quickstart<a class="headerlink" href="#quickstart" title="Permalink to this headline">¶</a></h1>
 <div class="section" id="overview-of-the-package">
 <h2>Overview of the package<a class="headerlink" href="#overview-of-the-package" title="Permalink to this headline">¶</a></h2>
-<p>pyModbusTCP give access to modbus/TCP server through the ModbusClient object:
-this class is define in the client module.</p>
+<p>pyModbusTCP give access to modbus/TCP server through the ModbusClient object.
+This class is define in the client module.</p>
 <p>To deal with frequent need of modbus data mangling (for example 32 bits IEEE
 float to 2x16 bits words convertion) a special module named utils provide some
 helful functions.</p>
@@ -83,8 +83,8 @@ sudo python setup.py install
 </pre></div>
 </div>
 </div>
-<div class="section" id="init-object-modbusclient">
-<h2>init object ModbusClient<a class="headerlink" href="#init-object-modbusclient" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="modbusclient-init">
+<h2>ModbusClient: init<a class="headerlink" href="#modbusclient-init" title="Permalink to this headline">¶</a></h2>
 <p>init module from constructor (raise ValueError if host/port error):</p>
 <div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pyModbusTCP.client</span> <span class="kn">import</span> <span class="n">ModbusClient</span>
 <span class="k">try</span><span class="p">:</span>
@@ -104,15 +104,16 @@ sudo python setup.py install
 </div>
 </div>
 <div class="section" id="modbusclient-manage-tcp-link">
-<h2>ModbusClient manage TCP link<a class="headerlink" href="#modbusclient-manage-tcp-link" title="Permalink to this headline">¶</a></h2>
-<p>Before each request, the TCP link need to be manualy open:</p>
+<h2>ModbusClient: manage TCP link<a class="headerlink" href="#modbusclient-manage-tcp-link" title="Permalink to this headline">¶</a></h2>
+<p>After init ModbusClient, you need to open the TCP link. After this, you can
+call a modbus request function (see list in next section):</p>
 <div class="highlight-python"><div class="highlight"><pre><span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">open</span><span class="p">():</span>
     <span class="n">regs_list_1</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">read_holding_registers</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
     <span class="n">regs_list_2</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">read_holding_registers</span><span class="p">(</span><span class="mi">55</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
     <span class="n">c</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 </pre></div>
 </div>
-<p>In a loop:</p>
+<p>With a forever polling loop, TCP always open (auto-reconnect code):</p>
 <div class="highlight-python"><div class="highlight"><pre><span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
     <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">is_open</span><span class="p">():</span>
         <span class="n">regs_list_1</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">read_holding_registers</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
@@ -123,23 +124,26 @@ sudo python setup.py install
 </pre></div>
 </div>
 </div>
-<div class="section" id="modbusclient-available-functions-table">
-<h2>ModbusClient available functions table<a class="headerlink" href="#modbusclient-available-functions-table" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="modbusclient-available-modbus-requests-functions">
+<h2>ModbusClient: available modbus requests functions<a class="headerlink" href="#modbusclient-available-modbus-requests-functions" title="Permalink to this headline">¶</a></h2>
 <p>See <a class="reference external" href="http://en.wikipedia.org/wiki/Modbus">http://en.wikipedia.org/wiki/Modbus</a> for full table.</p>
 <table border="1" class="docutils">
 <colgroup>
-<col width="45%" />
-<col width="19%" />
-<col width="36%" />
+<col width="14%" />
+<col width="34%" />
+<col width="17%" />
+<col width="35%" />
 </colgroup>
 <thead valign="bottom">
-<tr class="row-odd"><th class="head">Function name</th>
+<tr class="row-odd"><th class="head">Domain</th>
+<th class="head">Function name</th>
 <th class="head">Function code</th>
-<th class="head">ModbusClient function</th>
+<th class="head">ModbusClient request function</th>
 </tr>
 </thead>
 <tbody valign="top">
-<tr class="row-even"><td>Read Discrete Inputs</td>
+<tr class="row-even"><td rowspan="4">Bit</td>
+<td>Read Discrete Inputs</td>
 <td>2</td>
 <td>read_discrete_inputs</td>
 </tr>
@@ -155,7 +159,8 @@ sudo python setup.py install
 <td>15</td>
 <td>n/a</td>
 </tr>
-<tr class="row-even"><td>Read Input Registers</td>
+<tr class="row-even"><td rowspan="6">Register</td>
+<td>Read Input Registers</td>
 <td>4</td>
 <td>read_input_registers</td>
 </tr>
@@ -179,7 +184,8 @@ sudo python setup.py install
 <td>22</td>
 <td>n/a</td>
 </tr>
-<tr class="row-even"><td>Read FIFO Queue</td>
+<tr class="row-even"><td rowspan="4">File</td>
+<td>Read FIFO Queue</td>
 <td>24</td>
 <td>n/a</td>
 </tr>
@@ -195,7 +201,8 @@ sudo python setup.py install
 <td>7</td>
 <td>n/a</td>
 </tr>
-<tr class="row-even"><td>Diagnostic</td>
+<tr class="row-even"><td rowspan="5">Diagnostic</td>
+<td>Diagnostic</td>
 <td>8</td>
 <td>n/a</td>
 </tr>
@@ -220,7 +227,57 @@ sudo python setup.py install
 </div>
 <div class="section" id="modbus-data-mangling">
 <h2>Modbus data mangling<a class="headerlink" href="#modbus-data-mangling" title="Permalink to this headline">¶</a></h2>
-<p><em>Coming soon.</em></p>
+<p>Sample data mangling, usefull for interface PLC device.</p>
+<ul>
+<li><p class="first">16 bits to 32 bits integers:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pyModbusTCP</span> <span class="kn">import</span> <span class="n">utils</span>
+<span class="n">list_16_bits</span> <span class="o">=</span> <span class="p">[</span><span class="mh">0x0123</span><span class="p">,</span> <span class="mh">0x4567</span><span class="p">,</span> <span class="mh">0x89ab</span><span class="p">,</span> <span class="mh">0xcdef</span><span class="p">]</span>
+
+<span class="c"># big endian sample (default)</span>
+<span class="n">list_32_bits</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">word_list_to_long</span><span class="p">(</span><span class="n">list_16_bits</span><span class="p">)</span>
+<span class="c"># display &quot;[&#39;0x1234567&#39;, &#39;0x89abcdef&#39;]&quot;</span>
+<span class="k">print</span><span class="p">([</span><span class="nb">hex</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">list_32_bits</span><span class="p">])</span>
+
+<span class="c"># little endian sample</span>
+<span class="n">list_32_bits</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">word_list_to_long</span><span class="p">(</span><span class="n">list_16_bits</span><span class="p">,</span> <span class="n">big_endian</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+<span class="c"># display &quot;[&#39;0x45670123&#39;, &#39;0xcdef89ab&#39;]&quot;</span>
+<span class="k">print</span><span class="p">([</span><span class="nb">hex</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">list_32_bits</span><span class="p">])</span>
+</pre></div>
+</div>
+</li>
+<li><p class="first">two&#8217;s complement (see <a class="reference external" href="http://en.wikipedia.org/wiki/Two%27s_complement">http://en.wikipedia.org/wiki/Two%27s_complement</a>):</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pyModbusTCP</span> <span class="kn">import</span> <span class="n">utils</span>
+<span class="n">list_16_bits</span> <span class="o">=</span> <span class="p">[</span><span class="mh">0x0000</span><span class="p">,</span> <span class="mh">0xFFFF</span><span class="p">,</span> <span class="mh">0x00FF</span><span class="p">,</span> <span class="mh">0x8001</span><span class="p">]</span>
+
+<span class="c"># display &quot;[0, -1, 255, -32767]&quot;</span>
+<span class="k">print</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">get_list_2comp</span><span class="p">(</span><span class="n">list_16_bits</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+
+<span class="c"># display &quot;-1&quot;</span>
+<span class="k">print</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">get_2comp</span><span class="p">(</span><span class="n">list_16_bits</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">16</span><span class="p">))</span>
+</pre></div>
+</div>
+</li>
+<li><p class="first">an integer of val_size bits (default is 16) to an array of boolean:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pyModbusTCP</span> <span class="kn">import</span> <span class="n">utils</span>
+<span class="c"># display &quot;[True, False, True, False, False, False, False, False]&quot;</span>
+<span class="k">print</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">get_bits_from_int</span><span class="p">(</span><span class="mh">0x05</span><span class="p">,</span> <span class="n">val_size</span><span class="o">=</span><span class="mi">8</span><span class="p">))</span>
+</pre></div>
+</div>
+</li>
+<li><p class="first">gateway between IEEE single precision float and python float:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pyModbusTCP</span> <span class="kn">import</span> <span class="n">utils</span>
+
+<span class="c"># convert python float 0.3 to 0x3e99999a (32 bits IEEE representation)</span>
+<span class="c"># display &quot;0x3e99999a&quot;</span>
+<span class="k">print</span><span class="p">(</span><span class="nb">hex</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">encode_ieee</span><span class="p">(</span><span class="mf">0.3</span><span class="p">)))</span>
+
+<span class="c"># convert python float 0.3 to 0x3e99999a (32 bits IEEE representation)</span>
+<span class="c"># display &quot;0.300000011921&quot; (it&#39;s not 0.3, precision leak with float...)</span>
+<span class="k">print</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">decode_ieee</span><span class="p">(</span><span class="mh">0x3e99999a</span><span class="p">))</span>
+</pre></div>
+</div>
+</li>
+</ul>
 </div>
 </div>
 
@@ -235,9 +292,9 @@ sudo python setup.py install
 <li><a class="reference internal" href="#">Quickstart</a><ul>
 <li><a class="reference internal" href="#overview-of-the-package">Overview of the package</a></li>
 <li><a class="reference internal" href="#package-setup">Package setup</a></li>
-<li><a class="reference internal" href="#init-object-modbusclient">init object ModbusClient</a></li>
-<li><a class="reference internal" href="#modbusclient-manage-tcp-link">ModbusClient manage TCP link</a></li>
-<li><a class="reference internal" href="#modbusclient-available-functions-table">ModbusClient available functions table</a></li>
+<li><a class="reference internal" href="#modbusclient-init">ModbusClient: init</a></li>
+<li><a class="reference internal" href="#modbusclient-manage-tcp-link">ModbusClient: manage TCP link</a></li>
+<li><a class="reference internal" href="#modbusclient-available-modbus-requests-functions">ModbusClient: available modbus requests functions</a></li>
 <li><a class="reference internal" href="#modbus-data-mangling">Modbus data mangling</a></li>
 </ul>
 </li>
