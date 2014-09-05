@@ -21,6 +21,10 @@ import os
 sys.path.insert(0, os.path.abspath('../../'))
 from pyModbusTCP.constants import VERSION as __version__
 
+# PDF builder config
+pdf_documents = [('index', 'pyModbusTCP', 'pyModbusTCP documentation',
+                  'Loic Lefebvre'),]
+
 # -- General configuration ------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
@@ -34,6 +38,7 @@ extensions = [
     'sphinx.ext.todo',
     'sphinx.ext.ifconfig',
     'sphinx.ext.viewcode',
+    'rst2pdf.pdfbuilder',
 ]
 
 # Add any paths that contain templates here, relative to this directory.

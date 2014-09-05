@@ -198,9 +198,3 @@ Sample data mangling, usefull for interface PLC device.
     # display "0.300000011921" (it's not 0.3, precision leak with float...)
     print(utils.decode_ieee(0x3e99999a))
 
-
-
-
-
-
-
