@@ -691,11 +691,14 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;call _send on close socket&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="bp">None</span>
-        <span class="c"># send data</span>
+        <span class="c"># send</span>
         <span class="n">data_l</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-        <span class="n">send_l</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-        <span class="c"># send error</span>
-        <span class="k">if</span> <span class="n">send_l</span> <span class="o">!=</span> <span class="n">data_l</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">send_l</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">socket</span><span class="o">.</span><span class="n">error</span><span class="p">:</span>
+            <span class="n">send_l</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="c"># handle send error</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">send_l</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">send_l</span> <span class="o">!=</span> <span class="n">data_l</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_SEND_ERR</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;_send error&quot;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
@@ -716,7 +719,11 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">return</span> <span class="bp">None</span>
         <span class="c"># recv</span>
-        <span class="n">r_buffer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">max_size</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">r_buffer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">max_size</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">socket</span><span class="o">.</span><span class="n">error</span><span class="p">:</span>
+            <span class="n">r_buffer</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="c"># handle recv error</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">r_buffer</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__last_error</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MB_RECV_ERR</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;_recv error&quot;</span><span class="p">)</span>

@@ -642,11 +642,14 @@ class ModbusClient:
         if self.__sock is None:
             self.__debug_msg("call _send on close socket")
             return None
-        # send data
+        # send
         data_l = len(data)
-        send_l = self.__sock.send(data)
-        # send error
-        if send_l != data_l:
+        try:
+            send_l = self.__sock.send(data)
+        except socket.error:
+            send_l = None
+        # handle send error
+        if (send_l is None) or (send_l != data_l):
             self.__last_error = const.MB_SEND_ERR
             self.__debug_msg("_send error")
             self.close()
@@ -667,7 +670,11 @@ class ModbusClient:
             self.close()
             return None
         # recv
-        r_buffer = self.__sock.recv(max_size)
+        try:
+            r_buffer = self.__sock.recv(max_size)
+        except socket.error:
+            r_buffer = None
+        # handle recv error
         if not r_buffer:
             self.__last_error = const.MB_RECV_ERR
             self.__debug_msg("_recv error")
