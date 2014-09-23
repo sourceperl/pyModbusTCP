@@ -1,5 +1,9 @@
 Revision history for pyModbusTCP
 
+0.0.8 2014-09-23
+    - Catch excepts on socket send/recv.
+    - Sphinx documentation include a quickstart and examples.
+
 0.0.7 2014-08-31
 
     - Add unit test (see test/).
