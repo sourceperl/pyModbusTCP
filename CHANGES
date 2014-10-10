@@ -1,5 +1,8 @@
 Revision history for pyModbusTCP
 
+0.0.9 2014-10-10
+    - Fix rx_byte_count check in ModbusClient class.
+
 0.0.8 2014-09-23
     - Catch excepts on socket send/recv.
     - Sphinx documentation include a quickstart and examples.
