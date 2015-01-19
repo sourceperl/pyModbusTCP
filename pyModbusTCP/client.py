@@ -26,6 +26,8 @@ class ModbusClient:
         :type port: int
         :param unit_id: unit ID (optional)
         :type unit_id: int
+        :param timeout: socket timeout in second (optional)
+        :type timeout: int
         :param debug: debug state (optional)
         :type debug: bool
         :return: Object ModbusClient
