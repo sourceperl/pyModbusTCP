@@ -12,7 +12,7 @@ import random
 class ModbusClient:
     """Client Modbus TCP"""
 
-    def __init__(self, host=None, port=None, unit_id=None, debug=None):
+    def __init__(self, host=None, port=None, unit_id=None, timeout=30, debug=None):
         """Constructor
 
         Modbus server params (host, port) can be set here or with host(), port()
@@ -26,6 +26,8 @@ class ModbusClient:
         :type port: int
         :param unit_id: unit ID (optional)
         :type unit_id: int
+        :param timeout: socket timeout in second (optional)
+        :type timeout: int
         :param debug: debug state (optional)
         :type debug: bool
         :return: Object ModbusClient
@@ -38,7 +40,7 @@ class ModbusClient:
         self.__unit_id     = 1
         self.__mode        = const.MODBUS_TCP  # default is Modbus/TCP
         self.__sock        = None              # socket handle
-        self.__timeout     = 30                # socket timeout
+        self.__timeout     = timeout           # socket timeout
         self.__hd_tr_id    = 0                 # store transaction ID
         self.__debug       = False             # debug trace on/off
         self.__version     = const.VERSION     # version number
