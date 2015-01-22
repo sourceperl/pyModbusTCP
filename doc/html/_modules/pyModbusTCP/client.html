@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>pyModbusTCP.client &mdash; pyModbusTCP 0.0.9 documentation</title>
+    <title>pyModbusTCP.client &mdash; pyModbusTCP 0.0.10 documentation</title>
     
     <link rel="stylesheet" href="../../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
@@ -14,7 +14,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../../',
-        VERSION:     '0.0.9',
+        VERSION:     '0.0.10',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../../_static/jquery.js"></script>
     <script type="text/javascript" src="../../_static/underscore.js"></script>
     <script type="text/javascript" src="../../_static/doctools.js"></script>
-    <link rel="top" title="pyModbusTCP 0.0.9 documentation" href="../../index.html" />
+    <link rel="top" title="pyModbusTCP 0.0.10 documentation" href="../../index.html" />
     <link rel="up" title="Module code" href="../index.html" /> 
   </head>
   <body>
@@ -36,7 +36,7 @@
         <li class="right" >
           <a href="../../py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../index.html">pyModbusTCP 0.0.9 documentation</a> &raquo;</li>
+        <li><a href="../../index.html">pyModbusTCP 0.0.10 documentation</a> &raquo;</li>
           <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
       </ul>
     </div>  
@@ -61,7 +61,7 @@
 <div class="viewcode-block" id="ModbusClient"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient">[docs]</a><span class="k">class</span> <span class="nc">ModbusClient</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;Client Modbus TCP&quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="ModbusClient.__init__"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">unit_id</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.__init__"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">unit_id</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Constructor</span>
 
 <span class="sd">        Modbus server params (host, port) can be set here or with host(), port()</span>
@@ -75,6 +75,8 @@
 <span class="sd">        :type port: int</span>
 <span class="sd">        :param unit_id: unit ID (optional)</span>
 <span class="sd">        :type unit_id: int</span>
+<span class="sd">        :param timeout: socket timeout in second (optional)</span>
+<span class="sd">        :type timeout: int</span>
 <span class="sd">        :param debug: debug state (optional)</span>
 <span class="sd">        :type debug: bool</span>
 <span class="sd">        :return: Object ModbusClient</span>
@@ -87,7 +89,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">__unit_id</span>     <span class="o">=</span> <span class="mi">1</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__mode</span>        <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MODBUS_TCP</span>  <span class="c"># default is Modbus/TCP</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span>        <span class="o">=</span> <span class="bp">None</span>              <span class="c"># socket handle</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__timeout</span>     <span class="o">=</span> <span class="mi">30</span>                <span class="c"># socket timeout</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__timeout</span>     <span class="o">=</span> <span class="n">timeout</span>           <span class="c"># socket timeout</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__hd_tr_id</span>    <span class="o">=</span> <span class="mi">0</span>                 <span class="c"># store transaction ID</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__debug</span>       <span class="o">=</span> <span class="bp">False</span>             <span class="c"># debug trace on/off</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__version</span>     <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">VERSION</span>     <span class="c"># version number</span>
@@ -977,7 +979,7 @@
         <li class="right" >
           <a href="../../py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../index.html">pyModbusTCP 0.0.9 documentation</a> &raquo;</li>
+        <li><a href="../../index.html">pyModbusTCP 0.0.10 documentation</a> &raquo;</li>
           <li><a href="../index.html" >Module code</a> &raquo;</li> 
       </ul>
     </div>

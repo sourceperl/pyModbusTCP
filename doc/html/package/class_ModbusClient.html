@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>Module pyModbusTCP.client &mdash; pyModbusTCP 0.0.9 documentation</title>
+    <title>Module pyModbusTCP.client &mdash; pyModbusTCP 0.0.10 documentation</title>
     
     <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
@@ -14,7 +14,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../',
-        VERSION:     '0.0.9',
+        VERSION:     '0.0.10',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <link rel="top" title="pyModbusTCP 0.0.9 documentation" href="../index.html" />
+    <link rel="top" title="pyModbusTCP 0.0.10 documentation" href="../index.html" />
     <link rel="up" title="pyModbusTCP modules documentation" href="index.html" />
     <link rel="next" title="Module pyModbusTCP.utils" href="module_utils.html" />
     <link rel="prev" title="pyModbusTCP modules documentation" href="index.html" /> 
@@ -44,7 +44,7 @@
         <li class="right" >
           <a href="index.html" title="pyModbusTCP modules documentation"
              accesskey="P">previous</a> |</li>
-        <li><a href="../index.html">pyModbusTCP 0.0.9 documentation</a> &raquo;</li>
+        <li><a href="../index.html">pyModbusTCP 0.0.10 documentation</a> &raquo;</li>
           <li><a href="index.html" accesskey="U">pyModbusTCP modules documentation</a> &raquo;</li> 
       </ul>
     </div>  
@@ -61,11 +61,11 @@
 <h2>class pyModbusTCP.client.ModbusClient<a class="headerlink" href="#class-pymodbustcp-client-modbusclient" title="Permalink to this headline">¶</a></h2>
 <dl class="class">
 <dt id="pyModbusTCP.client.ModbusClient">
-<em class="property">class </em><tt class="descclassname">pyModbusTCP.client.</tt><tt class="descname">ModbusClient</tt><big>(</big><em>host=None</em>, <em>port=None</em>, <em>unit_id=None</em>, <em>debug=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><tt class="descclassname">pyModbusTCP.client.</tt><tt class="descname">ModbusClient</tt><big>(</big><em>host=None</em>, <em>port=None</em>, <em>unit_id=None</em>, <em>timeout=30</em>, <em>debug=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient" title="Permalink to this definition">¶</a></dt>
 <dd><p>Client Modbus TCP</p>
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.__init__">
-<tt class="descname">__init__</tt><big>(</big><em>host=None</em>, <em>port=None</em>, <em>unit_id=None</em>, <em>debug=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.__init__" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">__init__</tt><big>(</big><em>host=None</em>, <em>port=None</em>, <em>unit_id=None</em>, <em>timeout=30</em>, <em>debug=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.__init__" title="Permalink to this definition">¶</a></dt>
 <dd><p>Constructor</p>
 <p>Modbus server params (host, port) can be set here or with host(), port()
 functions. Same for debug option.</p>
@@ -78,6 +78,7 @@ functions. Same for debug option.</p>
 <li><strong>host</strong> (<em>str</em>) &#8211; hostname or IPv4/IPv6 address server address (optional)</li>
 <li><strong>port</strong> (<em>int</em>) &#8211; TCP port number (optional)</li>
 <li><strong>unit_id</strong> (<em>int</em>) &#8211; unit ID (optional)</li>
+<li><strong>timeout</strong> (<em>int</em>) &#8211; socket timeout in second (optional)</li>
 <li><strong>debug</strong> (<em>bool</em>) &#8211; debug state (optional)</li>
 </ul>
 </td>
@@ -512,7 +513,7 @@ functions. Same for debug option.</p>
         <li class="right" >
           <a href="index.html" title="pyModbusTCP modules documentation"
              >previous</a> |</li>
-        <li><a href="../index.html">pyModbusTCP 0.0.9 documentation</a> &raquo;</li>
+        <li><a href="../index.html">pyModbusTCP 0.0.10 documentation</a> &raquo;</li>
           <li><a href="index.html" >pyModbusTCP modules documentation</a> &raquo;</li> 
       </ul>
     </div>
