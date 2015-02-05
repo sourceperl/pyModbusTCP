@@ -202,6 +202,7 @@ class ModbusClient:
                 self.__sock = None
                 continue
             try:
+                self.__sock.settimeout(float(self.__timeout))
                 self.__sock.connect(sa)
             except socket.error:
                 self.__sock.close()
