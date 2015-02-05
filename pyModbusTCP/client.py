@@ -42,7 +42,7 @@ class ModbusClient:
         self.__unit_id = 1
         self.__mode = const.MODBUS_TCP  # default is Modbus/TCP
         self.__sock = None              # socket handle
-        self.__timeout = timeout           # socket timeout
+        self.__timeout = float(timeout)           # socket timeout
         self.__hd_tr_id = 0                 # store transaction ID
         self.__debug = False             # debug trace on/off
         self.__version = const.VERSION     # version number
@@ -204,7 +204,7 @@ class ModbusClient:
                 self.__sock = None
                 continue
             try:
-                self.__sock.settimeout(float(self.__timeout))
+                self.__sock.settimeout(self.__timeout)
                 self.__sock.connect(sa)
             except socket.error:
                 self.__sock.close()
