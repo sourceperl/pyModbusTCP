@@ -15,7 +15,7 @@ class ModbusClient:
     """Client Modbus TCP"""
 
     def __init__(self, host=None, port=None, unit_id=None, timeout=None,
-                 auto_tcp=None, debug=None):
+                 debug=None, auto_tcp=None):
         """Constructor
 
         Modbus server params (host, port) can be set here or with host(), port()
@@ -30,11 +30,11 @@ class ModbusClient:
         :param unit_id: unit ID (optional)
         :type unit_id: int
         :param timeout: socket timeout in seconds (optional)
-        :type timeout: int
-        :param auto_tcp: auto connect state (optional)
-        :type auto_tcp: bool
+        :type timeout: float
         :param debug: debug state (optional)
         :type debug: bool
+        :param auto_tcp: auto connect state (optional)
+        :type auto_tcp: bool
         :return: Object ModbusClient
         :rtype: ModbusClient
         :raises ValueError: if a set parameter value is incorrect
@@ -43,12 +43,12 @@ class ModbusClient:
         self.__hostname = "localhost"
         self.__port = const.MODBUS_PORT
         self.__unit_id = 1
+        self.__timeout = 30.0               # socket timeout
+        self.__debug = False                # debug trace on/off
+        self.__auto_tcp = False             # auto TCP connect
         self.__mode = const.MODBUS_TCP      # default is Modbus/TCP
         self.__sock = None                  # socket handle
-        self.__timeout = 30.0               # socket timeout
         self.__hd_tr_id = 0                 # store transaction ID
-        self.__auto_tcp = False             # auto TCP connect
-        self.__debug = False                # debug trace on/off
         self.__version = const.VERSION      # version number
         self.__last_error = const.MB_NO_ERR # last error code
         self.__last_except = 0              # last expect code
@@ -68,14 +68,14 @@ class ModbusClient:
         if timeout:
             if not self.timeout(timeout):
                 raise ValueError("timeout value error")
-        # set auto_tcp
-        if auto_tcp:
-            if not self.auto_tcp(auto_tcp):
-                raise ValueError("auto_tcp value error")
         # set debug
         if debug:
             if not self.debug(debug):
                 raise ValueError("debug value error")
+        # set auto_tcp
+        if auto_tcp:
+            if not self.auto_tcp(auto_tcp):
+                raise ValueError("auto_tcp value error")
 
     def version(self):
         """Get package version
@@ -148,32 +148,6 @@ class ModbusClient:
         else:
             return None
 
-    def auto_tcp(self, state=None):
-        """Get or set automatic TCP connect mode
-
-        :param state: auto_tcp state or None for get value
-        :type state: bool or None
-        :returns: auto_tcp state or None if set fail
-        :rtype: bool or None
-        """
-        if state is None:
-            return self.__auto_tcp
-        self.__auto_tcp = bool(state)
-        return self.__auto_tcp
-
-    def debug(self, state=None):
-        """Get or set debug mode
-
-        :param state: debug state or None for get value
-        :type state: bool or None
-        :returns: debug state or None if set fail
-        :rtype: bool or None
-        """
-        if state is None:
-            return self.__debug
-        self.__debug = bool(state)
-        return self.__debug
-
     def unit_id(self, unit_id=None):
         """Get or set unit ID field
 
@@ -205,6 +179,32 @@ class ModbusClient:
             return self.__timeout
         else:
             return None
+
+    def debug(self, state=None):
+        """Get or set debug mode
+
+        :param state: debug state or None for get value
+        :type state: bool or None
+        :returns: debug state or None if set fail
+        :rtype: bool or None
+        """
+        if state is None:
+            return self.__debug
+        self.__debug = bool(state)
+        return self.__debug
+
+    def auto_tcp(self, state=None):
+        """Get or set automatic TCP connect mode
+
+        :param state: auto_tcp state or None for get value
+        :type state: bool or None
+        :returns: auto_tcp state or None if set fail
+        :rtype: bool or None
+        """
+        if state is None:
+            return self.__auto_tcp
+        self.__auto_tcp = bool(state)
+        return self.__auto_tcp
 
     def mode(self, mode=None):
         """Get or set modbus mode (TCP or RTU)
