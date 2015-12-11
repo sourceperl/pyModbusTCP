@@ -14,7 +14,7 @@ class ModbusClient:
 
     """Client Modbus TCP"""
 
-    def __init__(self, host=None, port=None, unit_id=None, timeout=30,
+    def __init__(self, host=None, port=None, unit_id=None, timeout=None,
                  auto_tcp=None, debug=None):
         """Constructor
 
@@ -29,7 +29,7 @@ class ModbusClient:
         :type port: int
         :param unit_id: unit ID (optional)
         :type unit_id: int
-        :param timeout: socket timeout in second (optional)
+        :param timeout: socket timeout in seconds (optional)
         :type timeout: int
         :param auto_tcp: auto connect state (optional)
         :type auto_tcp: bool
@@ -45,7 +45,7 @@ class ModbusClient:
         self.__unit_id = 1
         self.__mode = const.MODBUS_TCP      # default is Modbus/TCP
         self.__sock = None                  # socket handle
-        self.__timeout = float(timeout)     # socket timeout
+        self.__timeout = 30.0               # socket timeout
         self.__hd_tr_id = 0                 # store transaction ID
         self.__auto_tcp = False             # auto TCP connect
         self.__debug = False                # debug trace on/off
@@ -64,7 +64,11 @@ class ModbusClient:
         if unit_id:
             if not self.unit_id(unit_id):
                 raise ValueError("unit_id value error")
-        # set debug
+        # set timeout
+        if timeout:
+            if not self.timeout(timeout):
+                raise ValueError("timeout value error")
+        # set auto_tcp
         if auto_tcp:
             if not self.auto_tcp(auto_tcp):
                 raise ValueError("auto_tcp value error")
@@ -183,6 +187,22 @@ class ModbusClient:
         if (0 <= int(unit_id) < 256):
             self.__unit_id = int(unit_id)
             return self.__unit_id
+        else:
+            return None
+
+    def timeout(self, timeout=None):
+        """Get or set timeout field
+
+        :param timeout: socket timeout in seconds or None for get value
+        :type timeout: float or None
+        :returns: timeout or None if set fail
+        :rtype: float or None
+        """
+        if timeout is None:
+            return self.__timeout
+        if (0 < float(timeout) < 3600):
+            self.__timeout = float(timeout)
+            return self.__timeout
         else:
             return None
 
