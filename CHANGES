@@ -1,5 +1,10 @@
 Revision history for pyModbusTCP
 
+0.0.12 2015-12-11
+
+    - add auto_tcp mode to ModbusClient.
+    - add accessor function for socket timeout.
+
 0.0.11 2015-03-27
 
     - fix sock.settimeout missing (thanks to bonaime).
