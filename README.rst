@@ -35,6 +35,12 @@ GitHub:
     cd pyModbusTCP  
     sudo python setup.py install  
 
+Install the current devel-release:
+
+::
+
+    sudo pip install git+https://github.com/sourceperl/pyModbusTCP.git@devel  
+
 Usage example
 -------------
 
