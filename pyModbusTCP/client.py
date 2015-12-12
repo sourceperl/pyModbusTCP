@@ -109,8 +109,10 @@ class ModbusClient:
         :returns: hostname or None if set fail
         :rtype: str or None
         """
-        if hostname is None:
+        if (hostname is None) or (hostname is self.__hostname):
             return self.__hostname
+        # when hostname change ensure old socket is close
+        self.close()
         # IPv4 ?
         try:
             socket.inet_pton(socket.AF_INET, hostname)
@@ -125,7 +127,7 @@ class ModbusClient:
             return self.__hostname
         except socket.error:
             pass
-        # hostname ?
+        # DNS name ?
         if re.match("^[a-z][a-z0-9\.\-]+$", hostname):
             self.__hostname = hostname
             return self.__hostname
