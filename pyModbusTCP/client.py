@@ -15,7 +15,7 @@ class ModbusClient:
     """Client Modbus TCP"""
 
     def __init__(self, host=None, port=None, unit_id=None, timeout=None,
-                 debug=None, auto_tcp=None):
+                 debug=None, auto_open=None, auto_close=None):
         """Constructor
 
         Modbus server params (host, port) can be set here or with host(), port()
@@ -33,8 +33,10 @@ class ModbusClient:
         :type timeout: float
         :param debug: debug state (optional)
         :type debug: bool
-        :param auto_tcp: auto connect state (optional)
-        :type auto_tcp: bool
+        :param auto_open: auto TCP connect (optional)
+        :type auto_open: bool
+        :param auto_close: auto TCP close (optional)
+        :type auto_close: bool
         :return: Object ModbusClient
         :rtype: ModbusClient
         :raises ValueError: if a set parameter value is incorrect
@@ -45,7 +47,8 @@ class ModbusClient:
         self.__unit_id = 1
         self.__timeout = 30.0               # socket timeout
         self.__debug = False                # debug trace on/off
-        self.__auto_tcp = False             # auto TCP connect
+        self.__auto_open = False            # auto TCP connect
+        self.__auto_close = False           # auto TCP close
         self.__mode = const.MODBUS_TCP      # default is Modbus/TCP
         self.__sock = None                  # socket handle
         self.__hd_tr_id = 0                 # store transaction ID
@@ -72,10 +75,14 @@ class ModbusClient:
         if debug:
             if not self.debug(debug):
                 raise ValueError("debug value error")
-        # set auto_tcp
-        if auto_tcp:
-            if not self.auto_tcp(auto_tcp):
-                raise ValueError("auto_tcp value error")
+        # set auto_open
+        if auto_open:
+            if not self.auto_open(auto_open):
+                raise ValueError("auto_open value error")
+        # set auto_close
+        if auto_close:
+            if not self.auto_close(auto_close):
+                raise ValueError("auto_close value error")
 
     def version(self):
         """Get package version
@@ -142,8 +149,11 @@ class ModbusClient:
         :returns: TCP port or None if set fail
         :rtype: int or None
         """
-        if port is None:
+        if (port is None) or (port is self.__port):
             return self.__port
+        # when port change ensure old socket is close
+        self.close()
+        # valid port ?
         if (0 < int(port) < 65536):
             self.__port = int(port)
             return self.__port
@@ -195,18 +205,31 @@ class ModbusClient:
         self.__debug = bool(state)
         return self.__debug
 
-    def auto_tcp(self, state=None):
+    def auto_open(self, state=None):
         """Get or set automatic TCP connect mode
 
-        :param state: auto_tcp state or None for get value
+        :param state: auto_open state or None for get value
         :type state: bool or None
-        :returns: auto_tcp state or None if set fail
+        :returns: auto_open state or None if set fail
         :rtype: bool or None
         """
         if state is None:
-            return self.__auto_tcp
-        self.__auto_tcp = bool(state)
-        return self.__auto_tcp
+            return self.__auto_open
+        self.__auto_open = bool(state)
+        return self.__auto_open
+
+    def auto_close(self, state=None):
+        """Get or set automatic TCP close mode (after each request)
+
+        :param state: auto_close state or None for get value
+        :type state: bool or None
+        :returns: auto_close state or None if set fail
+        :rtype: bool or None
+        """
+        if state is None:
+            return self.__auto_close
+        self.__auto_close = bool(state)
+        return self.__auto_close
 
     def mode(self, mode=None):
         """Get or set modbus mode (TCP or RTU)
@@ -689,9 +712,6 @@ class ModbusClient:
         :returns: True if send ok or None if error
         :rtype: bool or None
         """
-        # for auto_tcp mode, open TCP link if need
-        if self.__auto_tcp and not self.is_open():
-            self.open()
         # check link
         if self.__sock is None:
             self.__debug_msg("call _send on close socket")
@@ -744,6 +764,9 @@ class ModbusClient:
         :returns: number of bytes send or None if error
         :rtype: int or None
         """
+        # for auto_open mode, check TCP and open if need
+        if self.__auto_open and not self.is_open():
+            self.open()
         # send request
         bytes_send = self._send(frame)
         if bytes_send:
@@ -832,6 +855,9 @@ class ModbusClient:
                 return None
             # format f_body: remove unit ID, function code and CRC 2 last bytes
             f_body = rx_frame[2:-2]
+        # for auto_close mode, close socket after each request
+        if self.__auto_close:
+            self.close()
         # check except
         if rx_bd_fc > 0x80:
             # except code

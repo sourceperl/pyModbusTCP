@@ -2,8 +2,10 @@ Revision history for pyModbusTCP
 
 0.0.12 2015-12-11
 
-    - add auto_tcp mode to ModbusClient.
+    - add auto_open and auto_close mode to ModbusClient.
     - add accessor function for socket timeout.
+    - close TCP socket if hostname change
+    - close TCP socket if port change
 
 0.0.11 2015-03-27
 
