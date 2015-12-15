@@ -64,7 +64,7 @@
     <span class="sd">&quot;&quot;&quot;Client Modbus TCP&quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="ModbusClient.__init__"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">unit_id</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
-                 <span class="n">debug</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">auto_tcp</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+                 <span class="n">debug</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">auto_open</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">auto_close</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Constructor</span>
 
 <span class="sd">        Modbus server params (host, port) can be set here or with host(), port()</span>
@@ -82,8 +82,10 @@
 <span class="sd">        :type timeout: float</span>
 <span class="sd">        :param debug: debug state (optional)</span>
 <span class="sd">        :type debug: bool</span>
-<span class="sd">        :param auto_tcp: auto connect state (optional)</span>
-<span class="sd">        :type auto_tcp: bool</span>
+<span class="sd">        :param auto_open: auto TCP connect (optional)</span>
+<span class="sd">        :type auto_open: bool</span>
+<span class="sd">        :param auto_close: auto TCP close (optional)</span>
+<span class="sd">        :type auto_close: bool</span>
 <span class="sd">        :return: Object ModbusClient</span>
 <span class="sd">        :rtype: ModbusClient</span>
 <span class="sd">        :raises ValueError: if a set parameter value is incorrect</span>
@@ -94,7 +96,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">__unit_id</span> <span class="o">=</span> <span class="mi">1</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__timeout</span> <span class="o">=</span> <span class="mf">30.0</span>               <span class="c"># socket timeout</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__debug</span> <span class="o">=</span> <span class="bp">False</span>                <span class="c"># debug trace on/off</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__auto_tcp</span> <span class="o">=</span> <span class="bp">False</span>             <span class="c"># auto TCP connect</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__auto_open</span> <span class="o">=</span> <span class="bp">False</span>            <span class="c"># auto TCP connect</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__auto_close</span> <span class="o">=</span> <span class="bp">False</span>           <span class="c"># auto TCP close</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__mode</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">MODBUS_TCP</span>      <span class="c"># default is Modbus/TCP</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span> <span class="o">=</span> <span class="bp">None</span>                  <span class="c"># socket handle</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__hd_tr_id</span> <span class="o">=</span> <span class="mi">0</span>                 <span class="c"># store transaction ID</span>
@@ -121,10 +124,14 @@
         <span class="k">if</span> <span class="n">debug</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">debug</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;debug value error&quot;</span><span class="p">)</span>
-        <span class="c"># set auto_tcp</span>
-        <span class="k">if</span> <span class="n">auto_tcp</span><span class="p">:</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">auto_tcp</span><span class="p">(</span><span class="n">auto_tcp</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;auto_tcp value error&quot;</span><span class="p">)</span>
+        <span class="c"># set auto_open</span>
+        <span class="k">if</span> <span class="n">auto_open</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">auto_open</span><span class="p">(</span><span class="n">auto_open</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;auto_open value error&quot;</span><span class="p">)</span>
+        <span class="c"># set auto_close</span>
+        <span class="k">if</span> <span class="n">auto_close</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">auto_close</span><span class="p">(</span><span class="n">auto_close</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;auto_close value error&quot;</span><span class="p">)</span>
 </div>
 <div class="viewcode-block" id="ModbusClient.version"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.version">[docs]</a>    <span class="k">def</span> <span class="nf">version</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get package version</span>
@@ -158,8 +165,10 @@
 <span class="sd">        :returns: hostname or None if set fail</span>
 <span class="sd">        :rtype: str or None</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">hostname</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">hostname</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">hostname</span> <span class="ow">is</span> <span class="bp">self</span><span class="o">.</span><span class="n">__hostname</span><span class="p">):</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__hostname</span>
+        <span class="c"># when hostname change ensure old socket is close</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
         <span class="c"># IPv4 ?</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">socket</span><span class="o">.</span><span class="n">inet_pton</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">hostname</span><span class="p">)</span>
@@ -174,7 +183,7 @@
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__hostname</span>
         <span class="k">except</span> <span class="n">socket</span><span class="o">.</span><span class="n">error</span><span class="p">:</span>
             <span class="k">pass</span>
-        <span class="c"># hostname ?</span>
+        <span class="c"># DNS name ?</span>
         <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="s">&quot;^[a-z][a-z0-9\.\-]+$&quot;</span><span class="p">,</span> <span class="n">hostname</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__hostname</span> <span class="o">=</span> <span class="n">hostname</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__hostname</span>
@@ -189,8 +198,11 @@
 <span class="sd">        :returns: TCP port or None if set fail</span>
 <span class="sd">        :rtype: int or None</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">port</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">port</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">port</span> <span class="ow">is</span> <span class="bp">self</span><span class="o">.</span><span class="n">__port</span><span class="p">):</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__port</span>
+        <span class="c"># when port change ensure old socket is close</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="c"># valid port ?</span>
         <span class="k">if</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;</span> <span class="nb">int</span><span class="p">(</span><span class="n">port</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">65536</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__port</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">port</span><span class="p">)</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__port</span>
@@ -242,18 +254,31 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">__debug</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__debug</span>
 </div>
-<div class="viewcode-block" id="ModbusClient.auto_tcp"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.auto_tcp">[docs]</a>    <span class="k">def</span> <span class="nf">auto_tcp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusClient.auto_open"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.auto_open">[docs]</a>    <span class="k">def</span> <span class="nf">auto_open</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get or set automatic TCP connect mode</span>
 
-<span class="sd">        :param state: auto_tcp state or None for get value</span>
+<span class="sd">        :param state: auto_open state or None for get value</span>
 <span class="sd">        :type state: bool or None</span>
-<span class="sd">        :returns: auto_tcp state or None if set fail</span>
+<span class="sd">        :returns: auto_open state or None if set fail</span>
 <span class="sd">        :rtype: bool or None</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">state</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__auto_tcp</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__auto_tcp</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__auto_tcp</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__auto_open</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__auto_open</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__auto_open</span>
+</div>
+<div class="viewcode-block" id="ModbusClient.auto_close"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.auto_close">[docs]</a>    <span class="k">def</span> <span class="nf">auto_close</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get or set automatic TCP close mode (after each request)</span>
+
+<span class="sd">        :param state: auto_close state or None for get value</span>
+<span class="sd">        :type state: bool or None</span>
+<span class="sd">        :returns: auto_close state or None if set fail</span>
+<span class="sd">        :rtype: bool or None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">state</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__auto_close</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__auto_close</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__auto_close</span>
 </div>
 <div class="viewcode-block" id="ModbusClient.mode"><a class="viewcode-back" href="../../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.mode">[docs]</a>    <span class="k">def</span> <span class="nf">mode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Get or set modbus mode (TCP or RTU)</span>
@@ -736,9 +761,6 @@
 <span class="sd">        :returns: True if send ok or None if error</span>
 <span class="sd">        :rtype: bool or None</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c"># for auto_tcp mode, open TCP link if need</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__auto_tcp</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_open</span><span class="p">():</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">open</span><span class="p">()</span>
         <span class="c"># check link</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__sock</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__debug_msg</span><span class="p">(</span><span class="s">&quot;call _send on close socket&quot;</span><span class="p">)</span>
@@ -791,6 +813,9 @@
 <span class="sd">        :returns: number of bytes send or None if error</span>
 <span class="sd">        :rtype: int or None</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c"># for auto_open mode, check TCP and open if need</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__auto_open</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_open</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">open</span><span class="p">()</span>
         <span class="c"># send request</span>
         <span class="n">bytes_send</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span><span class="n">frame</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">bytes_send</span><span class="p">:</span>
@@ -879,6 +904,9 @@
                 <span class="k">return</span> <span class="bp">None</span>
             <span class="c"># format f_body: remove unit ID, function code and CRC 2 last bytes</span>
             <span class="n">f_body</span> <span class="o">=</span> <span class="n">rx_frame</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>
+        <span class="c"># for auto_close mode, close socket after each request</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__auto_close</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
         <span class="c"># check except</span>
         <span class="k">if</span> <span class="n">rx_bd_fc</span> <span class="o">&gt;</span> <span class="mh">0x80</span><span class="p">:</span>
             <span class="c"># except code</span>
