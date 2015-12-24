@@ -1,5 +1,10 @@
 Revision history for pyModbusTCP
 
+0.0.13 2015-12-24
+
+    - add auto_open and auto_close to README.rst and quickstart doc.
+    - add example min_read_bit.py for show minimal code approach.
+
 0.0.12 2015-12-11
 
     - add auto_open and auto_close mode to ModbusClient.

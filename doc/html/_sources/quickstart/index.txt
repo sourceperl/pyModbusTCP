@@ -58,8 +58,18 @@ you can also init module from functions host/port return None if error::
 ModbusClient: manage TCP link
 -----------------------------
 
-After init ModbusClient, you need to open the TCP link. After this, you can 
-call a modbus request function (see list in next section)::
+Now, it's possible to use auto mode to let module deal with TCP open/close.
+
+For keep TCP open, add auto_open=True in init::
+
+        c = ModbusClient(host="localhost", auto_open=True)
+
+For open/close socket before/after read or write, do this::
+
+        c = ModbusClient(host="localhost", auto_open=True, auto_close=True)
+
+You can also open manually the TCP link. After this, you call a modbus request 
+function (see list in next section)::
 
     if c.open():
         regs_list_1 = c.read_holding_registers(0, 10)
