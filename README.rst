@@ -25,36 +25,59 @@ PyPI, the easy way:
 
 ::
 
-    sudo pip install pyModbusTCP  
+    sudo pip install pyModbusTCP
 
 GitHub:
 
 ::
 
-    git clone https://github.com/sourceperl/pyModbusTCP.git  
-    cd pyModbusTCP  
-    sudo python setup.py install  
+    git clone https://github.com/sourceperl/pyModbusTCP.git
+    cd pyModbusTCP
+    sudo python setup.py install
 
 Install the current devel-release:
 
 ::
 
-    sudo pip install git+https://github.com/sourceperl/pyModbusTCP.git@devel  
+    sudo pip install git+https://github.com/sourceperl/pyModbusTCP.git@devel
 
 Usage example
 -------------
 
 See examples/ for full scripts.
 
-include and module init (for all samples)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include (for all samples)
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ::
 
     from pyModbusTCP.client import ModbusClient
+
+module init (TCP always open)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    # TCP auto connect on first modbus request
+    c = ModbusClient(host="localhost", port=502, auto_open=True)
+
+module init (TCP open/close for each request)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    # TCP auto connect on modbus request, close after it
+    c = ModbusClient(host="127.0.0.1", auto_open=True, auto_close=True)
+
+module init (with accessor functions)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
     c = ModbusClient()
     c.host("localhost")
     c.port(502)
+    # managing TCP sessions with call to c.open()/c.close()
     c.open()
 
 Read 2x 16 bits registers at modbus address 0 :
