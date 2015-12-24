@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>Module pyModbusTCP.client &mdash; pyModbusTCP 0.0.11 documentation</title>
+    <title>Module pyModbusTCP.client &mdash; pyModbusTCP 0.0.12 documentation</title>
     
     <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
@@ -14,7 +14,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../',
-        VERSION:     '0.0.11',
+        VERSION:     '0.0.12',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <link rel="top" title="pyModbusTCP 0.0.11 documentation" href="../index.html" />
+    <link rel="top" title="pyModbusTCP 0.0.12 documentation" href="../index.html" />
     <link rel="up" title="pyModbusTCP modules documentation" href="index.html" />
     <link rel="next" title="Module pyModbusTCP.utils" href="module_utils.html" />
     <link rel="prev" title="pyModbusTCP modules documentation" href="index.html" /> 
@@ -44,7 +44,7 @@
         <li class="right" >
           <a href="index.html" title="pyModbusTCP modules documentation"
              accesskey="P">previous</a> |</li>
-        <li><a href="../index.html">pyModbusTCP 0.0.11 documentation</a> &raquo;</li>
+        <li><a href="../index.html">pyModbusTCP 0.0.12 documentation</a> &raquo;</li>
           <li><a href="index.html" accesskey="U">pyModbusTCP modules documentation</a> &raquo;</li> 
       </ul>
     </div>  
@@ -61,11 +61,11 @@
 <h2>class pyModbusTCP.client.ModbusClient<a class="headerlink" href="#class-pymodbustcp-client-modbusclient" title="Permalink to this headline">¶</a></h2>
 <dl class="class">
 <dt id="pyModbusTCP.client.ModbusClient">
-<em class="property">class </em><tt class="descclassname">pyModbusTCP.client.</tt><tt class="descname">ModbusClient</tt><big>(</big><em>host=None</em>, <em>port=None</em>, <em>unit_id=None</em>, <em>timeout=30</em>, <em>debug=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><tt class="descclassname">pyModbusTCP.client.</tt><tt class="descname">ModbusClient</tt><big>(</big><em>host=None</em>, <em>port=None</em>, <em>unit_id=None</em>, <em>timeout=None</em>, <em>debug=None</em>, <em>auto_open=None</em>, <em>auto_close=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient" title="Permalink to this definition">¶</a></dt>
 <dd><p>Client Modbus TCP</p>
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.__init__">
-<tt class="descname">__init__</tt><big>(</big><em>host=None</em>, <em>port=None</em>, <em>unit_id=None</em>, <em>timeout=30</em>, <em>debug=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.__init__" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">__init__</tt><big>(</big><em>host=None</em>, <em>port=None</em>, <em>unit_id=None</em>, <em>timeout=None</em>, <em>debug=None</em>, <em>auto_open=None</em>, <em>auto_close=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.__init__" title="Permalink to this definition">¶</a></dt>
 <dd><p>Constructor</p>
 <p>Modbus server params (host, port) can be set here or with host(), port()
 functions. Same for debug option.</p>
@@ -78,8 +78,10 @@ functions. Same for debug option.</p>
 <li><strong>host</strong> (<em>str</em>) &#8211; hostname or IPv4/IPv6 address server address (optional)</li>
 <li><strong>port</strong> (<em>int</em>) &#8211; TCP port number (optional)</li>
 <li><strong>unit_id</strong> (<em>int</em>) &#8211; unit ID (optional)</li>
-<li><strong>timeout</strong> (<em>int</em>) &#8211; socket timeout in second (optional)</li>
+<li><strong>timeout</strong> (<em>float</em>) &#8211; socket timeout in seconds (optional)</li>
 <li><strong>debug</strong> (<em>bool</em>) &#8211; debug state (optional)</li>
+<li><strong>auto_open</strong> (<em>bool</em>) &#8211; auto TCP connect (optional)</li>
+<li><strong>auto_close</strong> (<em>bool</em>) &#8211; auto TCP close (optional)</li>
 </ul>
 </td>
 </tr>
@@ -92,6 +94,42 @@ functions. Same for debug option.</p>
 <tr class="field-even field"><th class="field-name" colspan="2">Raises ValueError:</th></tr>
 <tr class="field-even field"><td>&nbsp;</td><td class="field-body"><p class="first last">if a set parameter value is incorrect</p>
 </td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.auto_close">
+<tt class="descname">auto_close</tt><big>(</big><em>state=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.auto_close"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.auto_close" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get or set automatic TCP close mode (after each request)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>state</strong> (<em>bool or None</em>) &#8211; auto_close state or None for get value</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">auto_close state or None if set fail</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">bool or None</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.auto_open">
+<tt class="descname">auto_open</tt><big>(</big><em>state=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.auto_open"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.auto_open" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get or set automatic TCP connect mode</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>state</strong> (<em>bool or None</em>) &#8211; auto_open state or None for get value</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">auto_open state or None if set fail</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">bool or None</td>
 </tr>
 </tbody>
 </table>
@@ -346,6 +384,24 @@ functions. Same for debug option.</p>
 </dd></dl>
 
 <dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.timeout">
+<tt class="descname">timeout</tt><big>(</big><em>timeout=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.timeout"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.timeout" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get or set timeout field</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>timeout</strong> (<em>float or None</em>) &#8211; socket timeout in seconds or None for get value</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">timeout or None if set fail</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">float or None</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.unit_id">
 <tt class="descname">unit_id</tt><big>(</big><em>unit_id=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.unit_id"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.unit_id" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get or set unit ID field</p>
@@ -513,7 +569,7 @@ functions. Same for debug option.</p>
         <li class="right" >
           <a href="index.html" title="pyModbusTCP modules documentation"
              >previous</a> |</li>
-        <li><a href="../index.html">pyModbusTCP 0.0.11 documentation</a> &raquo;</li>
+        <li><a href="../index.html">pyModbusTCP 0.0.12 documentation</a> &raquo;</li>
           <li><a href="index.html" >pyModbusTCP modules documentation</a> &raquo;</li> 
       </ul>
     </div>

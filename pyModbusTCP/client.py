@@ -14,7 +14,8 @@ class ModbusClient:
 
     """Client Modbus TCP"""
 
-    def __init__(self, host=None, port=None, unit_id=None, timeout=30, debug=None):
+    def __init__(self, host=None, port=None, unit_id=None, timeout=None,
+                 debug=None, auto_open=None, auto_close=None):
         """Constructor
 
         Modbus server params (host, port) can be set here or with host(), port()
@@ -28,10 +29,14 @@ class ModbusClient:
         :type port: int
         :param unit_id: unit ID (optional)
         :type unit_id: int
-        :param timeout: socket timeout in second (optional)
-        :type timeout: int
+        :param timeout: socket timeout in seconds (optional)
+        :type timeout: float
         :param debug: debug state (optional)
         :type debug: bool
+        :param auto_open: auto TCP connect (optional)
+        :type auto_open: bool
+        :param auto_close: auto TCP close (optional)
+        :type auto_close: bool
         :return: Object ModbusClient
         :rtype: ModbusClient
         :raises ValueError: if a set parameter value is incorrect
@@ -40,14 +45,16 @@ class ModbusClient:
         self.__hostname = "localhost"
         self.__port = const.MODBUS_PORT
         self.__unit_id = 1
-        self.__mode = const.MODBUS_TCP  # default is Modbus/TCP
-        self.__sock = None              # socket handle
-        self.__timeout = float(timeout)           # socket timeout
+        self.__timeout = 30.0               # socket timeout
+        self.__debug = False                # debug trace on/off
+        self.__auto_open = False            # auto TCP connect
+        self.__auto_close = False           # auto TCP close
+        self.__mode = const.MODBUS_TCP      # default is Modbus/TCP
+        self.__sock = None                  # socket handle
         self.__hd_tr_id = 0                 # store transaction ID
-        self.__debug = False             # debug trace on/off
-        self.__version = const.VERSION     # version number
-        self.__last_error = const.MB_NO_ERR   # last error code
-        self.__last_except = 0                 # last expect code
+        self.__version = const.VERSION      # version number
+        self.__last_error = const.MB_NO_ERR # last error code
+        self.__last_except = 0              # last expect code
         # set host
         if host:
             if not self.host(host):
@@ -60,10 +67,22 @@ class ModbusClient:
         if unit_id:
             if not self.unit_id(unit_id):
                 raise ValueError("unit_id value error")
+        # set timeout
+        if timeout:
+            if not self.timeout(timeout):
+                raise ValueError("timeout value error")
         # set debug
         if debug:
             if not self.debug(debug):
                 raise ValueError("debug value error")
+        # set auto_open
+        if auto_open:
+            if not self.auto_open(auto_open):
+                raise ValueError("auto_open value error")
+        # set auto_close
+        if auto_close:
+            if not self.auto_close(auto_close):
+                raise ValueError("auto_close value error")
 
     def version(self):
         """Get package version
@@ -97,8 +116,10 @@ class ModbusClient:
         :returns: hostname or None if set fail
         :rtype: str or None
         """
-        if hostname is None:
+        if (hostname is None) or (hostname is self.__hostname):
             return self.__hostname
+        # when hostname change ensure old socket is close
+        self.close()
         # IPv4 ?
         try:
             socket.inet_pton(socket.AF_INET, hostname)
@@ -113,7 +134,7 @@ class ModbusClient:
             return self.__hostname
         except socket.error:
             pass
-        # hostname ?
+        # DNS name ?
         if re.match("^[a-z][a-z0-9\.\-]+$", hostname):
             self.__hostname = hostname
             return self.__hostname
@@ -128,26 +149,16 @@ class ModbusClient:
         :returns: TCP port or None if set fail
         :rtype: int or None
         """
-        if port is None:
+        if (port is None) or (port is self.__port):
             return self.__port
+        # when port change ensure old socket is close
+        self.close()
+        # valid port ?
         if (0 < int(port) < 65536):
             self.__port = int(port)
             return self.__port
         else:
             return None
-
-    def debug(self, state=None):
-        """Get or set debug mode
-
-        :param state: debug state or None for get value
-        :type state: bool or None
-        :returns: debug state or None if set fail
-        :rtype: bool or None
-        """
-        if state is None:
-            return self.__debug
-        self.__debug = bool(state)
-        return self.__debug
 
     def unit_id(self, unit_id=None):
         """Get or set unit ID field
@@ -164,6 +175,61 @@ class ModbusClient:
             return self.__unit_id
         else:
             return None
+
+    def timeout(self, timeout=None):
+        """Get or set timeout field
+
+        :param timeout: socket timeout in seconds or None for get value
+        :type timeout: float or None
+        :returns: timeout or None if set fail
+        :rtype: float or None
+        """
+        if timeout is None:
+            return self.__timeout
+        if (0 < float(timeout) < 3600):
+            self.__timeout = float(timeout)
+            return self.__timeout
+        else:
+            return None
+
+    def debug(self, state=None):
+        """Get or set debug mode
+
+        :param state: debug state or None for get value
+        :type state: bool or None
+        :returns: debug state or None if set fail
+        :rtype: bool or None
+        """
+        if state is None:
+            return self.__debug
+        self.__debug = bool(state)
+        return self.__debug
+
+    def auto_open(self, state=None):
+        """Get or set automatic TCP connect mode
+
+        :param state: auto_open state or None for get value
+        :type state: bool or None
+        :returns: auto_open state or None if set fail
+        :rtype: bool or None
+        """
+        if state is None:
+            return self.__auto_open
+        self.__auto_open = bool(state)
+        return self.__auto_open
+
+    def auto_close(self, state=None):
+        """Get or set automatic TCP close mode (after each request)
+
+        :param state: auto_close state or None for get value
+        :type state: bool or None
+        :returns: auto_close state or None if set fail
+        :rtype: bool or None
+        """
+        if state is None:
+            return self.__auto_close
+        self.__auto_close = bool(state)
+        return self.__auto_close
 
     def mode(self, mode=None):
         """Get or set modbus mode (TCP or RTU)
@@ -646,7 +712,7 @@ class ModbusClient:
         :returns: True if send ok or None if error
         :rtype: bool or None
         """
-        # check link, open if need
+        # check link
         if self.__sock is None:
             self.__debug_msg("call _send on close socket")
             return None
@@ -698,6 +764,9 @@ class ModbusClient:
         :returns: number of bytes send or None if error
         :rtype: int or None
         """
+        # for auto_open mode, check TCP and open if need
+        if self.__auto_open and not self.is_open():
+            self.open()
         # send request
         bytes_send = self._send(frame)
         if bytes_send:
@@ -786,6 +855,9 @@ class ModbusClient:
                 return None
             # format f_body: remove unit ID, function code and CRC 2 last bytes
             f_body = rx_frame[2:-2]
+        # for auto_close mode, close socket after each request
+        if self.__auto_close:
+            self.close()
         # check except
         if rx_bd_fc > 0x80:
             # except code
