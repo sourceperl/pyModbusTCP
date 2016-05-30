@@ -140,3 +140,48 @@ def crc16(frame):
             if lsb:
                 crc ^= 0xA001
     return crc
+
+
+####################
+# misc bit functions
+####################
+def test_bit(value, offset):
+    """Test a bit at offset position
+
+    :param value: value of integer to test
+    :type value: int
+    :param offset: bit offset (0 is lsb)
+    :type offset: int
+    :returns: value of bit at offset position
+    :rtype: bool
+    """
+    mask = 1 << offset
+    return bool(value & mask)
+
+
+def set_bit(value, offset):
+    """Set a bit at offset position
+
+    :param value: value of integer where set the bit
+    :type value: int
+    :param offset: bit offset (0 is lsb)
+    :type offset: int
+    :returns: value of integer with bit set
+    :rtype: int
+    """
+    mask = 1 << offset
+    return int(value | mask)
+
+
+def reset_bit(value, offset):
+    """Reset a bit at offset position
+
+    :param value: value of integer where reset the bit
+    :type value: int
+    :param offset: bit offset (0 is lsb)
+    :type offset: int
+    :returns: value of integer with bit reset
+    :rtype: int
+    """
+    mask = ~(1 << offset)
+    return int(value & mask)

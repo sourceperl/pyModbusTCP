@@ -436,16 +436,40 @@ functions. Same for debug option.</p>
 </dd></dl>
 
 <dl class="method">
+<dt id="pyModbusTCP.client.ModbusClient.write_multiple_coils">
+<tt class="descname">write_multiple_coils</tt><big>(</big><em>bits_addr</em>, <em>bits_value</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.write_multiple_coils"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.write_multiple_coils" title="Permalink to this definition">¶</a></dt>
+<dd><p>Modbus function WRITE_MULTIPLE_COILS (0x0F)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>bits_addr</strong> (<em>int</em>) &#8211; bits address (0 to 65535)</li>
+<li><strong>bits_value</strong> (<em>list</em>) &#8211; bits values to write</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">True if write ok or None if fail</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">bool or None</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.write_multiple_registers">
-<tt class="descname">write_multiple_registers</tt><big>(</big><em>reg_addr</em>, <em>regs_value</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.write_multiple_registers"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.write_multiple_registers" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">write_multiple_registers</tt><big>(</big><em>regs_addr</em>, <em>regs_value</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.write_multiple_registers"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.write_multiple_registers" title="Permalink to this definition">¶</a></dt>
 <dd><p>Modbus function WRITE_MULTIPLE_REGISTERS (0x10)</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>reg_addr</strong> (<em>int</em>) &#8211; registers address (0 to 65535)</li>
-<li><strong>reg_value</strong> (<em>list</em>) &#8211; registers value to write</li>
+<li><strong>regs_addr</strong> (<em>int</em>) &#8211; registers address (0 to 65535)</li>
+<li><strong>regs_value</strong> (<em>list</em>) &#8211; registers values to write</li>
 </ul>
 </td>
 </tr>

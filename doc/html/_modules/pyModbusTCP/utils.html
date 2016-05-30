@@ -53,10 +53,10 @@
 
 <span class="kn">import</span> <span class="nn">struct</span>
 
+
 <span class="c">###############</span>
 <span class="c"># bits function</span>
 <span class="c">###############</span>
-
 <div class="viewcode-block" id="get_bits_from_int"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.get_bits_from_int">[docs]</a><span class="k">def</span> <span class="nf">get_bits_from_int</span><span class="p">(</span><span class="n">val_int</span><span class="p">,</span> <span class="n">val_size</span><span class="o">=</span><span class="mi">16</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Get the list of bits of val_int integer (default size is 16 bits)</span>
 
@@ -78,10 +78,10 @@
     <span class="c"># return bits list</span>
     <span class="k">return</span> <span class="n">bits</span>
 
+
 <span class="c">#########################</span>
 <span class="c"># floating-point function</span>
-<span class="c">#########################</span>
-</div>
+<span class="c">#########################</span></div>
 <div class="viewcode-block" id="decode_ieee"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.decode_ieee">[docs]</a><span class="k">def</span> <span class="nf">decode_ieee</span><span class="p">(</span><span class="n">val_int</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Decode Python int (32 bits integer) as an IEEE single precision format</span>
 
@@ -106,10 +106,10 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;I&quot;</span><span class="p">,</span><span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s">&quot;f&quot;</span><span class="p">,</span> <span class="n">val_float</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
 
+
 <span class="c">################################</span>
 <span class="c"># long format (32 bits) function</span>
-<span class="c">################################</span>
-</div>
+<span class="c">################################</span></div>
 <div class="viewcode-block" id="word_list_to_long"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.word_list_to_long">[docs]</a><span class="k">def</span> <span class="nf">word_list_to_long</span><span class="p">(</span><span class="n">val_list</span><span class="p">,</span> <span class="n">big_endian</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Word list (16 bits int) to long list (32 bits int)</span>
 
@@ -134,10 +134,10 @@
     <span class="c"># return long list</span>
     <span class="k">return</span> <span class="n">long_list</span>
 
+
 <span class="c">#########################################################</span>
 <span class="c"># 2&#39;s complement of int value (scalar and list) functions</span>
-<span class="c">#########################################################</span>
-</div>
+<span class="c">#########################################################</span></div>
 <div class="viewcode-block" id="get_2comp"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.get_2comp">[docs]</a><span class="k">def</span> <span class="nf">get_2comp</span><span class="p">(</span><span class="n">val_int</span><span class="p">,</span> <span class="n">val_size</span><span class="o">=</span><span class="mi">16</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Get the 2&#39;s complement of Python int val_int</span>
 
@@ -153,6 +153,7 @@
         <span class="c"># do complement</span>
         <span class="n">val_int</span> <span class="o">=</span> <span class="n">val_int</span> <span class="o">-</span> <span class="p">(</span><span class="mi">1</span><span class="o">&lt;&lt;</span><span class="n">val_size</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">val_int</span>
+
 </div>
 <div class="viewcode-block" id="get_list_2comp"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.get_list_2comp">[docs]</a><span class="k">def</span> <span class="nf">get_list_2comp</span><span class="p">(</span><span class="n">val_list</span><span class="p">,</span> <span class="n">val_size</span><span class="o">=</span><span class="mi">16</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Get the 2&#39;s complement of Python list val_list</span>
@@ -164,7 +165,75 @@
 <span class="sd">        :returns: 2&#39;s complement result</span>
 <span class="sd">        :rtype: list</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="p">[</span><span class="n">get_2comp</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">val_size</span><span class="p">)</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">val_list</span><span class="p">]</span></div>
+    <span class="k">return</span> <span class="p">[</span><span class="n">get_2comp</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">val_size</span><span class="p">)</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">val_list</span><span class="p">]</span>
+
+
+<span class="c">######################</span>
+<span class="c"># compute CRC of frame</span>
+<span class="c">######################</span></div>
+<div class="viewcode-block" id="crc16"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.crc16">[docs]</a><span class="k">def</span> <span class="nf">crc16</span><span class="p">(</span><span class="n">frame</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Compute CRC16</span>
+
+<span class="sd">    :param frame: frame</span>
+<span class="sd">    :type frame: str (Python2) or class bytes (Python3)</span>
+<span class="sd">    :returns: CRC16</span>
+<span class="sd">    :rtype: int</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">crc</span> <span class="o">=</span> <span class="mh">0xFFFF</span>
+    <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">bytearray</span><span class="p">(</span><span class="n">frame</span><span class="p">)):</span>
+        <span class="n">next_byte</span> <span class="o">=</span> <span class="n">item</span>
+        <span class="n">crc</span> <span class="o">^=</span> <span class="n">next_byte</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">8</span><span class="p">):</span>
+            <span class="n">lsb</span> <span class="o">=</span> <span class="n">crc</span> <span class="o">&amp;</span> <span class="mi">1</span>
+            <span class="n">crc</span> <span class="o">&gt;&gt;=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="n">lsb</span><span class="p">:</span>
+                <span class="n">crc</span> <span class="o">^=</span> <span class="mh">0xA001</span>
+    <span class="k">return</span> <span class="n">crc</span>
+
+
+<span class="c">####################</span>
+<span class="c"># misc bit functions</span>
+<span class="c">####################</span></div>
+<div class="viewcode-block" id="test_bit"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.test_bit">[docs]</a><span class="k">def</span> <span class="nf">test_bit</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">offset</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Test a bit at offset position</span>
+
+<span class="sd">    :param value: value of integer to test</span>
+<span class="sd">    :type value: int</span>
+<span class="sd">    :param offset: bit offset (0 is lsb)</span>
+<span class="sd">    :type offset: int</span>
+<span class="sd">    :returns: value of bit at offset position</span>
+<span class="sd">    :rtype: bool</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">offset</span>
+    <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">value</span> <span class="o">&amp;</span> <span class="n">mask</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="set_bit"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.set_bit">[docs]</a><span class="k">def</span> <span class="nf">set_bit</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">offset</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Set a bit at offset position</span>
+
+<span class="sd">    :param value: value of integer where set the bit</span>
+<span class="sd">    :type value: int</span>
+<span class="sd">    :param offset: bit offset (0 is lsb)</span>
+<span class="sd">    :type offset: int</span>
+<span class="sd">    :returns: value of integer with bit set</span>
+<span class="sd">    :rtype: int</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">offset</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span> <span class="o">|</span> <span class="n">mask</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="reset_bit"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.reset_bit">[docs]</a><span class="k">def</span> <span class="nf">reset_bit</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">offset</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Reset a bit at offset position</span>
+
+<span class="sd">    :param value: value of integer where reset the bit</span>
+<span class="sd">    :type value: int</span>
+<span class="sd">    :param offset: bit offset (0 is lsb)</span>
+<span class="sd">    :type offset: int</span>
+<span class="sd">    :returns: value of integer with bit reset</span>
+<span class="sd">    :rtype: int</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="o">~</span><span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">offset</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span> <span class="o">&amp;</span> <span class="n">mask</span><span class="p">)</span></div>
 </pre></div>
 
           </div>

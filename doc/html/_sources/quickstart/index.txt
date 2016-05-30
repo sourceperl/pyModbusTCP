@@ -100,7 +100,7 @@ See http://en.wikipedia.org/wiki/Modbus for full table.
 |            +------------------------------+---------------+---------------------------------------------------------------------+
 |            | Write Single Coil            | 5             | :py:meth:`~pyModbusTCP.client.ModbusClient.write_single_coil`       |
 |            +------------------------------+---------------+---------------------------------------------------------------------+
-|            | Write Multiple Coils         | 15            | n/a                                                                 |
+|            | Write Multiple Coils         | 15            | :py:meth:`~pyModbusTCP.client.ModbusClient.write_multiple_coils`    |
 +------------+------------------------------+---------------+---------------------------------------------------------------------+
 | Register   | Read Input Registers         | 4             | :py:meth:`~pyModbusTCP.client.ModbusClient.read_input_registers`    |
 |            +------------------------------+---------------+---------------------------------------------------------------------+
