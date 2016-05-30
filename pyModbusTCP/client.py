@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Python module: ModbusClient class (Client ModBus/TCP class 1)
+# Python module: ModbusClient class (Client ModBus/TCP)
 
 from . import constants as const
 from .utils import crc16, set_bit
@@ -13,7 +13,7 @@ import random
 
 class ModbusClient:
 
-    """Client Modbus TCP"""
+    """Modbus TCP client"""
 
     def __init__(self, host=None, port=None, unit_id=None, timeout=None,
                  debug=None, auto_open=None, auto_close=None):

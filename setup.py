@@ -11,8 +11,8 @@ setup(
     long_description=readme,
     author="Loic Lefebvre",
     author_email="loic.celine@free.fr",
-    license = "MIT",
+    license="MIT",
     url="https://github.com/sourceperl/pyModbusTCP",
     packages=["pyModbusTCP"],
     platforms="any",
-    )
+)

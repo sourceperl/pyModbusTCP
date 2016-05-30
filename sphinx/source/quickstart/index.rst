@@ -7,9 +7,12 @@ Overview of the package
 pyModbusTCP give access to modbus/TCP server through the ModbusClient object. 
 This class is define in the client module.
 
-To deal with frequent need of modbus data mangling (for example 32 bits IEEE 
-float to 2x16 bits words convertion) a special module named utils provide some 
-helful functions.
+Since version 0.1.0, a server is available as ModbusServer class. This server
+is currently in test (API can change at any time).
+
+To deal with frequent need of modbus data mangling (for example convert 32 bits
+IEEE float to 2x16 bits words) a special module named utils provide some helpful
+functions.
 
 **Package map:**
 

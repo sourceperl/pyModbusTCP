@@ -1,7 +1,9 @@
 pyModbusTCP
 ===========
 
-A simple Modbus/TCP client library for Python (beta release).
+A simple Modbus/TCP client library for Python.
+
+Since version 0.1.0, a server is also available for test purpose only (don't use in project).
 
 pyModbusTCP is pure Python code without any extension or external module
 dependency.

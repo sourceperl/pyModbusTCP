@@ -1,5 +1,13 @@
 Revision history for pyModbusTCP
 
+0.1.0 2016-05-30
+
+    - fix some issues in PEP 8 conformance and inline doc.
+    - client modbus RTU: move crc16 compute to utils.
+    - add write_multiple_coils() function (code 0x0f).
+    - add test_bit(), set_bit(), reset_bit() to utils.
+    - add a modbus/TCP multithreaded server through ModbusServer class (for test only).
+
 0.0.13 2015-12-24
 
     - add auto_open and auto_close to README.rst and quickstart doc.

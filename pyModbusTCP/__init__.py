@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 
-# Python package: Client ModBus/TCP class 1
-#        Version: 0.0.13
+# Python package: Client and Server for ModBus/TCP
+#        Version: 0.1.0
 #        Website: https://github.com/sourceperl/pyModbusTCP
-#           Date: 2015-12-24
+#           Date: 2016-05-30
 #        License: MIT (http://http://opensource.org/licenses/mit-license.php)
-#    Description: Client ModBus / TCP
+#    Description: Client/Server ModBus/TCP
 #                 Support functions 3 and 16 (class 0)
 #                 1,2,4,5,6 (Class 1)
+#                 15
 #        Charset: utf-8
 
-__all__       = ["constants", "client", "utils"]
+__all__ = ['constants', 'client', 'server', 'utils']
