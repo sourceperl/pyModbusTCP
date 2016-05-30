@@ -2,7 +2,8 @@
 
 # Python module: ModbusClient class (Client ModBus/TCP class 1)
 
-from pyModbusTCP import constants as const
+from . import constants as const
+from .utils import crc16
 import re
 import socket
 import select
@@ -45,16 +46,16 @@ class ModbusClient:
         self.__hostname = "localhost"
         self.__port = const.MODBUS_PORT
         self.__unit_id = 1
-        self.__timeout = 30.0               # socket timeout
-        self.__debug = False                # debug trace on/off
-        self.__auto_open = False            # auto TCP connect
-        self.__auto_close = False           # auto TCP close
-        self.__mode = const.MODBUS_TCP      # default is Modbus/TCP
-        self.__sock = None                  # socket handle
-        self.__hd_tr_id = 0                 # store transaction ID
-        self.__version = const.VERSION      # version number
-        self.__last_error = const.MB_NO_ERR # last error code
-        self.__last_except = 0              # last expect code
+        self.__timeout = 30.0                # socket timeout
+        self.__debug = False                 # debug trace on/off
+        self.__auto_open = False             # auto TCP connect
+        self.__auto_close = False            # auto TCP close
+        self.__mode = const.MODBUS_TCP       # default is Modbus/TCP
+        self.__sock = None                   # socket handle
+        self.__hd_tr_id = 0                  # store transaction ID
+        self.__version = const.VERSION       # version number
+        self.__last_error = const.MB_NO_ERR  # last error code
+        self.__last_except = 0               # last expect code
         # set host
         if host:
             if not self.host(host):
@@ -154,7 +155,7 @@ class ModbusClient:
         # when port change ensure old socket is close
         self.close()
         # valid port ?
-        if (0 < int(port) < 65536):
+        if 0 < int(port) < 65536:
             self.__port = int(port)
             return self.__port
         else:
@@ -170,7 +171,7 @@ class ModbusClient:
         """
         if unit_id is None:
             return self.__unit_id
-        if (0 <= int(unit_id) < 256):
+        if 0 <= int(unit_id) < 256:
             self.__unit_id = int(unit_id)
             return self.__unit_id
         else:
@@ -186,7 +187,7 @@ class ModbusClient:
         """
         if timeout is None:
             return self.__timeout
-        if (0 < float(timeout) < 3600):
+        if 0 < float(timeout) < 3600:
             self.__timeout = float(timeout)
             return self.__timeout
         else:
@@ -241,7 +242,7 @@ class ModbusClient:
         """
         if mode is None:
             return self.__mode
-        if (mode == const.MODBUS_TCP or mode == const.MODBUS_RTU):
+        if mode == const.MODBUS_TCP or mode == const.MODBUS_RTU:
             self.__mode = mode
             return self.__mode
         else:
@@ -631,8 +632,8 @@ class ModbusClient:
 
         :param reg_addr: registers address (0 to 65535)
         :type reg_addr: int
-        :param reg_value: registers value to write
-        :type reg_value: list
+        :param regs_value: registers value to write
+        :type regs_value: list
         :returns: True if write ok or None if fail
         :rtype: bool or None
         """
@@ -926,45 +927,26 @@ class ModbusClient:
             s += i + " "
         print(s)
 
-    def _crc(self, frame):
-        """Compute modbus CRC16 (for RTU mode)
-
-        :param label: modbus frame
-        :type label: str (Python2) or class bytes (Python3)
-        :returns: CRC16
-        :rtype: int
-        """
-        crc = 0xFFFF
-        for index, item in enumerate(bytearray(frame)):
-            next_byte = item
-            crc ^= next_byte
-            for i in range(8):
-                lsb = crc & 1
-                crc >>= 1
-                if lsb:
-                    crc ^= 0xA001
-        return crc
-
     def _add_crc(self, frame):
         """Add CRC to modbus frame (for RTU mode)
 
-        :param label: modbus RTU frame
-        :type label: str (Python2) or class bytes (Python3)
+        :param frame: modbus RTU frame
+        :type frame: str (Python2) or class bytes (Python3)
         :returns: modbus RTU frame with CRC
         :rtype: str (Python2) or class bytes (Python3)
         """
-        crc = struct.pack("<H", self._crc(frame))
+        crc = struct.pack("<H", crc16(frame))
         return frame + crc
 
     def _crc_is_ok(self, frame):
         """Check the CRC of modbus RTU frame
 
-        :param label: modbus RTU frame with CRC
-        :type label: str (Python2) or class bytes (Python3)
+        :param frame: modbus RTU frame with CRC
+        :type frame: str (Python2) or class bytes (Python3)
         :returns: status CRC (True for valid)
         :rtype: bool
         """
-        return (self._crc(frame) == 0)
+        return crc16(frame) == 0
 
     def __debug_msg(self, msg):
         """Print debug message if debug mode is on

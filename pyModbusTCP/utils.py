@@ -4,10 +4,10 @@
 
 import struct
 
+
 ###############
 # bits function
 ###############
-
 def get_bits_from_int(val_int, val_size=16):
     """Get the list of bits of val_int integer (default size is 16 bits)
 
@@ -29,10 +29,10 @@ def get_bits_from_int(val_int, val_size=16):
     # return bits list
     return bits
 
+
 #########################
 # floating-point function
 #########################
-
 def decode_ieee(val_int):
     """Decode Python int (32 bits integer) as an IEEE single precision format
 
@@ -57,10 +57,10 @@ def encode_ieee(val_float):
     """
     return struct.unpack("I",struct.pack("f", val_float))[0]
 
+
 ################################
 # long format (32 bits) function
 ################################
-
 def word_list_to_long(val_list, big_endian=True):
     """Word list (16 bits int) to long list (32 bits int)
 
@@ -85,10 +85,10 @@ def word_list_to_long(val_list, big_endian=True):
     # return long list
     return long_list
 
+
 #########################################################
 # 2's complement of int value (scalar and list) functions
 #########################################################
-
 def get_2comp(val_int, val_size=16):
     """Get the 2's complement of Python int val_int
 
@@ -105,6 +105,7 @@ def get_2comp(val_int, val_size=16):
         val_int = val_int - (1<<val_size)
     return val_int
 
+
 def get_list_2comp(val_list, val_size=16):
     """Get the 2's complement of Python list val_list
 
@@ -116,3 +117,26 @@ def get_list_2comp(val_list, val_size=16):
         :rtype: list
     """
     return [get_2comp(val, val_size) for val in val_list]
+
+
+######################
+# compute CRC of frame
+######################
+def crc16(frame):
+    """Compute CRC16
+
+    :param frame: frame
+    :type frame: str (Python2) or class bytes (Python3)
+    :returns: CRC16
+    :rtype: int
+    """
+    crc = 0xFFFF
+    for index, item in enumerate(bytearray(frame)):
+        next_byte = item
+        crc ^= next_byte
+        for i in range(8):
+            lsb = crc & 1
+            crc >>= 1
+            if lsb:
+                crc ^= 0xA001
+    return crc
