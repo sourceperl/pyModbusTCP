@@ -3,7 +3,7 @@ Module pyModbusTCP.server
 
 .. automodule:: pyModbusTCP.server
 
-*This module provide the ModbusServer class used to deal with modbus server.*
+*This module provide the ModbusServer class.*
 
 class pyModbusTCP.client.ModbusServer
 -------------------------------------
