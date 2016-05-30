@@ -1,0 +1,5 @@
+1. log to PyPi website.
+2. build archive with "sudo python setup.py sdist".
+3. untar archive in dist to access PKG-INFO file.
+4. create new release under "edit/submitting package information" with package info file PKG-INFO.
+5. upload file tar.gz in dist/ to PyPi in files section (check before it's for the good release).
