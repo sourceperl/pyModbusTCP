@@ -1,5 +1,11 @@
 Revision history for pyModbusTCP
 
+0.1.1 2016-05-30
+
+    - add toggle_bit() to utils.
+    - add server.py example.
+    - add HOWTO for safe PyPI upload.
+
 0.1.0 2016-05-30
 
     - fix some issues in PEP 8 conformance and inline doc.

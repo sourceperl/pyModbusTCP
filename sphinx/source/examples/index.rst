@@ -10,3 +10,4 @@ pyModbusTCP examples
    read_bit
    write_bit
    modbus_thread
+   server

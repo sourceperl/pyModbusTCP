@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>pyModbusTCP.utils &mdash; pyModbusTCP 0.1.0 documentation</title>
+    <title>pyModbusTCP.utils &mdash; pyModbusTCP 0.1.1 documentation</title>
     
     <link rel="stylesheet" href="../../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
@@ -14,7 +14,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../../',
-        VERSION:     '0.1.0',
+        VERSION:     '0.1.1',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../../_static/jquery.js"></script>
     <script type="text/javascript" src="../../_static/underscore.js"></script>
     <script type="text/javascript" src="../../_static/doctools.js"></script>
-    <link rel="top" title="pyModbusTCP 0.1.0 documentation" href="../../index.html" />
+    <link rel="top" title="pyModbusTCP 0.1.1 documentation" href="../../index.html" />
     <link rel="up" title="Module code" href="../index.html" /> 
   </head>
   <body>
@@ -36,7 +36,7 @@
         <li class="right" >
           <a href="../../py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../index.html">pyModbusTCP 0.1.0 documentation</a> &raquo;</li>
+        <li><a href="../../index.html">pyModbusTCP 0.1.1 documentation</a> &raquo;</li>
           <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
       </ul>
     </div>  
@@ -233,8 +233,22 @@
 <span class="sd">    :rtype: int</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">mask</span> <span class="o">=</span> <span class="o">~</span><span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">offset</span><span class="p">)</span>
-    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span> <span class="o">&amp;</span> <span class="n">mask</span><span class="p">)</span></div>
-</pre></div>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span> <span class="o">&amp;</span> <span class="n">mask</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="toggle_bit"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.toggle_bit">[docs]</a><span class="k">def</span> <span class="nf">toggle_bit</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">offset</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Return an integer with the bit at offset position inverted</span>
+
+<span class="sd">    :param value: value of integer where invert the bit</span>
+<span class="sd">    :type value: int</span>
+<span class="sd">    :param offset: bit offset (0 is lsb)</span>
+<span class="sd">    :type offset: int</span>
+<span class="sd">    :returns: value of integer with bit inverted</span>
+<span class="sd">    :rtype: int</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">offset</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span> <span class="o">^</span> <span class="n">mask</span><span class="p">)</span>
+</pre></div></div>
 
           </div>
         </div>
@@ -267,7 +281,7 @@
         <li class="right" >
           <a href="../../py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../index.html">pyModbusTCP 0.1.0 documentation</a> &raquo;</li>
+        <li><a href="../../index.html">pyModbusTCP 0.1.1 documentation</a> &raquo;</li>
           <li><a href="../index.html" >Module code</a> &raquo;</li> 
       </ul>
     </div>
