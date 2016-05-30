@@ -185,3 +185,18 @@ def reset_bit(value, offset):
     """
     mask = ~(1 << offset)
     return int(value & mask)
+
+
+def toggle_bit(value, offset):
+    """Return an integer with the bit at offset position inverted
+
+    :param value: value of integer where invert the bit
+    :type value: int
+    :param offset: bit offset (0 is lsb)
+    :type offset: int
+    :returns: value of integer with bit inverted
+    :rtype: int
+    """
+    mask = 1 << offset
+    return int(value ^ mask)
+
