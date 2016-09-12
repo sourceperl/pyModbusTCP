@@ -47,6 +47,7 @@ class TestModbusClient(unittest.TestCase):
         c = ModbusClient()
         self.assertEqual(c.unit_id(), 1, 'default unit_id is 1')
         self.assertEqual(c.unit_id(42), 42)
+        self.assertEqual(c.unit_id(0), 0)
         self.assertEqual(c.unit_id(420), None)
 
 

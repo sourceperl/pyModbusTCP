@@ -20,7 +20,7 @@ class ModbusClient:
         """Constructor
 
         Modbus server params (host, port) can be set here or with host(), port()
-        functions. Same for debug option. 
+        functions. Same for debug option.
 
         Use functions avoid to launch ValueError except if params is incorrect.
 
@@ -65,8 +65,8 @@ class ModbusClient:
             if not self.port(port):
                 raise ValueError('port value error')
         # set unit_id
-        if unit_id:
-            if not self.unit_id(unit_id):
+        if unit_id is not None:
+            if self.unit_id(unit_id) is None:
                 raise ValueError('unit_id value error')
         # set timeout
         if timeout:
@@ -853,6 +853,9 @@ class ModbusClient:
                     (rx_hd_unit_id == self.__unit_id)):
                 self.__last_error = const.MB_RECV_ERR
                 self.__debug_msg('MBAP format error')
+                if self.__debug:
+                    rx_frame += self._recv(rx_hd_length - 1)
+                    self._pretty_dump('Err', rx_frame)
                 self.close()
                 return None
             # end of frame
