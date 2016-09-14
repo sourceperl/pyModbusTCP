@@ -855,7 +855,7 @@ class ModbusClient:
                 self.__debug_msg('MBAP format error')
                 if self.__debug:
                     rx_frame += self._recv(rx_hd_length - 1)
-                    self._pretty_dump('Err', rx_frame)
+                    self._pretty_dump('Rx', rx_frame)
                 self.close()
                 return None
             # end of frame
