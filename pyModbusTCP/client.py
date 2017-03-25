@@ -535,13 +535,15 @@ class ModbusClient:
         # return registers list
         return registers
 
-    def write_single_coil(self, bit_addr, bit_value):
+    def write_single_coil(self, bit_addr, bit_value, literal=False):
         """Modbus function WRITE_SINGLE_COIL (0x05)
 
         :param bit_addr: bit address (0 to 65535)
         :type bit_addr: int
         :param bit_value: bit value to write
-        :type bit_value: bool
+        :type bit_value: bool or int
+        :param literal: keep the actual value in bit_value and don't translate it to 0xFF
+        :type literal: bool
         :returns: True if write ok or None if fail
         :rtype: bool or None
         """
@@ -550,7 +552,8 @@ class ModbusClient:
             self.__debug_msg('write_single_coil(): bit_addr out of range')
             return None
         # build frame
-        bit_value = 0xFF if bit_value else 0x00
+        if not literal:
+            bit_value = 0xFF if bit_value else 0x00
         tx_buffer = self._mbus_frame(const.WRITE_SINGLE_COIL, struct.pack('>HBB', bit_addr, bit_value, 0))
         # send request
         s_send = self._send_mbus(tx_buffer)
