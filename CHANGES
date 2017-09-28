@@ -1,5 +1,12 @@
 Revision history for pyModbusTCP
 
+0.1.2 2017-09-28
+
+    - fix 'Rx' label on error.
+    - change file mode for server.py example.
+    - fix compatibility with modbus unit_id = 0 (thanks to mfkenney).
+    - fix compatibility for modbus frame with garbage.
+
 0.1.1 2016-05-30
 
     - add toggle_bit() to utils.

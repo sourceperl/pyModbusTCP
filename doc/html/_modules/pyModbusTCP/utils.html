@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>pyModbusTCP.utils &mdash; pyModbusTCP 0.1.1 documentation</title>
+    <title>pyModbusTCP.utils &#8212; pyModbusTCP 0.1.2 documentation</title>
     
     <link rel="stylesheet" href="../../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
@@ -14,7 +14,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../../',
-        VERSION:     '0.1.1',
+        VERSION:     '0.1.2',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -23,11 +23,13 @@
     <script type="text/javascript" src="../../_static/jquery.js"></script>
     <script type="text/javascript" src="../../_static/underscore.js"></script>
     <script type="text/javascript" src="../../_static/doctools.js"></script>
-    <link rel="top" title="pyModbusTCP 0.1.1 documentation" href="../../index.html" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="top" title="pyModbusTCP 0.1.2 documentation" href="../../index.html" />
     <link rel="up" title="Module code" href="../index.html" /> 
   </head>
-  <body>
-    <div class="related">
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
         <li class="right" style="margin-right: 10px">
@@ -36,27 +38,27 @@
         <li class="right" >
           <a href="../../py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../index.html">pyModbusTCP 0.1.1 documentation</a> &raquo;</li>
-          <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../../index.html">pyModbusTCP 0.1.2 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" accesskey="U">Module code</a> &#187;</li> 
       </ul>
     </div>  
 
     <div class="document">
       <div class="documentwrapper">
         <div class="bodywrapper">
-          <div class="body">
+          <div class="body" role="main">
             
   <h1>Source code for pyModbusTCP.utils</h1><div class="highlight"><pre>
-<span class="c"># -*- coding: utf-8 -*-</span>
+<span></span><span class="c1"># -*- coding: utf-8 -*-</span>
 
-<span class="c"># Python module: Some functions for modbus data mangling</span>
+<span class="c1"># Python module: Some functions for modbus data mangling</span>
 
 <span class="kn">import</span> <span class="nn">struct</span>
 
 
-<span class="c">###############</span>
-<span class="c"># bits function</span>
-<span class="c">###############</span>
+<span class="c1">###############</span>
+<span class="c1"># bits function</span>
+<span class="c1">###############</span>
 <div class="viewcode-block" id="get_bits_from_int"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.get_bits_from_int">[docs]</a><span class="k">def</span> <span class="nf">get_bits_from_int</span><span class="p">(</span><span class="n">val_int</span><span class="p">,</span> <span class="n">val_size</span><span class="o">=</span><span class="mi">16</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Get the list of bits of val_int integer (default size is 16 bits)</span>
 
@@ -70,18 +72,18 @@
 <span class="sd">        :returns: list of boolean &quot;bits&quot; (least significant first)</span>
 <span class="sd">        :rtype: list</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c"># allocate a bit_nb size list</span>
-    <span class="n">bits</span> <span class="o">=</span> <span class="p">[</span><span class="bp">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">val_size</span>
-    <span class="c"># fill bits list with bit items</span>
+    <span class="c1"># allocate a bit_nb size list</span>
+    <span class="n">bits</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">val_size</span>
+    <span class="c1"># fill bits list with bit items</span>
     <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">bits</span><span class="p">):</span>
         <span class="n">bits</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">((</span><span class="n">val_int</span><span class="o">&gt;&gt;</span><span class="n">i</span><span class="p">)</span><span class="o">&amp;</span><span class="mh">0x01</span><span class="p">)</span>
-    <span class="c"># return bits list</span>
-    <span class="k">return</span> <span class="n">bits</span>
+    <span class="c1"># return bits list</span>
+    <span class="k">return</span> <span class="n">bits</span></div>
 
 
-<span class="c">#########################</span>
-<span class="c"># floating-point function</span>
-<span class="c">#########################</span></div>
+<span class="c1">#########################</span>
+<span class="c1"># floating-point function</span>
+<span class="c1">#########################</span>
 <div class="viewcode-block" id="decode_ieee"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.decode_ieee">[docs]</a><span class="k">def</span> <span class="nf">decode_ieee</span><span class="p">(</span><span class="n">val_int</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Decode Python int (32 bits integer) as an IEEE single precision format</span>
 
@@ -92,8 +94,8 @@
 <span class="sd">        :returns: float result</span>
 <span class="sd">        :rtype: float</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;f&quot;</span><span class="p">,</span><span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s">&quot;I&quot;</span><span class="p">,</span> <span class="n">val_int</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
-</div>
+    <span class="k">return</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s2">&quot;f&quot;</span><span class="p">,</span><span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s2">&quot;I&quot;</span><span class="p">,</span> <span class="n">val_int</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span></div>
+
 <div class="viewcode-block" id="encode_ieee"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.encode_ieee">[docs]</a><span class="k">def</span> <span class="nf">encode_ieee</span><span class="p">(</span><span class="n">val_float</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Encode Python float to int (32 bits integer) as an IEEE single precision</span>
 
@@ -104,13 +106,13 @@
 <span class="sd">        :returns: IEEE 32 bits (single precision) as Python int</span>
 <span class="sd">        :rtype: int</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&quot;I&quot;</span><span class="p">,</span><span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s">&quot;f&quot;</span><span class="p">,</span> <span class="n">val_float</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s2">&quot;I&quot;</span><span class="p">,</span><span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s2">&quot;f&quot;</span><span class="p">,</span> <span class="n">val_float</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span></div>
 
 
-<span class="c">################################</span>
-<span class="c"># long format (32 bits) function</span>
-<span class="c">################################</span></div>
-<div class="viewcode-block" id="word_list_to_long"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.word_list_to_long">[docs]</a><span class="k">def</span> <span class="nf">word_list_to_long</span><span class="p">(</span><span class="n">val_list</span><span class="p">,</span> <span class="n">big_endian</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+<span class="c1">################################</span>
+<span class="c1"># long format (32 bits) function</span>
+<span class="c1">################################</span>
+<div class="viewcode-block" id="word_list_to_long"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.word_list_to_long">[docs]</a><span class="k">def</span> <span class="nf">word_list_to_long</span><span class="p">(</span><span class="n">val_list</span><span class="p">,</span> <span class="n">big_endian</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Word list (16 bits int) to long list (32 bits int)</span>
 
 <span class="sd">        By default word_list2long() use big endian order. For use little endian, set</span>
@@ -123,21 +125,21 @@
 <span class="sd">        :returns: 2&#39;s complement result</span>
 <span class="sd">        :rtype: list</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c"># allocate list for long int</span>
-    <span class="n">long_list</span> <span class="o">=</span> <span class="p">[</span><span class="bp">None</span><span class="p">]</span> <span class="o">*</span> <span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">val_list</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">)</span>
-    <span class="c"># fill registers list with register items</span>
+    <span class="c1"># allocate list for long int</span>
+    <span class="n">long_list</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">val_list</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">)</span>
+    <span class="c1"># fill registers list with register items</span>
     <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">long_list</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">big_endian</span><span class="p">:</span>
             <span class="n">long_list</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">val_list</span><span class="p">[</span><span class="n">i</span><span class="o">*</span><span class="mi">2</span><span class="p">]</span><span class="o">&lt;&lt;</span><span class="mi">16</span><span class="p">)</span> <span class="o">+</span> <span class="n">val_list</span><span class="p">[(</span><span class="n">i</span><span class="o">*</span><span class="mi">2</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">]</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">long_list</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">val_list</span><span class="p">[(</span><span class="n">i</span><span class="o">*</span><span class="mi">2</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">]</span><span class="o">&lt;&lt;</span><span class="mi">16</span><span class="p">)</span> <span class="o">+</span> <span class="n">val_list</span><span class="p">[</span><span class="n">i</span><span class="o">*</span><span class="mi">2</span><span class="p">]</span>
-    <span class="c"># return long list</span>
-    <span class="k">return</span> <span class="n">long_list</span>
+    <span class="c1"># return long list</span>
+    <span class="k">return</span> <span class="n">long_list</span></div>
 
 
-<span class="c">#########################################################</span>
-<span class="c"># 2&#39;s complement of int value (scalar and list) functions</span>
-<span class="c">#########################################################</span></div>
+<span class="c1">#########################################################</span>
+<span class="c1"># 2&#39;s complement of int value (scalar and list) functions</span>
+<span class="c1">#########################################################</span>
 <div class="viewcode-block" id="get_2comp"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.get_2comp">[docs]</a><span class="k">def</span> <span class="nf">get_2comp</span><span class="p">(</span><span class="n">val_int</span><span class="p">,</span> <span class="n">val_size</span><span class="o">=</span><span class="mi">16</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Get the 2&#39;s complement of Python int val_int</span>
 
@@ -148,13 +150,13 @@
 <span class="sd">        :returns: 2&#39;s complement result</span>
 <span class="sd">        :rtype: int</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c"># test MSBit (1 for negative)</span>
+    <span class="c1"># test MSBit (1 for negative)</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">val_int</span><span class="o">&amp;</span><span class="p">(</span><span class="mi">1</span><span class="o">&lt;&lt;</span><span class="p">(</span><span class="n">val_size</span><span class="o">-</span><span class="mi">1</span><span class="p">))):</span>
-        <span class="c"># do complement</span>
+        <span class="c1"># do complement</span>
         <span class="n">val_int</span> <span class="o">=</span> <span class="n">val_int</span> <span class="o">-</span> <span class="p">(</span><span class="mi">1</span><span class="o">&lt;&lt;</span><span class="n">val_size</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">val_int</span>
+    <span class="k">return</span> <span class="n">val_int</span></div>
 
-</div>
+
 <div class="viewcode-block" id="get_list_2comp"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.get_list_2comp">[docs]</a><span class="k">def</span> <span class="nf">get_list_2comp</span><span class="p">(</span><span class="n">val_list</span><span class="p">,</span> <span class="n">val_size</span><span class="o">=</span><span class="mi">16</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Get the 2&#39;s complement of Python list val_list</span>
 
@@ -165,12 +167,12 @@
 <span class="sd">        :returns: 2&#39;s complement result</span>
 <span class="sd">        :rtype: list</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="p">[</span><span class="n">get_2comp</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">val_size</span><span class="p">)</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">val_list</span><span class="p">]</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">get_2comp</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">val_size</span><span class="p">)</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">val_list</span><span class="p">]</span></div>
 
 
-<span class="c">######################</span>
-<span class="c"># compute CRC of frame</span>
-<span class="c">######################</span></div>
+<span class="c1">######################</span>
+<span class="c1"># compute CRC of frame</span>
+<span class="c1">######################</span>
 <div class="viewcode-block" id="crc16"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.crc16">[docs]</a><span class="k">def</span> <span class="nf">crc16</span><span class="p">(</span><span class="n">frame</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Compute CRC16</span>
 
@@ -188,12 +190,12 @@
             <span class="n">crc</span> <span class="o">&gt;&gt;=</span> <span class="mi">1</span>
             <span class="k">if</span> <span class="n">lsb</span><span class="p">:</span>
                 <span class="n">crc</span> <span class="o">^=</span> <span class="mh">0xA001</span>
-    <span class="k">return</span> <span class="n">crc</span>
+    <span class="k">return</span> <span class="n">crc</span></div>
 
 
-<span class="c">####################</span>
-<span class="c"># misc bit functions</span>
-<span class="c">####################</span></div>
+<span class="c1">####################</span>
+<span class="c1"># misc bit functions</span>
+<span class="c1">####################</span>
 <div class="viewcode-block" id="test_bit"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.test_bit">[docs]</a><span class="k">def</span> <span class="nf">test_bit</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">offset</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Test a bit at offset position</span>
 
@@ -205,9 +207,9 @@
 <span class="sd">    :rtype: bool</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">mask</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">offset</span>
-    <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">value</span> <span class="o">&amp;</span> <span class="n">mask</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">value</span> <span class="o">&amp;</span> <span class="n">mask</span><span class="p">)</span></div>
 
-</div>
+
 <div class="viewcode-block" id="set_bit"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.set_bit">[docs]</a><span class="k">def</span> <span class="nf">set_bit</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">offset</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Set a bit at offset position</span>
 
@@ -219,9 +221,9 @@
 <span class="sd">    :rtype: int</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">mask</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">offset</span>
-    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span> <span class="o">|</span> <span class="n">mask</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span> <span class="o">|</span> <span class="n">mask</span><span class="p">)</span></div>
 
-</div>
+
 <div class="viewcode-block" id="reset_bit"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.reset_bit">[docs]</a><span class="k">def</span> <span class="nf">reset_bit</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">offset</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Reset a bit at offset position</span>
 
@@ -233,9 +235,9 @@
 <span class="sd">    :rtype: int</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">mask</span> <span class="o">=</span> <span class="o">~</span><span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">offset</span><span class="p">)</span>
-    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span> <span class="o">&amp;</span> <span class="n">mask</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span> <span class="o">&amp;</span> <span class="n">mask</span><span class="p">)</span></div>
 
-</div>
+
 <div class="viewcode-block" id="toggle_bit"><a class="viewcode-back" href="../../package/module_utils.html#pyModbusTCP.utils.toggle_bit">[docs]</a><span class="k">def</span> <span class="nf">toggle_bit</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">offset</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Return an integer with the bit at offset position inverted</span>
 
@@ -247,32 +249,30 @@
 <span class="sd">    :rtype: int</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">mask</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">offset</span>
-    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span> <span class="o">^</span> <span class="n">mask</span><span class="p">)</span>
-</pre></div></div>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span> <span class="o">^</span> <span class="n">mask</span><span class="p">)</span></div>
+
+</pre></div>
 
           </div>
         </div>
       </div>
-      <div class="sphinxsidebar">
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
         <div class="sphinxsidebarwrapper">
-<div id="searchbox" style="display: none">
+<div id="searchbox" style="display: none" role="search">
   <h3>Quick search</h3>
     <form class="search" action="../../search.html" method="get">
-      <input type="text" name="q" />
-      <input type="submit" value="Go" />
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
       <input type="hidden" name="check_keywords" value="yes" />
       <input type="hidden" name="area" value="default" />
     </form>
-    <p class="searchtip" style="font-size: 90%">
-    Enter search terms or a module, class or function name.
-    </p>
 </div>
 <script type="text/javascript">$('#searchbox').show(0);</script>
         </div>
       </div>
       <div class="clearer"></div>
     </div>
-    <div class="related">
+    <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
         <li class="right" style="margin-right: 10px">
@@ -281,13 +281,13 @@
         <li class="right" >
           <a href="../../py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../index.html">pyModbusTCP 0.1.1 documentation</a> &raquo;</li>
-          <li><a href="../index.html" >Module code</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../../index.html">pyModbusTCP 0.1.2 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &#187;</li> 
       </ul>
     </div>
-    <div class="footer">
-        &copy; Copyright 2014, Loic Lefebvre.
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2017, Loic Lefebvre.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.9.
     </div>
   </body>
 </html>

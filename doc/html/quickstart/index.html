@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>Quick start guide &mdash; pyModbusTCP 0.1.1 documentation</title>
+    <title>Quick start guide &#8212; pyModbusTCP 0.1.2 documentation</title>
     
     <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
@@ -14,7 +14,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../',
-        VERSION:     '0.1.1',
+        VERSION:     '0.1.2',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -23,12 +23,14 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <link rel="top" title="pyModbusTCP 0.1.1 documentation" href="../index.html" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="top" title="pyModbusTCP 0.1.2 documentation" href="../index.html" />
     <link rel="next" title="pyModbusTCP modules documentation" href="../package/index.html" />
     <link rel="prev" title="Welcome to pyModbusTCP’s documentation" href="../index.html" /> 
   </head>
-  <body>
-    <div class="related">
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
         <li class="right" style="margin-right: 10px">
@@ -43,14 +45,14 @@
         <li class="right" >
           <a href="../index.html" title="Welcome to pyModbusTCP’s documentation"
              accesskey="P">previous</a> |</li>
-        <li><a href="../index.html">pyModbusTCP 0.1.1 documentation</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../index.html">pyModbusTCP 0.1.2 documentation</a> &#187;</li> 
       </ul>
     </div>  
 
     <div class="document">
       <div class="documentwrapper">
         <div class="bodywrapper">
-          <div class="body">
+          <div class="body" role="main">
             
   <div class="section" id="quick-start-guide">
 <h1>Quick start guide<a class="headerlink" href="#quick-start-guide" title="Permalink to this headline">¶</a></h1>
@@ -69,39 +71,39 @@ functions.</p>
 <div class="section" id="package-setup">
 <h2>Package setup<a class="headerlink" href="#package-setup" title="Permalink to this headline">¶</a></h2>
 <p>from PyPi:</p>
-<div class="highlight-python"><div class="highlight"><pre># for Python 2.7
-sudo pip-2.7 install pyModbusTCP
-# or for Python 3.2
-sudo pip-3.2 install pyModbusTCP
-# or upgrade from an older release
-sudo pip-3.2 install pyModbusTCP --upgrade
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="c1"># for Python 2.7</span>
+<span class="n">sudo</span> <span class="n">pip</span><span class="o">-</span><span class="mf">2.7</span> <span class="n">install</span> <span class="n">pyModbusTCP</span>
+<span class="c1"># or for Python 3.2</span>
+<span class="n">sudo</span> <span class="n">pip</span><span class="o">-</span><span class="mf">3.2</span> <span class="n">install</span> <span class="n">pyModbusTCP</span>
+<span class="c1"># or upgrade from an older release</span>
+<span class="n">sudo</span> <span class="n">pip</span><span class="o">-</span><span class="mf">3.2</span> <span class="n">install</span> <span class="n">pyModbusTCP</span> <span class="o">--</span><span class="n">upgrade</span>
 </pre></div>
 </div>
 <p>from Github:</p>
-<div class="highlight-python"><div class="highlight"><pre>git clone https://github.com/sourceperl/pyModbusTCP.git
-cd pyModbusTCP
-# here change &quot;python&quot; by your python target(s) version(s) (like python3.2)
-sudo python setup.py install
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">clone</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">sourceperl</span><span class="o">/</span><span class="n">pyModbusTCP</span><span class="o">.</span><span class="n">git</span>
+<span class="n">cd</span> <span class="n">pyModbusTCP</span>
+<span class="c1"># here change &quot;python&quot; by your python target(s) version(s) (like python3.2)</span>
+<span class="n">sudo</span> <span class="n">python</span> <span class="n">setup</span><span class="o">.</span><span class="n">py</span> <span class="n">install</span>
 </pre></div>
 </div>
 </div>
 <div class="section" id="modbusclient-init">
 <h2>ModbusClient: init<a class="headerlink" href="#modbusclient-init" title="Permalink to this headline">¶</a></h2>
 <p>init module from constructor (raise ValueError if host/port error):</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pyModbusTCP.client</span> <span class="kn">import</span> <span class="n">ModbusClient</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pyModbusTCP.client</span> <span class="k">import</span> <span class="n">ModbusClient</span>
 <span class="k">try</span><span class="p">:</span>
-    <span class="n">c</span> <span class="o">=</span> <span class="n">ModbusClient</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s">&quot;localhost&quot;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">502</span><span class="p">)</span>
+    <span class="n">c</span> <span class="o">=</span> <span class="n">ModbusClient</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s2">&quot;localhost&quot;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">502</span><span class="p">)</span>
 <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
-    <span class="k">print</span><span class="p">(</span><span class="s">&quot;Error with host or port params&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Error with host or port params&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>you can also init module from functions host/port return None if error:</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pyModbusTCP.client</span> <span class="kn">import</span> <span class="n">ModbusClient</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pyModbusTCP.client</span> <span class="k">import</span> <span class="n">ModbusClient</span>
 <span class="n">c</span> <span class="o">=</span> <span class="n">ModbusClient</span><span class="p">()</span>
-<span class="k">if</span> <span class="ow">not</span> <span class="n">c</span><span class="o">.</span><span class="n">host</span><span class="p">(</span><span class="s">&quot;localhost&quot;</span><span class="p">):</span>
-    <span class="k">print</span><span class="p">(</span><span class="s">&quot;host error&quot;</span><span class="p">)</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="n">c</span><span class="o">.</span><span class="n">host</span><span class="p">(</span><span class="s2">&quot;localhost&quot;</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;host error&quot;</span><span class="p">)</span>
 <span class="k">if</span> <span class="ow">not</span> <span class="n">c</span><span class="o">.</span><span class="n">port</span><span class="p">(</span><span class="mi">502</span><span class="p">):</span>
-    <span class="k">print</span><span class="p">(</span><span class="s">&quot;port error&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;port error&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -109,23 +111,23 @@ sudo python setup.py install
 <h2>ModbusClient: manage TCP link<a class="headerlink" href="#modbusclient-manage-tcp-link" title="Permalink to this headline">¶</a></h2>
 <p>Now, it&#8217;s possible to use auto mode to let module deal with TCP open/close.</p>
 <p>For keep TCP open, add auto_open=True in init:</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="n">c</span> <span class="o">=</span> <span class="n">ModbusClient</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s">&quot;localhost&quot;</span><span class="p">,</span> <span class="n">auto_open</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">c</span> <span class="o">=</span> <span class="n">ModbusClient</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s2">&quot;localhost&quot;</span><span class="p">,</span> <span class="n">auto_open</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>For open/close socket before/after read or write, do this:</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="n">c</span> <span class="o">=</span> <span class="n">ModbusClient</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s">&quot;localhost&quot;</span><span class="p">,</span> <span class="n">auto_open</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">auto_close</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">c</span> <span class="o">=</span> <span class="n">ModbusClient</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s2">&quot;localhost&quot;</span><span class="p">,</span> <span class="n">auto_open</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">auto_close</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>You can also open manually the TCP link. After this, you call a modbus request
 function (see list in next section):</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">open</span><span class="p">():</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">open</span><span class="p">():</span>
     <span class="n">regs_list_1</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">read_holding_registers</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
     <span class="n">regs_list_2</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">read_holding_registers</span><span class="p">(</span><span class="mi">55</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
     <span class="n">c</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 </pre></div>
 </div>
 <p>With a forever polling loop, TCP always open (auto-reconnect code):</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
     <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">is_open</span><span class="p">():</span>
         <span class="n">regs_list_1</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">read_holding_registers</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
         <span class="n">regs_list_2</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">read_holding_registers</span><span class="p">(</span><span class="mi">55</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
@@ -156,36 +158,36 @@ function (see list in next section):</p>
 <tr class="row-even"><td rowspan="4">Bit</td>
 <td>Read Discrete Inputs</td>
 <td>2</td>
-<td><a class="reference internal" href="../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.read_discrete_inputs" title="pyModbusTCP.client.ModbusClient.read_discrete_inputs"><tt class="xref py py-meth docutils literal"><span class="pre">read_discrete_inputs()</span></tt></a></td>
+<td><a class="reference internal" href="../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.read_discrete_inputs" title="pyModbusTCP.client.ModbusClient.read_discrete_inputs"><code class="xref py py-meth docutils literal"><span class="pre">read_discrete_inputs()</span></code></a></td>
 </tr>
 <tr class="row-odd"><td>Read Coils</td>
 <td>1</td>
-<td><a class="reference internal" href="../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.read_coils" title="pyModbusTCP.client.ModbusClient.read_coils"><tt class="xref py py-meth docutils literal"><span class="pre">read_coils()</span></tt></a></td>
+<td><a class="reference internal" href="../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.read_coils" title="pyModbusTCP.client.ModbusClient.read_coils"><code class="xref py py-meth docutils literal"><span class="pre">read_coils()</span></code></a></td>
 </tr>
 <tr class="row-even"><td>Write Single Coil</td>
 <td>5</td>
-<td><a class="reference internal" href="../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.write_single_coil" title="pyModbusTCP.client.ModbusClient.write_single_coil"><tt class="xref py py-meth docutils literal"><span class="pre">write_single_coil()</span></tt></a></td>
+<td><a class="reference internal" href="../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.write_single_coil" title="pyModbusTCP.client.ModbusClient.write_single_coil"><code class="xref py py-meth docutils literal"><span class="pre">write_single_coil()</span></code></a></td>
 </tr>
 <tr class="row-odd"><td>Write Multiple Coils</td>
 <td>15</td>
-<td><a class="reference internal" href="../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.write_multiple_coils" title="pyModbusTCP.client.ModbusClient.write_multiple_coils"><tt class="xref py py-meth docutils literal"><span class="pre">write_multiple_coils()</span></tt></a></td>
+<td><a class="reference internal" href="../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.write_multiple_coils" title="pyModbusTCP.client.ModbusClient.write_multiple_coils"><code class="xref py py-meth docutils literal"><span class="pre">write_multiple_coils()</span></code></a></td>
 </tr>
 <tr class="row-even"><td rowspan="6">Register</td>
 <td>Read Input Registers</td>
 <td>4</td>
-<td><a class="reference internal" href="../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.read_input_registers" title="pyModbusTCP.client.ModbusClient.read_input_registers"><tt class="xref py py-meth docutils literal"><span class="pre">read_input_registers()</span></tt></a></td>
+<td><a class="reference internal" href="../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.read_input_registers" title="pyModbusTCP.client.ModbusClient.read_input_registers"><code class="xref py py-meth docutils literal"><span class="pre">read_input_registers()</span></code></a></td>
 </tr>
 <tr class="row-odd"><td>Read Holding Registers</td>
 <td>3</td>
-<td><a class="reference internal" href="../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.read_holding_registers" title="pyModbusTCP.client.ModbusClient.read_holding_registers"><tt class="xref py py-meth docutils literal"><span class="pre">read_holding_registers()</span></tt></a></td>
+<td><a class="reference internal" href="../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.read_holding_registers" title="pyModbusTCP.client.ModbusClient.read_holding_registers"><code class="xref py py-meth docutils literal"><span class="pre">read_holding_registers()</span></code></a></td>
 </tr>
 <tr class="row-even"><td>Write Single Register</td>
 <td>6</td>
-<td><a class="reference internal" href="../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.write_single_register" title="pyModbusTCP.client.ModbusClient.write_single_register"><tt class="xref py py-meth docutils literal"><span class="pre">write_single_register()</span></tt></a></td>
+<td><a class="reference internal" href="../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.write_single_register" title="pyModbusTCP.client.ModbusClient.write_single_register"><code class="xref py py-meth docutils literal"><span class="pre">write_single_register()</span></code></a></td>
 </tr>
 <tr class="row-odd"><td>Write Multiple Registers</td>
 <td>16</td>
-<td><a class="reference internal" href="../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.write_multiple_registers" title="pyModbusTCP.client.ModbusClient.write_multiple_registers"><tt class="xref py py-meth docutils literal"><span class="pre">write_multiple_registers()</span></tt></a></td>
+<td><a class="reference internal" href="../package/class_ModbusClient.html#pyModbusTCP.client.ModbusClient.write_multiple_registers" title="pyModbusTCP.client.ModbusClient.write_multiple_registers"><code class="xref py py-meth docutils literal"><span class="pre">write_multiple_registers()</span></code></a></td>
 </tr>
 <tr class="row-even"><td>Read/Write Multiple Registers</td>
 <td>23</td>
@@ -239,25 +241,25 @@ function (see list in next section):</p>
 <div class="section" id="modbusclient-debug-mode">
 <h2>ModbusClient: debug mode<a class="headerlink" href="#modbusclient-debug-mode" title="Permalink to this headline">¶</a></h2>
 <p>If need, you can enable a debug mode for ModbusClient like this:</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pyModbusTCP.client</span> <span class="kn">import</span> <span class="n">ModbusClient</span>
-<span class="n">c</span> <span class="o">=</span> <span class="n">ModbusClient</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s">&quot;localhost&quot;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">502</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pyModbusTCP.client</span> <span class="k">import</span> <span class="n">ModbusClient</span>
+<span class="n">c</span> <span class="o">=</span> <span class="n">ModbusClient</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s2">&quot;localhost&quot;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">502</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>or:</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="n">c</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">c</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>when debug is enable all debug message is print on console and you can see
 modbus frame:</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="n">c</span><span class="o">.</span><span class="n">read_holding_registers</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">c</span><span class="o">.</span><span class="n">read_holding_registers</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>print:</p>
-<div class="highlight-python"><div class="highlight"><pre>Tx
-[E7 53 00 00 00 06 01] 03 00 00 00 04
-Rx
-[E7 53 00 00 00 0B 01] 03 08 00 00 00 6F 00 00 00 00
-[0, 111, 0, 0]
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">Tx</span>
+<span class="p">[</span><span class="n">E7</span> <span class="mi">53</span> <span class="mi">00</span> <span class="mi">00</span> <span class="mi">00</span> <span class="mi">06</span> <span class="mi">01</span><span class="p">]</span> <span class="mi">03</span> <span class="mi">00</span> <span class="mi">00</span> <span class="mi">00</span> <span class="mi">04</span>
+<span class="n">Rx</span>
+<span class="p">[</span><span class="n">E7</span> <span class="mi">53</span> <span class="mi">00</span> <span class="mi">00</span> <span class="mi">00</span> <span class="mi">0</span><span class="n">B</span> <span class="mi">01</span><span class="p">]</span> <span class="mi">03</span> <span class="mi">08</span> <span class="mi">00</span> <span class="mi">00</span> <span class="mi">00</span> <span class="mi">6</span><span class="n">F</span> <span class="mi">00</span> <span class="mi">00</span> <span class="mi">00</span> <span class="mi">00</span>
+<span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">111</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
 </pre></div>
 </div>
 </div>
@@ -266,50 +268,50 @@ Rx
 <p>Sample data mangling, usefull for interface PLC device.</p>
 <ul>
 <li><p class="first">16 bits to 32 bits integers:</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pyModbusTCP</span> <span class="kn">import</span> <span class="n">utils</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pyModbusTCP</span> <span class="k">import</span> <span class="n">utils</span>
 <span class="n">list_16_bits</span> <span class="o">=</span> <span class="p">[</span><span class="mh">0x0123</span><span class="p">,</span> <span class="mh">0x4567</span><span class="p">,</span> <span class="mh">0x89ab</span><span class="p">,</span> <span class="mh">0xcdef</span><span class="p">]</span>
 
-<span class="c"># big endian sample (default)</span>
+<span class="c1"># big endian sample (default)</span>
 <span class="n">list_32_bits</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">word_list_to_long</span><span class="p">(</span><span class="n">list_16_bits</span><span class="p">)</span>
-<span class="c"># display &quot;[&#39;0x1234567&#39;, &#39;0x89abcdef&#39;]&quot;</span>
-<span class="k">print</span><span class="p">([</span><span class="nb">hex</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">list_32_bits</span><span class="p">])</span>
+<span class="c1"># display &quot;[&#39;0x1234567&#39;, &#39;0x89abcdef&#39;]&quot;</span>
+<span class="nb">print</span><span class="p">([</span><span class="nb">hex</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">list_32_bits</span><span class="p">])</span>
 
-<span class="c"># little endian sample</span>
-<span class="n">list_32_bits</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">word_list_to_long</span><span class="p">(</span><span class="n">list_16_bits</span><span class="p">,</span> <span class="n">big_endian</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
-<span class="c"># display &quot;[&#39;0x45670123&#39;, &#39;0xcdef89ab&#39;]&quot;</span>
-<span class="k">print</span><span class="p">([</span><span class="nb">hex</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">list_32_bits</span><span class="p">])</span>
+<span class="c1"># little endian sample</span>
+<span class="n">list_32_bits</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">word_list_to_long</span><span class="p">(</span><span class="n">list_16_bits</span><span class="p">,</span> <span class="n">big_endian</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="c1"># display &quot;[&#39;0x45670123&#39;, &#39;0xcdef89ab&#39;]&quot;</span>
+<span class="nb">print</span><span class="p">([</span><span class="nb">hex</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">list_32_bits</span><span class="p">])</span>
 </pre></div>
 </div>
 </li>
 <li><p class="first">two&#8217;s complement (see <a class="reference external" href="http://en.wikipedia.org/wiki/Two%27s_complement">http://en.wikipedia.org/wiki/Two%27s_complement</a>):</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pyModbusTCP</span> <span class="kn">import</span> <span class="n">utils</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pyModbusTCP</span> <span class="k">import</span> <span class="n">utils</span>
 <span class="n">list_16_bits</span> <span class="o">=</span> <span class="p">[</span><span class="mh">0x0000</span><span class="p">,</span> <span class="mh">0xFFFF</span><span class="p">,</span> <span class="mh">0x00FF</span><span class="p">,</span> <span class="mh">0x8001</span><span class="p">]</span>
 
-<span class="c"># display &quot;[0, -1, 255, -32767]&quot;</span>
-<span class="k">print</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">get_list_2comp</span><span class="p">(</span><span class="n">list_16_bits</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+<span class="c1"># display &quot;[0, -1, 255, -32767]&quot;</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">get_list_2comp</span><span class="p">(</span><span class="n">list_16_bits</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
 
-<span class="c"># display &quot;-1&quot;</span>
-<span class="k">print</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">get_2comp</span><span class="p">(</span><span class="n">list_16_bits</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">16</span><span class="p">))</span>
+<span class="c1"># display &quot;-1&quot;</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">get_2comp</span><span class="p">(</span><span class="n">list_16_bits</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">16</span><span class="p">))</span>
 </pre></div>
 </div>
 </li>
 <li><p class="first">an integer of val_size bits (default is 16) to an array of boolean:</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pyModbusTCP</span> <span class="kn">import</span> <span class="n">utils</span>
-<span class="c"># display &quot;[True, False, True, False, False, False, False, False]&quot;</span>
-<span class="k">print</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">get_bits_from_int</span><span class="p">(</span><span class="mh">0x05</span><span class="p">,</span> <span class="n">val_size</span><span class="o">=</span><span class="mi">8</span><span class="p">))</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pyModbusTCP</span> <span class="k">import</span> <span class="n">utils</span>
+<span class="c1"># display &quot;[True, False, True, False, False, False, False, False]&quot;</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">get_bits_from_int</span><span class="p">(</span><span class="mh">0x05</span><span class="p">,</span> <span class="n">val_size</span><span class="o">=</span><span class="mi">8</span><span class="p">))</span>
 </pre></div>
 </div>
 </li>
 <li><p class="first">gateway between IEEE single precision float and python float:</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pyModbusTCP</span> <span class="kn">import</span> <span class="n">utils</span>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pyModbusTCP</span> <span class="k">import</span> <span class="n">utils</span>
 
-<span class="c"># convert python float 0.3 to 0x3e99999a (32 bits IEEE representation)</span>
-<span class="c"># display &quot;0x3e99999a&quot;</span>
-<span class="k">print</span><span class="p">(</span><span class="nb">hex</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">encode_ieee</span><span class="p">(</span><span class="mf">0.3</span><span class="p">)))</span>
+<span class="c1"># convert python float 0.3 to 0x3e99999a (32 bits IEEE representation)</span>
+<span class="c1"># display &quot;0x3e99999a&quot;</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">hex</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">encode_ieee</span><span class="p">(</span><span class="mf">0.3</span><span class="p">)))</span>
 
-<span class="c"># convert python float 0.3 to 0x3e99999a (32 bits IEEE representation)</span>
-<span class="c"># display &quot;0.300000011921&quot; (it&#39;s not 0.3, precision leak with float...)</span>
-<span class="k">print</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">decode_ieee</span><span class="p">(</span><span class="mh">0x3e99999a</span><span class="p">))</span>
+<span class="c1"># convert python float 0.3 to 0x3e99999a (32 bits IEEE representation)</span>
+<span class="c1"># display &quot;0.300000011921&quot; (it&#39;s not 0.3, precision leak with float...)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">decode_ieee</span><span class="p">(</span><span class="mh">0x3e99999a</span><span class="p">))</span>
 </pre></div>
 </div>
 </li>
@@ -321,7 +323,7 @@ Rx
           </div>
         </div>
       </div>
-      <div class="sphinxsidebar">
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
         <div class="sphinxsidebarwrapper">
   <h3><a href="../index.html">Table Of Contents</a></h3>
   <ul>
@@ -343,29 +345,28 @@ Rx
   <h4>Next topic</h4>
   <p class="topless"><a href="../package/index.html"
                         title="next chapter">pyModbusTCP modules documentation</a></p>
-  <h3>This Page</h3>
-  <ul class="this-page-menu">
-    <li><a href="../_sources/quickstart/index.txt"
-           rel="nofollow">Show Source</a></li>
-  </ul>
-<div id="searchbox" style="display: none">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/quickstart/index.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
   <h3>Quick search</h3>
     <form class="search" action="../search.html" method="get">
-      <input type="text" name="q" />
-      <input type="submit" value="Go" />
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
       <input type="hidden" name="check_keywords" value="yes" />
       <input type="hidden" name="area" value="default" />
     </form>
-    <p class="searchtip" style="font-size: 90%">
-    Enter search terms or a module, class or function name.
-    </p>
 </div>
 <script type="text/javascript">$('#searchbox').show(0);</script>
         </div>
       </div>
       <div class="clearer"></div>
     </div>
-    <div class="related">
+    <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
         <li class="right" style="margin-right: 10px">
@@ -380,12 +381,12 @@ Rx
         <li class="right" >
           <a href="../index.html" title="Welcome to pyModbusTCP’s documentation"
              >previous</a> |</li>
-        <li><a href="../index.html">pyModbusTCP 0.1.1 documentation</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../index.html">pyModbusTCP 0.1.2 documentation</a> &#187;</li> 
       </ul>
     </div>
-    <div class="footer">
-        &copy; Copyright 2014, Loic Lefebvre.
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2017, Loic Lefebvre.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.9.
     </div>
   </body>
 </html>

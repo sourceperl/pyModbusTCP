@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>Module pyModbusTCP.utils &mdash; pyModbusTCP 0.1.1 documentation</title>
+    <title>Module pyModbusTCP.utils &#8212; pyModbusTCP 0.1.2 documentation</title>
     
     <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
@@ -14,7 +14,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../',
-        VERSION:     '0.1.1',
+        VERSION:     '0.1.2',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -23,13 +23,15 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <link rel="top" title="pyModbusTCP 0.1.1 documentation" href="../index.html" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="top" title="pyModbusTCP 0.1.2 documentation" href="../index.html" />
     <link rel="up" title="pyModbusTCP modules documentation" href="index.html" />
     <link rel="next" title="pyModbusTCP examples" href="../examples/index.html" />
     <link rel="prev" title="Module pyModbusTCP.server" href="class_ModbusServer.html" /> 
   </head>
-  <body>
-    <div class="related">
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
         <li class="right" style="margin-right: 10px">
@@ -44,22 +46,22 @@
         <li class="right" >
           <a href="class_ModbusServer.html" title="Module pyModbusTCP.server"
              accesskey="P">previous</a> |</li>
-        <li><a href="../index.html">pyModbusTCP 0.1.1 documentation</a> &raquo;</li>
-          <li><a href="index.html" accesskey="U">pyModbusTCP modules documentation</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../index.html">pyModbusTCP 0.1.2 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" accesskey="U">pyModbusTCP modules documentation</a> &#187;</li> 
       </ul>
     </div>  
 
     <div class="document">
       <div class="documentwrapper">
         <div class="bodywrapper">
-          <div class="body">
+          <div class="body" role="main">
             
   <div class="section" id="module-pymodbustcp-utils">
 <h1>Module pyModbusTCP.utils<a class="headerlink" href="#module-pymodbustcp-utils" title="Permalink to this headline">¶</a></h1>
 <p><em>This module provide a set of functions for modbus data mangling.</em></p>
 <span class="target" id="module-pyModbusTCP.utils"></span><dl class="function">
 <dt id="pyModbusTCP.utils.crc16">
-<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">crc16</tt><big>(</big><em>frame</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#crc16"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.crc16" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">pyModbusTCP.utils.</code><code class="descname">crc16</code><span class="sig-paren">(</span><em>frame</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#crc16"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.crc16" title="Permalink to this definition">¶</a></dt>
 <dd><p>Compute CRC16</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -77,7 +79,7 @@
 
 <dl class="function">
 <dt id="pyModbusTCP.utils.decode_ieee">
-<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">decode_ieee</tt><big>(</big><em>val_int</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#decode_ieee"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.decode_ieee" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">pyModbusTCP.utils.</code><code class="descname">decode_ieee</code><span class="sig-paren">(</span><em>val_int</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#decode_ieee"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.decode_ieee" title="Permalink to this definition">¶</a></dt>
 <dd><p>Decode Python int (32 bits integer) as an IEEE single precision format</p>
 <p>Support NaN.</p>
 <table class="docutils field-list" frame="void" rules="none">
@@ -96,7 +98,7 @@
 
 <dl class="function">
 <dt id="pyModbusTCP.utils.encode_ieee">
-<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">encode_ieee</tt><big>(</big><em>val_float</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#encode_ieee"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.encode_ieee" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">pyModbusTCP.utils.</code><code class="descname">encode_ieee</code><span class="sig-paren">(</span><em>val_float</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#encode_ieee"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.encode_ieee" title="Permalink to this definition">¶</a></dt>
 <dd><p>Encode Python float to int (32 bits integer) as an IEEE single precision</p>
 <p>Support NaN.</p>
 <table class="docutils field-list" frame="void" rules="none">
@@ -115,7 +117,7 @@
 
 <dl class="function">
 <dt id="pyModbusTCP.utils.get_2comp">
-<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">get_2comp</tt><big>(</big><em>val_int</em>, <em>val_size=16</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#get_2comp"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.get_2comp" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">pyModbusTCP.utils.</code><code class="descname">get_2comp</code><span class="sig-paren">(</span><em>val_int</em>, <em>val_size=16</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#get_2comp"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.get_2comp" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get the 2&#8217;s complement of Python int val_int</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -139,7 +141,7 @@
 
 <dl class="function">
 <dt id="pyModbusTCP.utils.get_bits_from_int">
-<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">get_bits_from_int</tt><big>(</big><em>val_int</em>, <em>val_size=16</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#get_bits_from_int"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.get_bits_from_int" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">pyModbusTCP.utils.</code><code class="descname">get_bits_from_int</code><span class="sig-paren">(</span><em>val_int</em>, <em>val_size=16</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#get_bits_from_int"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.get_bits_from_int" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get the list of bits of val_int integer (default size is 16 bits)</p>
 <p>Return bits list, least significant bit first. Use list.reverse() if
 need.</p>
@@ -165,7 +167,7 @@ need.</p>
 
 <dl class="function">
 <dt id="pyModbusTCP.utils.get_list_2comp">
-<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">get_list_2comp</tt><big>(</big><em>val_list</em>, <em>val_size=16</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#get_list_2comp"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.get_list_2comp" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">pyModbusTCP.utils.</code><code class="descname">get_list_2comp</code><span class="sig-paren">(</span><em>val_list</em>, <em>val_size=16</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#get_list_2comp"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.get_list_2comp" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get the 2&#8217;s complement of Python list val_list</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -189,7 +191,7 @@ need.</p>
 
 <dl class="function">
 <dt id="pyModbusTCP.utils.reset_bit">
-<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">reset_bit</tt><big>(</big><em>value</em>, <em>offset</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#reset_bit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.reset_bit" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">pyModbusTCP.utils.</code><code class="descname">reset_bit</code><span class="sig-paren">(</span><em>value</em>, <em>offset</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#reset_bit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.reset_bit" title="Permalink to this definition">¶</a></dt>
 <dd><p>Reset a bit at offset position</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -213,7 +215,7 @@ need.</p>
 
 <dl class="function">
 <dt id="pyModbusTCP.utils.set_bit">
-<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">set_bit</tt><big>(</big><em>value</em>, <em>offset</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#set_bit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.set_bit" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">pyModbusTCP.utils.</code><code class="descname">set_bit</code><span class="sig-paren">(</span><em>value</em>, <em>offset</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#set_bit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.set_bit" title="Permalink to this definition">¶</a></dt>
 <dd><p>Set a bit at offset position</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -237,7 +239,7 @@ need.</p>
 
 <dl class="function">
 <dt id="pyModbusTCP.utils.test_bit">
-<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">test_bit</tt><big>(</big><em>value</em>, <em>offset</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#test_bit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.test_bit" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">pyModbusTCP.utils.</code><code class="descname">test_bit</code><span class="sig-paren">(</span><em>value</em>, <em>offset</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#test_bit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.test_bit" title="Permalink to this definition">¶</a></dt>
 <dd><p>Test a bit at offset position</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -261,7 +263,7 @@ need.</p>
 
 <dl class="function">
 <dt id="pyModbusTCP.utils.toggle_bit">
-<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">toggle_bit</tt><big>(</big><em>value</em>, <em>offset</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#toggle_bit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.toggle_bit" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">pyModbusTCP.utils.</code><code class="descname">toggle_bit</code><span class="sig-paren">(</span><em>value</em>, <em>offset</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#toggle_bit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.toggle_bit" title="Permalink to this definition">¶</a></dt>
 <dd><p>Return an integer with the bit at offset position inverted</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -285,7 +287,7 @@ need.</p>
 
 <dl class="function">
 <dt id="pyModbusTCP.utils.word_list_to_long">
-<tt class="descclassname">pyModbusTCP.utils.</tt><tt class="descname">word_list_to_long</tt><big>(</big><em>val_list</em>, <em>big_endian=True</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#word_list_to_long"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.word_list_to_long" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">pyModbusTCP.utils.</code><code class="descname">word_list_to_long</code><span class="sig-paren">(</span><em>val_list</em>, <em>big_endian=True</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/utils.html#word_list_to_long"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.utils.word_list_to_long" title="Permalink to this definition">¶</a></dt>
 <dd><p>Word list (16 bits int) to long list (32 bits int)</p>
 <p>By default word_list2long() use big endian order. For use little endian, set
 big_endian param to False.</p>
@@ -315,7 +317,7 @@ big_endian param to False.</p>
           </div>
         </div>
       </div>
-      <div class="sphinxsidebar">
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
         <div class="sphinxsidebarwrapper">
   <h4>Previous topic</h4>
   <p class="topless"><a href="class_ModbusServer.html"
@@ -323,29 +325,28 @@ big_endian param to False.</p>
   <h4>Next topic</h4>
   <p class="topless"><a href="../examples/index.html"
                         title="next chapter">pyModbusTCP examples</a></p>
-  <h3>This Page</h3>
-  <ul class="this-page-menu">
-    <li><a href="../_sources/package/module_utils.txt"
-           rel="nofollow">Show Source</a></li>
-  </ul>
-<div id="searchbox" style="display: none">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/package/module_utils.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
   <h3>Quick search</h3>
     <form class="search" action="../search.html" method="get">
-      <input type="text" name="q" />
-      <input type="submit" value="Go" />
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
       <input type="hidden" name="check_keywords" value="yes" />
       <input type="hidden" name="area" value="default" />
     </form>
-    <p class="searchtip" style="font-size: 90%">
-    Enter search terms or a module, class or function name.
-    </p>
 </div>
 <script type="text/javascript">$('#searchbox').show(0);</script>
         </div>
       </div>
       <div class="clearer"></div>
     </div>
-    <div class="related">
+    <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
         <li class="right" style="margin-right: 10px">
@@ -360,13 +361,13 @@ big_endian param to False.</p>
         <li class="right" >
           <a href="class_ModbusServer.html" title="Module pyModbusTCP.server"
              >previous</a> |</li>
-        <li><a href="../index.html">pyModbusTCP 0.1.1 documentation</a> &raquo;</li>
-          <li><a href="index.html" >pyModbusTCP modules documentation</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../index.html">pyModbusTCP 0.1.2 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" >pyModbusTCP modules documentation</a> &#187;</li> 
       </ul>
     </div>
-    <div class="footer">
-        &copy; Copyright 2014, Loic Lefebvre.
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2017, Loic Lefebvre.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.9.
     </div>
   </body>
 </html>

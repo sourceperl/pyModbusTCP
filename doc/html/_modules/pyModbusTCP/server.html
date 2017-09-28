@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>pyModbusTCP.server &mdash; pyModbusTCP 0.1.1 documentation</title>
+    <title>pyModbusTCP.server &#8212; pyModbusTCP 0.1.2 documentation</title>
     
     <link rel="stylesheet" href="../../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
@@ -14,7 +14,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../../',
-        VERSION:     '0.1.1',
+        VERSION:     '0.1.2',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -23,11 +23,13 @@
     <script type="text/javascript" src="../../_static/jquery.js"></script>
     <script type="text/javascript" src="../../_static/underscore.js"></script>
     <script type="text/javascript" src="../../_static/doctools.js"></script>
-    <link rel="top" title="pyModbusTCP 0.1.1 documentation" href="../../index.html" />
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="top" title="pyModbusTCP 0.1.2 documentation" href="../../index.html" />
     <link rel="up" title="Module code" href="../index.html" /> 
   </head>
-  <body>
-    <div class="related">
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
         <li class="right" style="margin-right: 10px">
@@ -36,32 +38,32 @@
         <li class="right" >
           <a href="../../py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../index.html">pyModbusTCP 0.1.1 documentation</a> &raquo;</li>
-          <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../../index.html">pyModbusTCP 0.1.2 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" accesskey="U">Module code</a> &#187;</li> 
       </ul>
     </div>  
 
     <div class="document">
       <div class="documentwrapper">
         <div class="bodywrapper">
-          <div class="body">
+          <div class="body" role="main">
             
   <h1>Source code for pyModbusTCP.server</h1><div class="highlight"><pre>
-<span class="c"># -*- coding: utf-8 -*-</span>
+<span></span><span class="c1"># -*- coding: utf-8 -*-</span>
 
-<span class="c"># Python module: ModbusServer class (ModBus/TCP Server)</span>
+<span class="c1"># Python module: ModbusServer class (ModBus/TCP Server)</span>
 
-<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">constants</span> <span class="k">as</span> <span class="n">const</span>
-<span class="kn">from</span> <span class="nn">.utils</span> <span class="kn">import</span> <span class="n">test_bit</span><span class="p">,</span> <span class="n">set_bit</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="k">import</span> <span class="n">constants</span> <span class="k">as</span> <span class="n">const</span>
+<span class="kn">from</span> <span class="nn">.utils</span> <span class="k">import</span> <span class="n">test_bit</span><span class="p">,</span> <span class="n">set_bit</span>
 <span class="kn">import</span> <span class="nn">socket</span>
 <span class="kn">import</span> <span class="nn">struct</span>
-<span class="kn">from</span> <span class="nn">threading</span> <span class="kn">import</span> <span class="n">Lock</span><span class="p">,</span> <span class="n">Thread</span>
+<span class="kn">from</span> <span class="nn">threading</span> <span class="k">import</span> <span class="n">Lock</span><span class="p">,</span> <span class="n">Thread</span>
 
-<span class="c"># for python2 compatibility</span>
+<span class="c1"># for python2 compatibility</span>
 <span class="k">try</span><span class="p">:</span>
-    <span class="kn">from</span> <span class="nn">socketserver</span> <span class="kn">import</span> <span class="n">BaseRequestHandler</span><span class="p">,</span> <span class="n">ThreadingTCPServer</span>
+    <span class="kn">from</span> <span class="nn">socketserver</span> <span class="k">import</span> <span class="n">BaseRequestHandler</span><span class="p">,</span> <span class="n">ThreadingTCPServer</span>
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="kn">from</span> <span class="nn">SocketServer</span> <span class="kn">import</span> <span class="n">BaseRequestHandler</span><span class="p">,</span> <span class="n">ThreadingTCPServer</span>
+    <span class="kn">from</span> <span class="nn">SocketServer</span> <span class="k">import</span> <span class="n">BaseRequestHandler</span><span class="p">,</span> <span class="n">ThreadingTCPServer</span>
 
 
 <span class="k">class</span> <span class="nc">DataBank</span><span class="p">:</span>
@@ -69,43 +71,43 @@
     <span class="sd">&quot;&quot;&quot; Data class for thread safe access to bits and words space &quot;&quot;&quot;</span>
 
     <span class="n">bits_lock</span> <span class="o">=</span> <span class="n">Lock</span><span class="p">()</span>
-    <span class="n">bits</span> <span class="o">=</span> <span class="p">[</span><span class="bp">False</span><span class="p">]</span> <span class="o">*</span> <span class="mh">0x10000</span>
+    <span class="n">bits</span> <span class="o">=</span> <span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">*</span> <span class="mh">0x10000</span>
     <span class="n">words_lock</span> <span class="o">=</span> <span class="n">Lock</span><span class="p">()</span>
     <span class="n">words</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="mh">0x10000</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">get_bits</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">number</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
-        <span class="k">with</span> <span class="n">cls</span><span class="o">.</span><span class="n">bits_lock</span><span class="p">:</span>
-            <span class="k">if</span> <span class="p">(</span><span class="n">address</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">address</span> <span class="o">+</span> <span class="n">number</span> <span class="o">&lt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">cls</span><span class="o">.</span><span class="n">bits</span><span class="p">)):</span>
-                <span class="k">return</span> <span class="n">cls</span><span class="o">.</span><span class="n">bits</span><span class="p">[</span><span class="n">address</span><span class="p">:</span> <span class="n">number</span> <span class="o">+</span> <span class="n">address</span><span class="p">]</span>
+    <span class="k">def</span> <span class="nf">get_bits</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">number</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+        <span class="k">with</span> <span class="bp">cls</span><span class="o">.</span><span class="n">bits_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">address</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">address</span> <span class="o">+</span> <span class="n">number</span> <span class="o">&lt;=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">bits</span><span class="p">)):</span>
+                <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">bits</span><span class="p">[</span><span class="n">address</span><span class="p">:</span> <span class="n">number</span> <span class="o">+</span> <span class="n">address</span><span class="p">]</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">return</span> <span class="bp">None</span>
+                <span class="k">return</span> <span class="kc">None</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">set_bits</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">bit_list</span><span class="p">):</span>
-        <span class="k">with</span> <span class="n">cls</span><span class="o">.</span><span class="n">bits_lock</span><span class="p">:</span>
-            <span class="k">if</span> <span class="p">(</span><span class="n">address</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">address</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">bit_list</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">cls</span><span class="o">.</span><span class="n">bits</span><span class="p">)):</span>
-                <span class="n">cls</span><span class="o">.</span><span class="n">bits</span><span class="p">[</span><span class="n">address</span><span class="p">:</span> <span class="n">address</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">bit_list</span><span class="p">)]</span> <span class="o">=</span> <span class="n">bit_list</span>
-                <span class="k">return</span> <span class="bp">True</span>
+    <span class="k">def</span> <span class="nf">set_bits</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">bit_list</span><span class="p">):</span>
+        <span class="k">with</span> <span class="bp">cls</span><span class="o">.</span><span class="n">bits_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">address</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">address</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">bit_list</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">bits</span><span class="p">)):</span>
+                <span class="bp">cls</span><span class="o">.</span><span class="n">bits</span><span class="p">[</span><span class="n">address</span><span class="p">:</span> <span class="n">address</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">bit_list</span><span class="p">)]</span> <span class="o">=</span> <span class="n">bit_list</span>
+                <span class="k">return</span> <span class="kc">True</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">return</span> <span class="bp">None</span>
+                <span class="k">return</span> <span class="kc">None</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">get_words</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">number</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
-        <span class="k">with</span> <span class="n">cls</span><span class="o">.</span><span class="n">words_lock</span><span class="p">:</span>
-            <span class="k">if</span> <span class="p">(</span><span class="n">address</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">address</span> <span class="o">+</span> <span class="n">number</span> <span class="o">&lt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">cls</span><span class="o">.</span><span class="n">words</span><span class="p">)):</span>
-                <span class="k">return</span> <span class="n">cls</span><span class="o">.</span><span class="n">words</span><span class="p">[</span><span class="n">address</span><span class="p">:</span> <span class="n">number</span> <span class="o">+</span> <span class="n">address</span><span class="p">]</span>
+    <span class="k">def</span> <span class="nf">get_words</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">number</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+        <span class="k">with</span> <span class="bp">cls</span><span class="o">.</span><span class="n">words_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">address</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">address</span> <span class="o">+</span> <span class="n">number</span> <span class="o">&lt;=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">words</span><span class="p">)):</span>
+                <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">words</span><span class="p">[</span><span class="n">address</span><span class="p">:</span> <span class="n">number</span> <span class="o">+</span> <span class="n">address</span><span class="p">]</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">return</span> <span class="bp">None</span>
+                <span class="k">return</span> <span class="kc">None</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">set_words</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">word_list</span><span class="p">):</span>
-        <span class="k">with</span> <span class="n">cls</span><span class="o">.</span><span class="n">words_lock</span><span class="p">:</span>
-            <span class="k">if</span> <span class="p">(</span><span class="n">address</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">address</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">word_list</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">cls</span><span class="o">.</span><span class="n">words</span><span class="p">)):</span>
-                <span class="n">cls</span><span class="o">.</span><span class="n">words</span><span class="p">[</span><span class="n">address</span><span class="p">:</span> <span class="n">address</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">word_list</span><span class="p">)]</span> <span class="o">=</span> <span class="n">word_list</span>
-                <span class="k">return</span> <span class="bp">True</span>
+    <span class="k">def</span> <span class="nf">set_words</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">word_list</span><span class="p">):</span>
+        <span class="k">with</span> <span class="bp">cls</span><span class="o">.</span><span class="n">words_lock</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">address</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">address</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">word_list</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">words</span><span class="p">)):</span>
+                <span class="bp">cls</span><span class="o">.</span><span class="n">words</span><span class="p">[</span><span class="n">address</span><span class="p">:</span> <span class="n">address</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">word_list</span><span class="p">)]</span> <span class="o">=</span> <span class="n">word_list</span>
+                <span class="k">return</span> <span class="kc">True</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">return</span> <span class="bp">None</span>
+                <span class="k">return</span> <span class="kc">None</span>
 
 
 <div class="viewcode-block" id="ModbusServer"><a class="viewcode-back" href="../../package/class_ModbusServer.html#pyModbusTCP.server.ModbusServer">[docs]</a><span class="k">class</span> <span class="nc">ModbusServer</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
@@ -114,138 +116,138 @@
 
     <span class="k">class</span> <span class="nc">ModbusService</span><span class="p">(</span><span class="n">BaseRequestHandler</span><span class="p">):</span>
         <span class="k">def</span> <span class="nf">handle</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-            <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
                 <span class="n">rx_head</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="mi">7</span><span class="p">)</span>
-                <span class="c"># close connection if no standard 7 bytes header</span>
+                <span class="c1"># close connection if no standard 7 bytes header</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">rx_head</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">rx_head</span><span class="p">)</span> <span class="o">==</span> <span class="mi">7</span><span class="p">):</span>
                     <span class="k">break</span>
-                <span class="c"># decode header</span>
+                <span class="c1"># decode header</span>
                 <span class="p">(</span><span class="n">rx_hd_tr_id</span><span class="p">,</span> <span class="n">rx_hd_pr_id</span><span class="p">,</span>
-                 <span class="n">rx_hd_length</span><span class="p">,</span> <span class="n">rx_hd_unit_id</span><span class="p">)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&#39;&gt;HHHB&#39;</span><span class="p">,</span> <span class="n">rx_head</span><span class="p">)</span>
-                <span class="c"># close connection if frame header content inconsistency</span>
+                 <span class="n">rx_hd_length</span><span class="p">,</span> <span class="n">rx_hd_unit_id</span><span class="p">)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;HHHB&#39;</span><span class="p">,</span> <span class="n">rx_head</span><span class="p">)</span>
+                <span class="c1"># close connection if frame header content inconsistency</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="p">((</span><span class="n">rx_hd_pr_id</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="mi">2</span> <span class="o">&lt;</span> <span class="n">rx_hd_length</span> <span class="o">&lt;</span> <span class="mi">256</span><span class="p">)):</span>
                     <span class="k">break</span>
-                <span class="c"># receive body</span>
+                <span class="c1"># receive body</span>
                 <span class="n">rx_body</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="n">rx_hd_length</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-                <span class="c"># close connection if lack of bytes in frame body</span>
+                <span class="c1"># close connection if lack of bytes in frame body</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">rx_body</span> <span class="ow">and</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">rx_body</span><span class="p">)</span> <span class="o">==</span> <span class="n">rx_hd_length</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)):</span>
                     <span class="k">break</span>
-                <span class="c"># body decode: function code</span>
-                <span class="n">rx_bd_fc</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&#39;B&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
-                <span class="c"># close connection if function code is inconsistent</span>
+                <span class="c1"># body decode: function code</span>
+                <span class="n">rx_bd_fc</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="c1"># close connection if function code is inconsistent</span>
                 <span class="k">if</span> <span class="n">rx_bd_fc</span> <span class="o">&gt;</span> <span class="mh">0x7F</span><span class="p">:</span>
                     <span class="k">break</span>
-                <span class="c"># default except status</span>
+                <span class="c1"># default except status</span>
                 <span class="n">exp_status</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">EXP_NONE</span>
-                <span class="c"># functions Read Coils (0x01) or Read Discrete Inputs (0x02)</span>
+                <span class="c1"># functions Read Coils (0x01) or Read Discrete Inputs (0x02)</span>
                 <span class="k">if</span> <span class="n">rx_bd_fc</span> <span class="ow">in</span> <span class="p">(</span><span class="n">const</span><span class="o">.</span><span class="n">READ_COILS</span><span class="p">,</span> <span class="n">const</span><span class="o">.</span><span class="n">READ_DISCRETE_INPUTS</span><span class="p">):</span>
-                    <span class="p">(</span><span class="n">b_address</span><span class="p">,</span> <span class="n">b_count</span><span class="p">)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&#39;&gt;HH&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
-                    <span class="c"># check quantity of requested bits</span>
+                    <span class="p">(</span><span class="n">b_address</span><span class="p">,</span> <span class="n">b_count</span><span class="p">)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;HH&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+                    <span class="c1"># check quantity of requested bits</span>
                     <span class="k">if</span> <span class="mh">0x0001</span> <span class="o">&lt;=</span> <span class="n">b_count</span> <span class="o">&lt;=</span> <span class="mh">0x07D0</span><span class="p">:</span>
                         <span class="n">bits_l</span> <span class="o">=</span> <span class="n">DataBank</span><span class="o">.</span><span class="n">get_bits</span><span class="p">(</span><span class="n">b_address</span><span class="p">,</span> <span class="n">b_count</span><span class="p">)</span>
                         <span class="k">if</span> <span class="n">bits_l</span><span class="p">:</span>
-                            <span class="c"># allocate bytes list</span>
+                            <span class="c1"># allocate bytes list</span>
                             <span class="n">b_size</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">b_count</span> <span class="o">/</span> <span class="mi">8</span><span class="p">)</span>
                             <span class="n">b_size</span> <span class="o">+=</span> <span class="mi">1</span> <span class="k">if</span> <span class="p">(</span><span class="n">b_count</span> <span class="o">%</span> <span class="mi">8</span><span class="p">)</span> <span class="k">else</span> <span class="mi">0</span>
                             <span class="n">bytes_l</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">b_size</span>
-                            <span class="c"># populate bytes list with data bank bits</span>
+                            <span class="c1"># populate bytes list with data bank bits</span>
                             <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">bits_l</span><span class="p">):</span>
                                 <span class="k">if</span> <span class="n">item</span><span class="p">:</span>
                                     <span class="n">byte_i</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="o">/</span><span class="mi">8</span><span class="p">)</span>
                                     <span class="n">bytes_l</span><span class="p">[</span><span class="n">byte_i</span><span class="p">]</span> <span class="o">=</span> <span class="n">set_bit</span><span class="p">(</span><span class="n">bytes_l</span><span class="p">[</span><span class="n">byte_i</span><span class="p">],</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">8</span><span class="p">)</span>
-                            <span class="c"># format body of frame with bits</span>
-                            <span class="n">tx_body</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s">&#39;BB&#39;</span><span class="p">,</span> <span class="n">rx_bd_fc</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">bytes_l</span><span class="p">))</span>
-                            <span class="c"># add bytes with bits</span>
+                            <span class="c1"># format body of frame with bits</span>
+                            <span class="n">tx_body</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s1">&#39;BB&#39;</span><span class="p">,</span> <span class="n">rx_bd_fc</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">bytes_l</span><span class="p">))</span>
+                            <span class="c1"># add bytes with bits</span>
                             <span class="k">for</span> <span class="n">byte</span> <span class="ow">in</span> <span class="n">bytes_l</span><span class="p">:</span>
-                                <span class="n">tx_body</span> <span class="o">+=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s">&#39;B&#39;</span><span class="p">,</span> <span class="n">byte</span><span class="p">)</span>
+                                <span class="n">tx_body</span> <span class="o">+=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="n">byte</span><span class="p">)</span>
                         <span class="k">else</span><span class="p">:</span>
                             <span class="n">exp_status</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">EXP_DATA_ADDRESS</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">exp_status</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">EXP_DATA_VALUE</span>
-                <span class="c"># functions Read Holding Registers (0x03) or Read Input Registers (0x04)</span>
+                <span class="c1"># functions Read Holding Registers (0x03) or Read Input Registers (0x04)</span>
                 <span class="k">elif</span> <span class="n">rx_bd_fc</span> <span class="ow">in</span> <span class="p">(</span><span class="n">const</span><span class="o">.</span><span class="n">READ_HOLDING_REGISTERS</span><span class="p">,</span> <span class="n">const</span><span class="o">.</span><span class="n">READ_INPUT_REGISTERS</span><span class="p">):</span>
-                    <span class="p">(</span><span class="n">w_address</span><span class="p">,</span> <span class="n">w_count</span><span class="p">)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&#39;&gt;HH&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
-                    <span class="c"># check quantity of requested words</span>
+                    <span class="p">(</span><span class="n">w_address</span><span class="p">,</span> <span class="n">w_count</span><span class="p">)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;HH&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+                    <span class="c1"># check quantity of requested words</span>
                     <span class="k">if</span> <span class="mh">0x0001</span> <span class="o">&lt;=</span> <span class="n">w_count</span> <span class="o">&lt;=</span> <span class="mh">0x007D</span><span class="p">:</span>
                         <span class="n">words_l</span> <span class="o">=</span> <span class="n">DataBank</span><span class="o">.</span><span class="n">get_words</span><span class="p">(</span><span class="n">w_address</span><span class="p">,</span> <span class="n">w_count</span><span class="p">)</span>
                         <span class="k">if</span> <span class="n">words_l</span><span class="p">:</span>
-                            <span class="c"># format body of frame with words</span>
-                            <span class="n">tx_body</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s">&#39;BB&#39;</span><span class="p">,</span> <span class="n">rx_bd_fc</span><span class="p">,</span> <span class="n">w_count</span> <span class="o">*</span> <span class="mi">2</span><span class="p">)</span>
+                            <span class="c1"># format body of frame with words</span>
+                            <span class="n">tx_body</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s1">&#39;BB&#39;</span><span class="p">,</span> <span class="n">rx_bd_fc</span><span class="p">,</span> <span class="n">w_count</span> <span class="o">*</span> <span class="mi">2</span><span class="p">)</span>
                             <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="n">words_l</span><span class="p">:</span>
-                                <span class="n">tx_body</span> <span class="o">+=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s">&#39;&gt;H&#39;</span><span class="p">,</span> <span class="n">word</span><span class="p">)</span>
+                                <span class="n">tx_body</span> <span class="o">+=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s1">&#39;&gt;H&#39;</span><span class="p">,</span> <span class="n">word</span><span class="p">)</span>
                         <span class="k">else</span><span class="p">:</span>
                             <span class="n">exp_status</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">EXP_DATA_ADDRESS</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">exp_status</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">EXP_DATA_VALUE</span>
-                <span class="c"># function Write Single Coil (0x05)</span>
+                <span class="c1"># function Write Single Coil (0x05)</span>
                 <span class="k">elif</span> <span class="n">rx_bd_fc</span> <span class="ow">is</span> <span class="n">const</span><span class="o">.</span><span class="n">WRITE_SINGLE_COIL</span><span class="p">:</span>
-                    <span class="p">(</span><span class="n">b_address</span><span class="p">,</span> <span class="n">b_value</span><span class="p">)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&#39;&gt;HH&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+                    <span class="p">(</span><span class="n">b_address</span><span class="p">,</span> <span class="n">b_value</span><span class="p">)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;HH&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
                     <span class="n">f_b_value</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">b_value</span> <span class="o">==</span> <span class="mh">0xFF00</span><span class="p">)</span>
                     <span class="k">if</span> <span class="n">DataBank</span><span class="o">.</span><span class="n">set_bits</span><span class="p">(</span><span class="n">b_address</span><span class="p">,</span> <span class="p">[</span><span class="n">f_b_value</span><span class="p">]):</span>
-                        <span class="c"># send write ok frame</span>
-                        <span class="n">tx_body</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s">&#39;&gt;BHH&#39;</span><span class="p">,</span> <span class="n">rx_bd_fc</span><span class="p">,</span> <span class="n">b_address</span><span class="p">,</span> <span class="n">b_value</span><span class="p">)</span>
+                        <span class="c1"># send write ok frame</span>
+                        <span class="n">tx_body</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s1">&#39;&gt;BHH&#39;</span><span class="p">,</span> <span class="n">rx_bd_fc</span><span class="p">,</span> <span class="n">b_address</span><span class="p">,</span> <span class="n">b_value</span><span class="p">)</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">exp_status</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">EXP_DATA_ADDRESS</span>
-                <span class="c"># function Write Single Register (0x06)</span>
+                <span class="c1"># function Write Single Register (0x06)</span>
                 <span class="k">elif</span> <span class="n">rx_bd_fc</span> <span class="ow">is</span> <span class="n">const</span><span class="o">.</span><span class="n">WRITE_SINGLE_REGISTER</span><span class="p">:</span>
-                    <span class="p">(</span><span class="n">w_address</span><span class="p">,</span> <span class="n">w_value</span><span class="p">)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&#39;&gt;HH&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+                    <span class="p">(</span><span class="n">w_address</span><span class="p">,</span> <span class="n">w_value</span><span class="p">)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;HH&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
                     <span class="k">if</span> <span class="n">DataBank</span><span class="o">.</span><span class="n">set_words</span><span class="p">(</span><span class="n">w_address</span><span class="p">,</span> <span class="p">[</span><span class="n">w_value</span><span class="p">]):</span>
-                        <span class="c"># send write ok frame</span>
-                        <span class="n">tx_body</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s">&#39;&gt;BHH&#39;</span><span class="p">,</span> <span class="n">rx_bd_fc</span><span class="p">,</span> <span class="n">w_address</span><span class="p">,</span> <span class="n">w_value</span><span class="p">)</span>
+                        <span class="c1"># send write ok frame</span>
+                        <span class="n">tx_body</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s1">&#39;&gt;BHH&#39;</span><span class="p">,</span> <span class="n">rx_bd_fc</span><span class="p">,</span> <span class="n">w_address</span><span class="p">,</span> <span class="n">w_value</span><span class="p">)</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">exp_status</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">EXP_DATA_ADDRESS</span>
-                <span class="c"># function Write Multiple Coils (0x0F)</span>
+                <span class="c1"># function Write Multiple Coils (0x0F)</span>
                 <span class="k">elif</span> <span class="n">rx_bd_fc</span> <span class="ow">is</span> <span class="n">const</span><span class="o">.</span><span class="n">WRITE_MULTIPLE_COILS</span><span class="p">:</span>
-                    <span class="p">(</span><span class="n">b_address</span><span class="p">,</span> <span class="n">b_count</span><span class="p">,</span> <span class="n">byte_count</span><span class="p">)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&#39;&gt;HHB&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">6</span><span class="p">])</span>
-                    <span class="c"># check quantity of updated coils</span>
+                    <span class="p">(</span><span class="n">b_address</span><span class="p">,</span> <span class="n">b_count</span><span class="p">,</span> <span class="n">byte_count</span><span class="p">)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;HHB&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">6</span><span class="p">])</span>
+                    <span class="c1"># check quantity of updated coils</span>
                     <span class="k">if</span> <span class="p">(</span><span class="mh">0x0001</span> <span class="o">&lt;=</span> <span class="n">b_count</span> <span class="o">&lt;=</span> <span class="mh">0x07B0</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">byte_count</span> <span class="o">&gt;=</span> <span class="p">(</span><span class="n">b_count</span><span class="o">/</span><span class="mi">8</span><span class="p">)):</span>
-                        <span class="c"># allocate bits list</span>
-                        <span class="n">bits_l</span> <span class="o">=</span> <span class="p">[</span><span class="bp">False</span><span class="p">]</span> <span class="o">*</span> <span class="n">b_count</span>
-                        <span class="c"># populate bits list with bits from rx frame</span>
+                        <span class="c1"># allocate bits list</span>
+                        <span class="n">bits_l</span> <span class="o">=</span> <span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">*</span> <span class="n">b_count</span>
+                        <span class="c1"># populate bits list with bits from rx frame</span>
                         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">bits_l</span><span class="p">):</span>
                             <span class="n">b_bit_pos</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="o">/</span><span class="mi">8</span><span class="p">)</span><span class="o">+</span><span class="mi">6</span>
-                            <span class="n">b_bit_val</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&#39;B&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="n">b_bit_pos</span><span class="p">:</span><span class="n">b_bit_pos</span><span class="o">+</span><span class="mi">1</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+                            <span class="n">b_bit_val</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;B&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="n">b_bit_pos</span><span class="p">:</span><span class="n">b_bit_pos</span><span class="o">+</span><span class="mi">1</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
                             <span class="n">bits_l</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">test_bit</span><span class="p">(</span><span class="n">b_bit_val</span><span class="p">,</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">8</span><span class="p">)</span>
-                        <span class="c"># write words to data bank</span>
+                        <span class="c1"># write words to data bank</span>
                         <span class="k">if</span> <span class="n">DataBank</span><span class="o">.</span><span class="n">set_bits</span><span class="p">(</span><span class="n">b_address</span><span class="p">,</span> <span class="n">bits_l</span><span class="p">):</span>
-                            <span class="c"># send write ok frame</span>
-                            <span class="n">tx_body</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s">&#39;&gt;BHH&#39;</span><span class="p">,</span> <span class="n">rx_bd_fc</span><span class="p">,</span> <span class="n">b_address</span><span class="p">,</span> <span class="n">b_count</span><span class="p">)</span>
+                            <span class="c1"># send write ok frame</span>
+                            <span class="n">tx_body</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s1">&#39;&gt;BHH&#39;</span><span class="p">,</span> <span class="n">rx_bd_fc</span><span class="p">,</span> <span class="n">b_address</span><span class="p">,</span> <span class="n">b_count</span><span class="p">)</span>
                         <span class="k">else</span><span class="p">:</span>
                             <span class="n">exp_status</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">EXP_DATA_ADDRESS</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">exp_status</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">EXP_DATA_VALUE</span>
-                <span class="c"># function Write Multiple Registers (0x10)</span>
+                <span class="c1"># function Write Multiple Registers (0x10)</span>
                 <span class="k">elif</span> <span class="n">rx_bd_fc</span> <span class="ow">is</span> <span class="n">const</span><span class="o">.</span><span class="n">WRITE_MULTIPLE_REGISTERS</span><span class="p">:</span>
-                    <span class="p">(</span><span class="n">w_address</span><span class="p">,</span> <span class="n">w_count</span><span class="p">,</span> <span class="n">byte_count</span><span class="p">)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&#39;&gt;HHB&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">6</span><span class="p">])</span>
-                    <span class="c"># check quantity of updated words</span>
+                    <span class="p">(</span><span class="n">w_address</span><span class="p">,</span> <span class="n">w_count</span><span class="p">,</span> <span class="n">byte_count</span><span class="p">)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;HHB&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">6</span><span class="p">])</span>
+                    <span class="c1"># check quantity of updated words</span>
                     <span class="k">if</span> <span class="p">(</span><span class="mh">0x0001</span> <span class="o">&lt;=</span> <span class="n">w_count</span> <span class="o">&lt;=</span> <span class="mh">0x007B</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">byte_count</span> <span class="o">==</span> <span class="n">w_count</span> <span class="o">*</span> <span class="mi">2</span><span class="p">):</span>
-                        <span class="c"># allocate words list</span>
+                        <span class="c1"># allocate words list</span>
                         <span class="n">words_l</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">w_count</span>
-                        <span class="c"># populate words list with words from rx frame</span>
+                        <span class="c1"># populate words list with words from rx frame</span>
                         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">words_l</span><span class="p">):</span>
                             <span class="n">w_offset</span> <span class="o">=</span> <span class="n">i</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">+</span> <span class="mi">6</span>
-                            <span class="n">words_l</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&#39;&gt;H&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="n">w_offset</span><span class="p">:</span><span class="n">w_offset</span> <span class="o">+</span> <span class="mi">2</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
-                        <span class="c"># write words to data bank</span>
+                            <span class="n">words_l</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s1">&#39;&gt;H&#39;</span><span class="p">,</span> <span class="n">rx_body</span><span class="p">[</span><span class="n">w_offset</span><span class="p">:</span><span class="n">w_offset</span> <span class="o">+</span> <span class="mi">2</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+                        <span class="c1"># write words to data bank</span>
                         <span class="k">if</span> <span class="n">DataBank</span><span class="o">.</span><span class="n">set_words</span><span class="p">(</span><span class="n">w_address</span><span class="p">,</span> <span class="n">words_l</span><span class="p">):</span>
-                            <span class="c"># send write ok frame</span>
-                            <span class="n">tx_body</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s">&#39;&gt;BHH&#39;</span><span class="p">,</span> <span class="n">rx_bd_fc</span><span class="p">,</span> <span class="n">w_address</span><span class="p">,</span> <span class="n">w_count</span><span class="p">)</span>
+                            <span class="c1"># send write ok frame</span>
+                            <span class="n">tx_body</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s1">&#39;&gt;BHH&#39;</span><span class="p">,</span> <span class="n">rx_bd_fc</span><span class="p">,</span> <span class="n">w_address</span><span class="p">,</span> <span class="n">w_count</span><span class="p">)</span>
                         <span class="k">else</span><span class="p">:</span>
                             <span class="n">exp_status</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">EXP_DATA_ADDRESS</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">exp_status</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">EXP_DATA_VALUE</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">exp_status</span> <span class="o">=</span> <span class="n">const</span><span class="o">.</span><span class="n">EXP_ILLEGAL_FUNCTION</span>
-                <span class="c"># check exception</span>
+                <span class="c1"># check exception</span>
                 <span class="k">if</span> <span class="n">exp_status</span> <span class="o">!=</span> <span class="n">const</span><span class="o">.</span><span class="n">EXP_NONE</span><span class="p">:</span>
-                    <span class="c"># format body of frame with exception status</span>
-                    <span class="n">tx_body</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s">&#39;BB&#39;</span><span class="p">,</span> <span class="n">rx_bd_fc</span> <span class="o">+</span> <span class="mh">0x80</span><span class="p">,</span> <span class="n">exp_status</span><span class="p">)</span>
-                <span class="c"># build frame header</span>
-                <span class="n">tx_head</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s">&#39;&gt;HHHB&#39;</span><span class="p">,</span> <span class="n">rx_hd_tr_id</span><span class="p">,</span> <span class="n">rx_hd_pr_id</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">tx_body</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">rx_hd_unit_id</span><span class="p">)</span>
-                <span class="c"># send frame</span>
+                    <span class="c1"># format body of frame with exception status</span>
+                    <span class="n">tx_body</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s1">&#39;BB&#39;</span><span class="p">,</span> <span class="n">rx_bd_fc</span> <span class="o">+</span> <span class="mh">0x80</span><span class="p">,</span> <span class="n">exp_status</span><span class="p">)</span>
+                <span class="c1"># build frame header</span>
+                <span class="n">tx_head</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s1">&#39;&gt;HHHB&#39;</span><span class="p">,</span> <span class="n">rx_hd_tr_id</span><span class="p">,</span> <span class="n">rx_hd_pr_id</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">tx_body</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">rx_hd_unit_id</span><span class="p">)</span>
+                <span class="c1"># send frame</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">tx_head</span> <span class="o">+</span> <span class="n">tx_body</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 
-<div class="viewcode-block" id="ModbusServer.__init__"><a class="viewcode-back" href="../../package/class_ModbusServer.html#pyModbusTCP.server.ModbusServer.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s">&#39;localhost&#39;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">502</span><span class="p">,</span> <span class="n">no_block</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">ipv6</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+<div class="viewcode-block" id="ModbusServer.__init__"><a class="viewcode-back" href="../../package/class_ModbusServer.html#pyModbusTCP.server.ModbusServer.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">host</span><span class="o">=</span><span class="s1">&#39;localhost&#39;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">502</span><span class="p">,</span> <span class="n">no_block</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">ipv6</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Constructor</span>
 
 <span class="sd">        Modbus server constructor.</span>
@@ -263,26 +265,26 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">port</span> <span class="o">=</span> <span class="n">port</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">no_block</span> <span class="o">=</span> <span class="n">no_block</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ipv6</span> <span class="o">=</span> <span class="n">ipv6</span>
-        <span class="c"># set class attribute</span>
+        <span class="c1"># set class attribute</span>
         <span class="n">ThreadingTCPServer</span><span class="o">.</span><span class="n">address_family</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">AF_INET6</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ipv6</span> <span class="k">else</span> <span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span>
-        <span class="n">ThreadingTCPServer</span><span class="o">.</span><span class="n">daemon_threads</span> <span class="o">=</span> <span class="bp">True</span>
-        <span class="c"># init server</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_service</span> <span class="o">=</span> <span class="n">ThreadingTCPServer</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">port</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">ModbusService</span><span class="p">,</span> <span class="n">bind_and_activate</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
-        <span class="c"># set socket options</span>
+        <span class="n">ThreadingTCPServer</span><span class="o">.</span><span class="n">daemon_threads</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="c1"># init server</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_service</span> <span class="o">=</span> <span class="n">ThreadingTCPServer</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">port</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">ModbusService</span><span class="p">,</span> <span class="n">bind_and_activate</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="c1"># set socket options</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_service</span><span class="o">.</span><span class="n">socket</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">SOL_SOCKET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SO_REUSEADDR</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_service</span><span class="o">.</span><span class="n">socket</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">SOL_SOCKET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SO_KEEPALIVE</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-        <span class="c"># TODO test no_delay with bench</span>
+        <span class="c1"># TODO test no_delay with bench</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_service</span><span class="o">.</span><span class="n">socket</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">IPPROTO_TCP</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">TCP_NODELAY</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-        <span class="c"># add thread for no block mode</span>
+        <span class="c1"># add thread for no block mode</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">no_block</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_serve_th</span> <span class="o">=</span> <span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_service</span><span class="o">.</span><span class="n">serve_forever</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_serve_th</span><span class="o">.</span><span class="n">daemon</span> <span class="o">=</span> <span class="bp">True</span>
-</div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_serve_th</span><span class="o">.</span><span class="n">daemon</span> <span class="o">=</span> <span class="kc">True</span></div>
+
     <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="c"># bind and activate</span>
+        <span class="c1"># bind and activate</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_service</span><span class="o">.</span><span class="n">server_bind</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_service</span><span class="o">.</span><span class="n">server_activate</span><span class="p">()</span>
-        <span class="c"># serve request</span>
+        <span class="c1"># serve request</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">no_block</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_serve_th</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
@@ -292,26 +294,23 @@
           </div>
         </div>
       </div>
-      <div class="sphinxsidebar">
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
         <div class="sphinxsidebarwrapper">
-<div id="searchbox" style="display: none">
+<div id="searchbox" style="display: none" role="search">
   <h3>Quick search</h3>
     <form class="search" action="../../search.html" method="get">
-      <input type="text" name="q" />
-      <input type="submit" value="Go" />
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
       <input type="hidden" name="check_keywords" value="yes" />
       <input type="hidden" name="area" value="default" />
     </form>
-    <p class="searchtip" style="font-size: 90%">
-    Enter search terms or a module, class or function name.
-    </p>
 </div>
 <script type="text/javascript">$('#searchbox').show(0);</script>
         </div>
       </div>
       <div class="clearer"></div>
     </div>
-    <div class="related">
+    <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
         <li class="right" style="margin-right: 10px">
@@ -320,13 +319,13 @@
         <li class="right" >
           <a href="../../py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../index.html">pyModbusTCP 0.1.1 documentation</a> &raquo;</li>
-          <li><a href="../index.html" >Module code</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../../index.html">pyModbusTCP 0.1.2 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &#187;</li> 
       </ul>
     </div>
-    <div class="footer">
-        &copy; Copyright 2014, Loic Lefebvre.
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2017, Loic Lefebvre.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.9.
     </div>
   </body>
 </html>

@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>Module pyModbusTCP.client &mdash; pyModbusTCP 0.1.1 documentation</title>
+    <title>Module pyModbusTCP.client &#8212; pyModbusTCP 0.1.2 documentation</title>
     
     <link rel="stylesheet" href="../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
@@ -14,7 +14,7 @@
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../',
-        VERSION:     '0.1.1',
+        VERSION:     '0.1.2',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -23,13 +23,15 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <link rel="top" title="pyModbusTCP 0.1.1 documentation" href="../index.html" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="top" title="pyModbusTCP 0.1.2 documentation" href="../index.html" />
     <link rel="up" title="pyModbusTCP modules documentation" href="index.html" />
     <link rel="next" title="Module pyModbusTCP.server" href="class_ModbusServer.html" />
     <link rel="prev" title="pyModbusTCP modules documentation" href="index.html" /> 
   </head>
-  <body>
-    <div class="related">
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
         <li class="right" style="margin-right: 10px">
@@ -44,15 +46,15 @@
         <li class="right" >
           <a href="index.html" title="pyModbusTCP modules documentation"
              accesskey="P">previous</a> |</li>
-        <li><a href="../index.html">pyModbusTCP 0.1.1 documentation</a> &raquo;</li>
-          <li><a href="index.html" accesskey="U">pyModbusTCP modules documentation</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../index.html">pyModbusTCP 0.1.2 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" accesskey="U">pyModbusTCP modules documentation</a> &#187;</li> 
       </ul>
     </div>  
 
     <div class="document">
       <div class="documentwrapper">
         <div class="bodywrapper">
-          <div class="body">
+          <div class="body" role="main">
             
   <div class="section" id="module-pyModbusTCP.client">
 <span id="module-pymodbustcp-client"></span><h1>Module pyModbusTCP.client<a class="headerlink" href="#module-pyModbusTCP.client" title="Permalink to this headline">¶</a></h1>
@@ -61,11 +63,11 @@
 <h2>class pyModbusTCP.client.ModbusClient<a class="headerlink" href="#class-pymodbustcp-client-modbusclient" title="Permalink to this headline">¶</a></h2>
 <dl class="class">
 <dt id="pyModbusTCP.client.ModbusClient">
-<em class="property">class </em><tt class="descclassname">pyModbusTCP.client.</tt><tt class="descname">ModbusClient</tt><big>(</big><em>host=None</em>, <em>port=None</em>, <em>unit_id=None</em>, <em>timeout=None</em>, <em>debug=None</em>, <em>auto_open=None</em>, <em>auto_close=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">pyModbusTCP.client.</code><code class="descname">ModbusClient</code><span class="sig-paren">(</span><em>host=None</em>, <em>port=None</em>, <em>unit_id=None</em>, <em>timeout=None</em>, <em>debug=None</em>, <em>auto_open=None</em>, <em>auto_close=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient" title="Permalink to this definition">¶</a></dt>
 <dd><p>Modbus TCP client</p>
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.__init__">
-<tt class="descname">__init__</tt><big>(</big><em>host=None</em>, <em>port=None</em>, <em>unit_id=None</em>, <em>timeout=None</em>, <em>debug=None</em>, <em>auto_open=None</em>, <em>auto_close=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.__init__" title="Permalink to this definition">¶</a></dt>
+<code class="descname">__init__</code><span class="sig-paren">(</span><em>host=None</em>, <em>port=None</em>, <em>unit_id=None</em>, <em>timeout=None</em>, <em>debug=None</em>, <em>auto_open=None</em>, <em>auto_close=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.__init__" title="Permalink to this definition">¶</a></dt>
 <dd><p>Constructor</p>
 <p>Modbus server params (host, port) can be set here or with host(), port()
 functions. Same for debug option.</p>
@@ -88,11 +90,10 @@ functions. Same for debug option.</p>
 <tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">Object ModbusClient</p>
 </td>
 </tr>
-<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first">ModbusClient</p>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first"><a class="reference internal" href="#pyModbusTCP.client.ModbusClient" title="pyModbusTCP.client.ModbusClient">ModbusClient</a></p>
 </td>
 </tr>
-<tr class="field-even field"><th class="field-name" colspan="2">Raises ValueError:</th></tr>
-<tr class="field-even field"><td>&nbsp;</td><td class="field-body"><p class="first last">if a set parameter value is incorrect</p>
+<tr class="field-even field"><th class="field-name">Raises:</th><td class="field-body"><p class="first last"><strong>ValueError</strong> &#8211; if a set parameter value is incorrect</p>
 </td>
 </tr>
 </tbody>
@@ -101,7 +102,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.auto_close">
-<tt class="descname">auto_close</tt><big>(</big><em>state=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.auto_close"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.auto_close" title="Permalink to this definition">¶</a></dt>
+<code class="descname">auto_close</code><span class="sig-paren">(</span><em>state=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.auto_close"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.auto_close" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get or set automatic TCP close mode (after each request)</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -119,7 +120,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.auto_open">
-<tt class="descname">auto_open</tt><big>(</big><em>state=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.auto_open"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.auto_open" title="Permalink to this definition">¶</a></dt>
+<code class="descname">auto_open</code><span class="sig-paren">(</span><em>state=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.auto_open"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.auto_open" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get or set automatic TCP connect mode</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -137,7 +138,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.close">
-<tt class="descname">close</tt><big>(</big><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.close"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.close" title="Permalink to this definition">¶</a></dt>
+<code class="descname">close</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.close"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.close" title="Permalink to this definition">¶</a></dt>
 <dd><p>Close TCP connection</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -153,7 +154,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.debug">
-<tt class="descname">debug</tt><big>(</big><em>state=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.debug"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.debug" title="Permalink to this definition">¶</a></dt>
+<code class="descname">debug</code><span class="sig-paren">(</span><em>state=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.debug"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.debug" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get or set debug mode</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -171,7 +172,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.host">
-<tt class="descname">host</tt><big>(</big><em>hostname=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.host"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.host" title="Permalink to this definition">¶</a></dt>
+<code class="descname">host</code><span class="sig-paren">(</span><em>hostname=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.host"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.host" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get or set host (IPv4/IPv6 or hostname like &#8216;plc.domain.net&#8217;)</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -189,7 +190,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.is_open">
-<tt class="descname">is_open</tt><big>(</big><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.is_open"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.is_open" title="Permalink to this definition">¶</a></dt>
+<code class="descname">is_open</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.is_open"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.is_open" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get status of TCP connection</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -205,7 +206,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.last_error">
-<tt class="descname">last_error</tt><big>(</big><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.last_error"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.last_error" title="Permalink to this definition">¶</a></dt>
+<code class="descname">last_error</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.last_error"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.last_error" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get last error code</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -221,7 +222,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.last_except">
-<tt class="descname">last_except</tt><big>(</big><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.last_except"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.last_except" title="Permalink to this definition">¶</a></dt>
+<code class="descname">last_except</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.last_except"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.last_except" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get last except code</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -237,7 +238,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.mode">
-<tt class="descname">mode</tt><big>(</big><em>mode=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.mode"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.mode" title="Permalink to this definition">¶</a></dt>
+<code class="descname">mode</code><span class="sig-paren">(</span><em>mode=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.mode"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.mode" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get or set modbus mode (TCP or RTU)</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -255,7 +256,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.open">
-<tt class="descname">open</tt><big>(</big><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.open"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.open" title="Permalink to this definition">¶</a></dt>
+<code class="descname">open</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.open"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.open" title="Permalink to this definition">¶</a></dt>
 <dd><p>Connect to modbus server (open TCP connection)</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -271,7 +272,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.port">
-<tt class="descname">port</tt><big>(</big><em>port=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.port"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.port" title="Permalink to this definition">¶</a></dt>
+<code class="descname">port</code><span class="sig-paren">(</span><em>port=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.port"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.port" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get or set TCP port</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -289,7 +290,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.read_coils">
-<tt class="descname">read_coils</tt><big>(</big><em>bit_addr</em>, <em>bit_nb=1</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.read_coils"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.read_coils" title="Permalink to this definition">¶</a></dt>
+<code class="descname">read_coils</code><span class="sig-paren">(</span><em>bit_addr</em>, <em>bit_nb=1</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.read_coils"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.read_coils" title="Permalink to this definition">¶</a></dt>
 <dd><p>Modbus function READ_COILS (0x01)</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -313,7 +314,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.read_discrete_inputs">
-<tt class="descname">read_discrete_inputs</tt><big>(</big><em>bit_addr</em>, <em>bit_nb=1</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.read_discrete_inputs"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.read_discrete_inputs" title="Permalink to this definition">¶</a></dt>
+<code class="descname">read_discrete_inputs</code><span class="sig-paren">(</span><em>bit_addr</em>, <em>bit_nb=1</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.read_discrete_inputs"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.read_discrete_inputs" title="Permalink to this definition">¶</a></dt>
 <dd><p>Modbus function READ_DISCRETE_INPUTS (0x02)</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -337,7 +338,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.read_holding_registers">
-<tt class="descname">read_holding_registers</tt><big>(</big><em>reg_addr</em>, <em>reg_nb=1</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.read_holding_registers"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.read_holding_registers" title="Permalink to this definition">¶</a></dt>
+<code class="descname">read_holding_registers</code><span class="sig-paren">(</span><em>reg_addr</em>, <em>reg_nb=1</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.read_holding_registers"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.read_holding_registers" title="Permalink to this definition">¶</a></dt>
 <dd><p>Modbus function READ_HOLDING_REGISTERS (0x03)</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -361,7 +362,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.read_input_registers">
-<tt class="descname">read_input_registers</tt><big>(</big><em>reg_addr</em>, <em>reg_nb=1</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.read_input_registers"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.read_input_registers" title="Permalink to this definition">¶</a></dt>
+<code class="descname">read_input_registers</code><span class="sig-paren">(</span><em>reg_addr</em>, <em>reg_nb=1</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.read_input_registers"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.read_input_registers" title="Permalink to this definition">¶</a></dt>
 <dd><p>Modbus function READ_INPUT_REGISTERS (0x04)</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -385,7 +386,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.timeout">
-<tt class="descname">timeout</tt><big>(</big><em>timeout=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.timeout"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.timeout" title="Permalink to this definition">¶</a></dt>
+<code class="descname">timeout</code><span class="sig-paren">(</span><em>timeout=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.timeout"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.timeout" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get or set timeout field</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -403,7 +404,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.unit_id">
-<tt class="descname">unit_id</tt><big>(</big><em>unit_id=None</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.unit_id"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.unit_id" title="Permalink to this definition">¶</a></dt>
+<code class="descname">unit_id</code><span class="sig-paren">(</span><em>unit_id=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.unit_id"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.unit_id" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get or set unit ID field</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -421,7 +422,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.version">
-<tt class="descname">version</tt><big>(</big><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.version"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.version" title="Permalink to this definition">¶</a></dt>
+<code class="descname">version</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.version"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.version" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get package version</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -437,7 +438,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.write_multiple_coils">
-<tt class="descname">write_multiple_coils</tt><big>(</big><em>bits_addr</em>, <em>bits_value</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.write_multiple_coils"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.write_multiple_coils" title="Permalink to this definition">¶</a></dt>
+<code class="descname">write_multiple_coils</code><span class="sig-paren">(</span><em>bits_addr</em>, <em>bits_value</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.write_multiple_coils"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.write_multiple_coils" title="Permalink to this definition">¶</a></dt>
 <dd><p>Modbus function WRITE_MULTIPLE_COILS (0x0F)</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -461,7 +462,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.write_multiple_registers">
-<tt class="descname">write_multiple_registers</tt><big>(</big><em>regs_addr</em>, <em>regs_value</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.write_multiple_registers"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.write_multiple_registers" title="Permalink to this definition">¶</a></dt>
+<code class="descname">write_multiple_registers</code><span class="sig-paren">(</span><em>regs_addr</em>, <em>regs_value</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.write_multiple_registers"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.write_multiple_registers" title="Permalink to this definition">¶</a></dt>
 <dd><p>Modbus function WRITE_MULTIPLE_REGISTERS (0x10)</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -485,7 +486,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.write_single_coil">
-<tt class="descname">write_single_coil</tt><big>(</big><em>bit_addr</em>, <em>bit_value</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.write_single_coil"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.write_single_coil" title="Permalink to this definition">¶</a></dt>
+<code class="descname">write_single_coil</code><span class="sig-paren">(</span><em>bit_addr</em>, <em>bit_value</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.write_single_coil"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.write_single_coil" title="Permalink to this definition">¶</a></dt>
 <dd><p>Modbus function WRITE_SINGLE_COIL (0x05)</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -509,7 +510,7 @@ functions. Same for debug option.</p>
 
 <dl class="method">
 <dt id="pyModbusTCP.client.ModbusClient.write_single_register">
-<tt class="descname">write_single_register</tt><big>(</big><em>reg_addr</em>, <em>reg_value</em><big>)</big><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.write_single_register"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.write_single_register" title="Permalink to this definition">¶</a></dt>
+<code class="descname">write_single_register</code><span class="sig-paren">(</span><em>reg_addr</em>, <em>reg_value</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pyModbusTCP/client.html#ModbusClient.write_single_register"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#pyModbusTCP.client.ModbusClient.write_single_register" title="Permalink to this definition">¶</a></dt>
 <dd><p>Modbus function WRITE_SINGLE_REGISTER (0x06)</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -540,7 +541,7 @@ functions. Same for debug option.</p>
           </div>
         </div>
       </div>
-      <div class="sphinxsidebar">
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
         <div class="sphinxsidebarwrapper">
   <h3><a href="../index.html">Table Of Contents</a></h3>
   <ul>
@@ -556,29 +557,28 @@ functions. Same for debug option.</p>
   <h4>Next topic</h4>
   <p class="topless"><a href="class_ModbusServer.html"
                         title="next chapter">Module pyModbusTCP.server</a></p>
-  <h3>This Page</h3>
-  <ul class="this-page-menu">
-    <li><a href="../_sources/package/class_ModbusClient.txt"
-           rel="nofollow">Show Source</a></li>
-  </ul>
-<div id="searchbox" style="display: none">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/package/class_ModbusClient.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
   <h3>Quick search</h3>
     <form class="search" action="../search.html" method="get">
-      <input type="text" name="q" />
-      <input type="submit" value="Go" />
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
       <input type="hidden" name="check_keywords" value="yes" />
       <input type="hidden" name="area" value="default" />
     </form>
-    <p class="searchtip" style="font-size: 90%">
-    Enter search terms or a module, class or function name.
-    </p>
 </div>
 <script type="text/javascript">$('#searchbox').show(0);</script>
         </div>
       </div>
       <div class="clearer"></div>
     </div>
-    <div class="related">
+    <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
         <li class="right" style="margin-right: 10px">
@@ -593,13 +593,13 @@ functions. Same for debug option.</p>
         <li class="right" >
           <a href="index.html" title="pyModbusTCP modules documentation"
              >previous</a> |</li>
-        <li><a href="../index.html">pyModbusTCP 0.1.1 documentation</a> &raquo;</li>
-          <li><a href="index.html" >pyModbusTCP modules documentation</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../index.html">pyModbusTCP 0.1.2 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" >pyModbusTCP modules documentation</a> &#187;</li> 
       </ul>
     </div>
-    <div class="footer">
-        &copy; Copyright 2014, Loic Lefebvre.
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2017, Loic Lefebvre.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.9.
     </div>
   </body>
 </html>

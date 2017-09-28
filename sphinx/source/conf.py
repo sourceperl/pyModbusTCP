@@ -27,6 +27,9 @@ pdf_documents = [('index', 'pyModbusTCP', 'pyModbusTCP documentation',
 
 # -- General configuration ------------------------------------------------
 
+# fix issue with new release of rst2pdf
+pdf_use_index = False
+
 # If your documentation needs a minimal Sphinx version, state it here.
 #needs_sphinx = '1.0'
 
@@ -55,7 +58,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'pyModbusTCP'
-copyright = u'2014, Loic Lefebvre'
+copyright = u'2017, Loic Lefebvre'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
