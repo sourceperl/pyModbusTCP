@@ -1,6 +1,6 @@
 MANIFEST
 build/
 dist/
-forge/
 *.pyc
+*.egg-info/
 .idea/
