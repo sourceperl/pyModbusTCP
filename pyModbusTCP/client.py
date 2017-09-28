@@ -350,7 +350,7 @@ class ModbusClient:
         # frame with bits value -> bits[] list
         f_bits = bytearray(f_body[1:])
         # check rx_byte_count: match nb of bits request and check buffer size
-        if not ((rx_byte_count == int((bit_nb + 7) / 8)) and
+        if not ((rx_byte_count >= int((bit_nb + 7) / 8)) and
                 (rx_byte_count == len(f_bits))):
             self.__last_error = const.MB_RECV_ERR
             self.__debug_msg('read_coils(): rx byte count mismatch')
@@ -407,7 +407,7 @@ class ModbusClient:
         # frame with bits value -> bits[] list
         f_bits = bytearray(f_body[1:])
         # check rx_byte_count: match nb of bits request and check buffer size
-        if not ((rx_byte_count == int((bit_nb + 7) / 8)) and
+        if not ((rx_byte_count >= int((bit_nb + 7) / 8)) and
                 (rx_byte_count == len(f_bits))):
             self.__last_error = const.MB_RECV_ERR
             self.__debug_msg('read_discrete_inputs(): rx byte count mismatch')
@@ -463,8 +463,8 @@ class ModbusClient:
         rx_byte_count = struct.unpack('B', f_body[0:1])[0]
         # frame with regs value
         f_regs = f_body[1:]
-        # check rx_byte_count: match nb of bits request and check buffer size
-        if not ((rx_byte_count == 2 * reg_nb) and
+        # check rx_byte_count: buffer size must be consistent and have at least the requested number of registers
+        if not ((rx_byte_count >= 2 * reg_nb) and
                 (rx_byte_count == len(f_regs))):
             self.__last_error = const.MB_RECV_ERR
             self.__debug_msg('read_holding_registers(): rx byte count mismatch')
@@ -520,8 +520,8 @@ class ModbusClient:
         rx_byte_count = struct.unpack('B', f_body[0:1])[0]
         # frame with regs value
         f_regs = f_body[1:]
-        # check rx_byte_count: match nb of bits request and check buffer size
-        if not ((rx_byte_count == 2 * reg_nb) and
+        # check rx_byte_count: buffer size must be consistent and have at least the requested number of registers
+        if not ((rx_byte_count >= 2 * reg_nb) and
                 (rx_byte_count == len(f_regs))):
             self.__last_error = const.MB_RECV_ERR
             self.__debug_msg('read_input_registers(): rx byte count mismatch')
