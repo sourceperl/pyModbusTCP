@@ -1,6 +1,6 @@
-MANIFEST
-build/
-dist/
+/MANIFEST
+/build/
+/dist/
 *.pyc
-*.egg-info/
-.idea/
+/*.egg-info/
+/.idea/
