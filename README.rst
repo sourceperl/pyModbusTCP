@@ -107,4 +107,4 @@ Documentation
 -------------
 
 Documentation available online at http://pythonhosted.org/pyModbusTCP and on
-doc/html/index.html.
+doc/build/html/index.html.
