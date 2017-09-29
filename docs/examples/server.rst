@@ -3,4 +3,4 @@ Simple blocking server example
 ==============================
 
 
-.. literalinclude:: ../../../examples/server.py
+.. literalinclude:: ../../examples/server.py

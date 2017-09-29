@@ -3,4 +3,4 @@ Simple write bits example
 =========================
 
 
-.. literalinclude:: ../../../examples/write_bit.py
+.. literalinclude:: ../../examples/write_bit.py

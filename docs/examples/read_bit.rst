@@ -3,4 +3,4 @@ Simple read bits example
 ========================
 
 
-.. literalinclude:: ../../../examples/read_bit.py
+.. literalinclude:: ../../examples/read_bit.py

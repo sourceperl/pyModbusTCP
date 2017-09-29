@@ -18,6 +18,9 @@ Status:
 .. image:: https://api.travis-ci.org/sourceperl/pyModbusTCP.svg?branch=master
   :target: http://travis-ci.org/sourceperl/pyModbusTCP
 
+.. image:: https://readthedocs.org/projects/pymodbustcp/badge/?version=latest
+  :target: http://pymodbustcp.readthedocs.io/en/latest/?badge=latest
+
 Setup
 -----
 
@@ -106,5 +109,4 @@ Write value 44 and 55 to registers at modbus address 10 :
 Documentation
 -------------
 
-Documentation available online at http://pythonhosted.org/pyModbusTCP and on
-doc/build/html/index.html.
+Documentation available online at http://pymodbustcp.readthedocs.io/.
