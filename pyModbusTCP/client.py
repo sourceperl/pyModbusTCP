@@ -117,7 +117,7 @@ class ModbusClient:
         :returns: hostname or None if set fail
         :rtype: str or None
         """
-        if (hostname is None) or (hostname is self.__hostname):
+        if (hostname is None) or (hostname == self.__hostname):
             return self.__hostname
         # when hostname change ensure old socket is close
         self.close()
@@ -150,7 +150,7 @@ class ModbusClient:
         :returns: TCP port or None if set fail
         :rtype: int or None
         """
-        if (port is None) or (port is self.__port):
+        if (port is None) or (port == self.__port):
             return self.__port
         # when port change ensure old socket is close
         self.close()
