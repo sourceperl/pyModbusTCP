@@ -1,5 +1,10 @@
 Revision history for pyModbusTCP
 
+0.1.5 2017-11-23
+
+    - add long_list_to_word to utils.
+    - add float support as example.
+
 0.1.4 2017-11-13
 
     - fix port and host accessors, change check now use "==" and not "is".
