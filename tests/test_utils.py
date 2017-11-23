@@ -43,14 +43,27 @@ class TestUtils(unittest.TestCase):
         # if len of list is odd ignore last value
         self.assertEqual(utils.word_list_to_long([0x1, 0x2, 0x3]), [0x10002])
         # test convert with big and little endian
-        word_list = utils.word_list_to_long([0xdead, 0xbeef])
-        self.assertEqual(word_list, [0xdeadbeef])
-        word_list = utils.word_list_to_long([0xdead, 0xbeef, 0xdead, 0xbeef])
-        self.assertEqual(word_list, [0xdeadbeef, 0xdeadbeef])
-        word_list = utils.word_list_to_long([0xdead, 0xbeef], big_endian=False)
-        self.assertEqual(word_list, [0xbeefdead])
-        word_list = utils.word_list_to_long([0xdead, 0xbeef, 0xdead, 0xbeef], big_endian=False)
-        self.assertEqual(word_list, [0xbeefdead, 0xbeefdead])
+        long_list = utils.word_list_to_long([0xdead, 0xbeef])
+        self.assertEqual(long_list, [0xdeadbeef])
+        long_list = utils.word_list_to_long([0xdead, 0xbeef, 0xdead, 0xbeef])
+        self.assertEqual(long_list, [0xdeadbeef, 0xdeadbeef])
+        long_list = utils.word_list_to_long([0xdead, 0xbeef], big_endian=False)
+        self.assertEqual(long_list, [0xbeefdead])
+        long_list = utils.word_list_to_long([0xdead, 0xbeef, 0xdead, 0xbeef], big_endian=False)
+        self.assertEqual(long_list, [0xbeefdead, 0xbeefdead])
+
+    def test_long_list_to_word(self):
+        # empty list, return empty list
+        self.assertEqual(utils.long_list_to_word([]), [])
+        # test convert with big and little endian
+        word_list = utils.long_list_to_word([0xdeadbeef])
+        self.assertEqual(word_list, [0xdead, 0xbeef])
+        word_list = utils.long_list_to_word([0xdeadbeef, 0xdeadbeef])
+        self.assertEqual(word_list, [0xdead, 0xbeef, 0xdead, 0xbeef])
+        word_list = utils.long_list_to_word([0xdeadbeef], big_endian=False)
+        self.assertEqual(word_list, [0xbeef, 0xdead])
+        word_list = utils.long_list_to_word([0xdeadbeef, 0xdeadbeef], big_endian=False)
+        self.assertEqual(word_list, [0xbeef, 0xdead, 0xbeef, 0xdead])
 
     def test_get_2comp(self):
         # 2's complement of 16bits 0x0001 value is 1
