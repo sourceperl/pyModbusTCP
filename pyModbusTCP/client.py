@@ -813,7 +813,7 @@ class ModbusClient:
         :returns: receive data or None if error
         :rtype: str (Python2) or class bytes (Python3) or None
         """
-        r_buffer = bytearray()
+        r_buffer = bytes()
         while len(r_buffer) < size:
             r_packet = self._recv(size - len(r_buffer))
             if not r_packet:
