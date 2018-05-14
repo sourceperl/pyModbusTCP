@@ -66,7 +66,7 @@ class ModbusServer(object):
     class ModbusService(BaseRequestHandler):
         def handle(self):
             while True:
-                rx_head = self.request.recv(7)
+                rx_head = self.request.recv(7, socket.MSG_WAITALL)
                 # close connection if no standard 7 bytes header
                 if not (rx_head and len(rx_head) == 7):
                     break
@@ -77,7 +77,7 @@ class ModbusServer(object):
                 if not ((rx_hd_pr_id == 0) and (2 < rx_hd_length < 256)):
                     break
                 # receive body
-                rx_body = self.request.recv(rx_hd_length - 1)
+                rx_body = self.request.recv(rx_hd_length - 1, socket.MSG_WAITALL)
                 # close connection if lack of bytes in frame body
                 if not (rx_body and (len(rx_body) == rx_hd_length - 1)):
                     break
