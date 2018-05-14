@@ -1,5 +1,9 @@
 Revision history for pyModbusTCP
 
+0.1.6 2018-05-14
+
+    - fix multiple TCP packets recv issue in ModbusClient and ModbusServer (thanks Farin94).
+
 0.1.5 2017-11-23
 
     - add long_list_to_word to utils.
