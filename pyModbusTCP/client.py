@@ -805,6 +805,23 @@ class ModbusClient:
             return None
         return r_buffer
 
+    def _recv_all(self, size):
+        """Receive data over current socket, loop until all bytes is receive (avoid TCP frag)
+
+        :param size: number of bytes to receive
+        :type size: int
+        :returns: receive data or None if error
+        :rtype: str (Python2) or class bytes (Python3) or None
+        """
+        r_buffer = bytearray()
+        while len(r_buffer) < size:
+            print('recv_all loop here')
+            r_packet = self._recv(size - len(r_buffer))
+            if not r_packet:
+                return None
+            r_buffer += r_packet
+        return r_buffer
+
     def _send_mbus(self, frame):
         """Send modbus frame
 
@@ -835,7 +852,7 @@ class ModbusClient:
         # modbus TCP receive
         if self.__mode == const.MODBUS_TCP:
             # 7 bytes header (mbap)
-            rx_buffer = self._recv(7)
+            rx_buffer = self._recv_all(7)
             # check recv
             if not (rx_buffer and len(rx_buffer) == 7):
                 self.__last_error = const.MB_RECV_ERR
@@ -854,12 +871,12 @@ class ModbusClient:
                 self.__last_error = const.MB_RECV_ERR
                 self.__debug_msg('MBAP format error')
                 if self.__debug:
-                    rx_frame += self._recv(rx_hd_length - 1)
+                    rx_frame += self._recv_all(rx_hd_length - 1)
                     self._pretty_dump('Rx', rx_frame)
                 self.close()
                 return None
             # end of frame
-            rx_buffer = self._recv(rx_hd_length - 1)
+            rx_buffer = self._recv_all(rx_hd_length - 1)
             if not (rx_buffer and
                     (len(rx_buffer) == rx_hd_length - 1) and
                     (len(rx_buffer) >= 2)):
