@@ -815,7 +815,6 @@ class ModbusClient:
         """
         r_buffer = bytearray()
         while len(r_buffer) < size:
-            print('recv_all loop here')
             r_packet = self._recv(size - len(r_buffer))
             if not r_packet:
                 return None
