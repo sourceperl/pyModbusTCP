@@ -64,9 +64,20 @@ class ModbusServer(object):
     """Modbus TCP server"""
 
     class ModbusService(BaseRequestHandler):
+
+        def recv_all(self, size):
+            if hasattr(socket, "MSG_WAITALL"):
+                data = self.request.recv(size, socket.MSG_WAITALL)
+            else:
+                # Windows lacks MSG_WAITALL
+                data = b''
+                while len(data) < size:
+                    data += self.request.recv(size - len(data))
+            return data
+
         def handle(self):
             while True:
-                rx_head = self.request.recv(7, socket.MSG_WAITALL)
+                rx_head = self.recv_all(7)
                 # close connection if no standard 7 bytes header
                 if not (rx_head and len(rx_head) == 7):
                     break
@@ -77,7 +88,7 @@ class ModbusServer(object):
                 if not ((rx_hd_pr_id == 0) and (2 < rx_hd_length < 256)):
                     break
                 # receive body
-                rx_body = self.request.recv(rx_hd_length - 1, socket.MSG_WAITALL)
+                rx_body = self.recv_all(rx_hd_length - 1)
                 # close connection if lack of bytes in frame body
                 if not (rx_body and (len(rx_body) == rx_hd_length - 1)):
                     break
