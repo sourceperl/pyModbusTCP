@@ -207,7 +207,7 @@ class ModbusServer(object):
                 self.request.send(tx_head + tx_body)
             self.request.close()
 
-    def __init__(self, host='localhost', port=502, no_block=False, ipv6=False):
+    def __init__(self, host='localhost', port=const.MODBUS_PORT, no_block=False, ipv6=False):
         """Constructor
 
         Modbus server constructor.
