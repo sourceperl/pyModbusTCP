@@ -221,31 +221,66 @@ class ModbusServer(object):
         :param ipv6: use ipv6 stack
         :type ipv6: bool
         """
+        # public
         self.host = host
         self.port = port
         self.no_block = no_block
         self.ipv6 = ipv6
-        # set class attribute
-        ThreadingTCPServer.address_family = socket.AF_INET6 if self.ipv6 else socket.AF_INET
-        ThreadingTCPServer.daemon_threads = True
-        # init server
-        self._service = ThreadingTCPServer((self.host, self.port), self.ModbusService, bind_and_activate=False)
-        # set socket options
-        self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        # TODO test no_delay with bench
-        self._service.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        # add thread for no block mode
-        if self.no_block:
-            self._serve_th = Thread(target=self._service.serve_forever)
-            self._serve_th.daemon = True
+        # private
+        self._running = False
+        self._service = None
+        self._serve_th = None
 
     def start(self):
-        # bind and activate
-        self._service.server_bind()
-        self._service.server_activate()
-        # serve request
-        if self.no_block:
-            self._serve_th.start()
-        else:
+        """Start the server.
+
+        Do nothing is server is already running.
+        This function will block if no_block is not set to True.
+        """
+        if not self.is_run:
+            # set class attribute
+            ThreadingTCPServer.address_family = socket.AF_INET6 if self.ipv6 else socket.AF_INET
+            ThreadingTCPServer.daemon_threads = True
+            # init server
+            self._service = ThreadingTCPServer((self.host, self.port), self.ModbusService, bind_and_activate=False)
+            # set socket options
+            self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            # TODO test no_delay with bench
+            self._service.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            # bind and activate
+            self._service.server_bind()
+            self._service.server_activate()
+            # serve request
+            if self.no_block:
+                self._serve_th = Thread(target=self._serve)
+                self._serve_th.daemon = True
+                self._serve_th.start()
+            else:
+                self._serve()
+
+    def stop(self):
+        """Stop the server.
+
+        Do nothing is server is already not running.
+        """
+        if self.is_run:
+            self._service.shutdown()
+            self._service.server_close()
+
+    @property
+    def is_run(self):
+        """Return True if server running.
+
+        """
+        return self._running
+
+    def _serve(self):
+        try:
+            self._running = True
             self._service.serve_forever()
+        except:
+            self._service.server_close()
+            raise
+        finally:
+            self._running = False
