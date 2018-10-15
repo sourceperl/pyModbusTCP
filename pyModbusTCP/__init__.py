@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 
 # Python package: Client and Server for ModBus/TCP
-#        Version: 0.1.7
+#        Version: 0.1.8
 #        Website: https://github.com/sourceperl/pyModbusTCP
-#           Date: 2018-08-20
+#           Date: 2018-10-15
 #        License: MIT (http://http://opensource.org/licenses/mit-license.php)
 #    Description: Client/Server ModBus/TCP
 #                 Support functions 3 and 16 (class 0)

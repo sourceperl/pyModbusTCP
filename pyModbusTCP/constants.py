@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-VERSION = '0.1.7'
+VERSION = '0.1.8'
 ## ModBus/TCP
 MODBUS_PORT = 502
 ## Modbus mode
