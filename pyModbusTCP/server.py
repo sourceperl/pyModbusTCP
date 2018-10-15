@@ -234,7 +234,7 @@ class ModbusServer(object):
     def start(self):
         """Start the server.
 
-        Do nothing is server is already running.
+        Do nothing if server is already running.
         This function will block if no_block is not set to True.
         """
         if not self.is_run:
@@ -262,7 +262,7 @@ class ModbusServer(object):
     def stop(self):
         """Stop the server.
 
-        Do nothing is server is already not running.
+        Do nothing if server is already not running.
         """
         if self.is_run:
             self._service.shutdown()
