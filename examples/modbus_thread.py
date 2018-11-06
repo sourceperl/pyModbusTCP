@@ -18,6 +18,7 @@ regs = []
 # init a thread lock
 regs_lock = Lock()
 
+
 # modbus polling thread
 def polling_thread():
     global regs
@@ -28,13 +29,14 @@ def polling_thread():
         if not c.is_open():
             c.open()
         # do modbus reading on socket
-        reg_list = c.read_holding_registers(0,10)
+        reg_list = c.read_holding_registers(0, 10)
         # if read is ok, store result in regs (with thread lock synchronization)
         if reg_list:
             with regs_lock:
-                regs = reg_list
+                regs = list(reg_list)
         # 1s before next polling
         time.sleep(1)
+
 
 # start polling thread
 tp = Thread(target=polling_thread)
@@ -49,4 +51,3 @@ while True:
         print(regs)
     # 1s before next print
     time.sleep(1)
-
