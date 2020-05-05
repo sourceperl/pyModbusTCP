@@ -11,7 +11,7 @@ dependency.
 Test
 ----
 
-The module is currently test on Python 2.6, 2.7, 3.2, 3.3, 3.4, 3.5 and 3.6.
+The module is currently test on Python 2.7, 3.4, 3.5, 3.6, 3.7 and 3.8.
 
 Status:
 
