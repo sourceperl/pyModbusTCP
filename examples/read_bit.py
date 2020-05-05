@@ -9,15 +9,17 @@ import time
 
 SERVER_HOST = "localhost"
 SERVER_PORT = 502
+SERVER_U_ID = 1
 
 c = ModbusClient()
 
 # uncomment this line to see debug message
-#c.debug(True)
+# c.debug(True)
 
-# define modbus server host, port
+# define modbus server host, port and unit_id
 c.host(SERVER_HOST)
 c.port(SERVER_PORT)
+c.unit_id(SERVER_U_ID)
 
 while True:
     # open or reconnect TCP to server
