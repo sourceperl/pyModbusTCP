@@ -64,7 +64,7 @@ module init (TCP always open)
 ::
 
     # TCP auto connect on first modbus request
-    c = ModbusClient(host="localhost", port=502, auto_open=True)
+    c = ModbusClient(host="localhost", port=502, unit_id=1, auto_open=True)
 
 module init (TCP open/close for each request)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -82,6 +82,7 @@ module init (with accessor functions)
     c = ModbusClient()
     c.host("localhost")
     c.port(502)
+    c.unit_id(1)
     # managing TCP sessions with call to c.open()/c.close()
     c.open()
 
