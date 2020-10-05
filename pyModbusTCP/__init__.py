@@ -12,3 +12,4 @@
 #        Charset: utf-8
 
 __all__ = ['constants', 'client', 'server', 'utils']
+from .constants import VERSION as __version__
