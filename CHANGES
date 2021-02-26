@@ -1,6 +1,6 @@
 Revision history for pyModbusTCP
 
-0.x.x next release
+0.1.9 2021-02-26
 
     - add module error MB_SOCK_CLOSE_ERR (occur if frame send on close socket).
     - add modbus exception EXP_NEGATIVE_ACKNOWLEDGE (code 0x07) to constants.
