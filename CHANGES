@@ -2,7 +2,7 @@ Revision history for pyModbusTCP
 
 0.x.x next release
 
-    - update of the compatibility test for python version: remove 2.6/3.2/3.3, add 3.7/3.8.
+    - update of the compatibility test for python version: remove 2.6/3.2/3.3, add 3.7/3.8/3.9.
     - conform to PEP 396 (add pyModbusTCP.__version__ field).
 
 0.1.8 2018-10-15
