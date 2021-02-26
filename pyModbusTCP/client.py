@@ -55,7 +55,7 @@ class ModbusClient:
         self.__hd_tr_id = 0                  # store transaction ID
         self.__version = const.VERSION       # version number
         self.__last_error = const.MB_NO_ERR  # last error code
-        self.__last_except = 0               # last expect code
+        self.__last_except = const.EXP_NONE  # last expect code
         # set host
         if host:
             if not self.host(host):
@@ -101,6 +101,14 @@ class ModbusClient:
         """
         return self.__last_error
 
+    def last_error_txt(self):
+        """Get last error as text
+
+        :return: last error as string
+        :rtype: str
+        """
+        return const.MB_ERR_TXT.get(self.__last_error, 'error unknown')
+
     def last_except(self):
         """Get last except code
 
@@ -108,6 +116,18 @@ class ModbusClient:
         :rtype: int
         """
         return self.__last_except
+
+    def last_except_txt(self, verbose=False):
+        """Get last except code as text
+
+        :return: last except as string
+        :rtype: str
+        """
+        default_str = 'except %i unknown' % self.__last_except
+        if verbose:
+            return const.EXP_DETAILS.get(self.__last_except, default_str)
+        else:
+            return const.EXP_TXT.get(self.__last_except, default_str)
 
     def host(self, hostname=None):
         """Get or set host (IPv4/IPv6 or hostname like 'plc.domain.net')
@@ -279,12 +299,13 @@ class ModbusClient:
                 continue
             break
         # check connect status
-        if self.__sock is not None:
-            return True
-        else:
+        if self.__sock is None:
             self.__last_error = const.MB_CONNECT_ERR
             self.__debug_msg('connect error')
             return False
+        else:
+            return True
+
 
     def is_open(self):
         """Get status of TCP connection
@@ -763,6 +784,7 @@ class ModbusClient:
         """
         # check link
         if self.__sock is None:
+            self.__last_error = const.MB_SOCK_CLOSE_ERR
             self.__debug_msg('call _send on close socket')
             return None
         # send
