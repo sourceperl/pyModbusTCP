@@ -126,10 +126,18 @@ def get_2comp(val_int, val_size=16):
         :type val_size: int
         :returns: 2's complement result
         :rtype: int
+        :raises ValueError: if mismatch between val_int and val_size
     """
-    # test MSBit (1 for negative)
-    if val_int & (1 << (val_size - 1)):
-        # do complement
+    # avoid overflow
+    if not -1 << val_size-1 <= val_int < 1 << val_size:
+        err_msg = 'could not compute two\'s complement for %i on %i bits'
+        err_msg %= (val_int, val_size)
+        raise ValueError(err_msg)
+    # test negative int
+    if val_int < 0:
+        val_int += 1 << val_size
+    # test MSB (do two's comp if set)
+    elif val_int & (1 << (val_size - 1)):
         val_int -= 1 << val_size
     return val_int
 

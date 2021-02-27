@@ -49,7 +49,8 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(long_list, [0xdeadbeef, 0xdeadbeef])
         long_list = utils.word_list_to_long([0xdead, 0xbeef], big_endian=False)
         self.assertEqual(long_list, [0xbeefdead])
-        long_list = utils.word_list_to_long([0xdead, 0xbeef, 0xdead, 0xbeef], big_endian=False)
+        long_list = utils.word_list_to_long(
+            [0xdead, 0xbeef, 0xdead, 0xbeef], big_endian=False)
         self.assertEqual(long_list, [0xbeefdead, 0xbeefdead])
 
     def test_long_list_to_word(self):
@@ -62,22 +63,43 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(word_list, [0xdead, 0xbeef, 0xdead, 0xbeef])
         word_list = utils.long_list_to_word([0xdeadbeef], big_endian=False)
         self.assertEqual(word_list, [0xbeef, 0xdead])
-        word_list = utils.long_list_to_word([0xdeadbeef, 0xdeadbeef], big_endian=False)
+        word_list = utils.long_list_to_word(
+            [0xdeadbeef, 0xdeadbeef], big_endian=False)
         self.assertEqual(word_list, [0xbeef, 0xdead, 0xbeef, 0xdead])
 
     def test_get_2comp(self):
-        # 2's complement of 16bits 0x0001 value is 1
-        self.assertEqual(utils.get_2comp(0x0001, 16), 1)
-        # 2's complement of 16bits 0x8000 value is -32768
-        self.assertEqual(utils.get_2comp(0x8000, 16), -0x8000)
-        # 2's complement of 16bits 0xFFFF value is -1
-        self.assertEqual(utils.get_2comp(0xFFFF, 16), -0x0001)
+        # check if ValueError exception is raised
+        self.assertRaises(ValueError, utils.get_2comp, 0x10000)
+        self.assertRaises(ValueError, utils.get_2comp, -0x8001)
+        self.assertRaises(ValueError, utils.get_2comp,
+                          0x100000000, val_size=32)
+        self.assertRaises(ValueError, utils.get_2comp, -
+                          0x80000001, val_size=32)
+        # 2's complement of 16bits values (default)
+        self.assertEqual(utils.get_2comp(0x0001), 0x0001)
+        self.assertEqual(utils.get_2comp(0x8000), -0x8000)
+        self.assertEqual(utils.get_2comp(-0x8000), 0x8000)
+        self.assertEqual(utils.get_2comp(0xffff), -0x0001)
+        self.assertEqual(utils.get_2comp(-0x0001), 0xffff)
+        self.assertEqual(utils.get_2comp(-0x00fa), 0xff06)
+        self.assertEqual(utils.get_2comp(0xff06), -0x00fa)
+        # 2's complement of 32bits values
+        self.assertEqual(utils.get_2comp(0xfffffff, val_size=32), 0xfffffff)
+        self.assertEqual(utils.get_2comp(-1, val_size=32), 0xffffffff)
+        self.assertEqual(utils.get_2comp(0xffffffff, val_size=32), -1)
+        self.assertEqual(utils.get_2comp(125, val_size=32), 0x0000007d)
+        self.assertEqual(utils.get_2comp(0x0000007d, val_size=32), 125)
+        self.assertEqual(utils.get_2comp(-250, val_size=32), 0xffffff06)
+        self.assertEqual(utils.get_2comp(0xffffff06, val_size=32), -250)
+        self.assertEqual(utils.get_2comp(0xfffea2a5, val_size=32), -89435)
+        self.assertEqual(utils.get_2comp(-89435, val_size=32), 0xfffea2a5)
 
     def test_get_list_2comp(self):
-        # with 1 item
         self.assertEqual(utils.get_list_2comp([0x8000], 16), [-32768])
-        # with 3 items
-        self.assertEqual(utils.get_list_2comp([0x8000, 0xFFFF, 0x0042], 16), [-0x8000, -0x0001, 0x42])
+        self.assertEqual(utils.get_list_2comp(
+            [0x8000, 0xffff, 0x0042], val_size=16), [-0x8000, -0x0001, 0x42])
+        self.assertEqual(utils.get_list_2comp(
+            [0x8000, 0xffffffff, 0xfffea2a5], val_size=32), [0x8000, -0x0001, -89435])
 
 
 if __name__ == '__main__':
