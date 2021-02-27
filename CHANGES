@@ -1,5 +1,11 @@
 Revision history for pyModbusTCP
 
+0.x.x Next release
+
+    - now get_2comp can deal with negative python int.
+    - remove reference to devel github branch.
+    - improve last_error_txt() and last_except_txt().
+
 0.1.9 2021-02-26
 
     - add module error MB_SOCK_CLOSE_ERR (occur if frame send on close socket).
