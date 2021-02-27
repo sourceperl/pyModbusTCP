@@ -1,3 +1,2 @@
 - add a sample for modbus RTU.
 - add a sample with a modbus polling thread and a curses CLI interface.
-- add an access to string version of last_error().
