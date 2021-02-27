@@ -40,11 +40,11 @@ GitHub:
     cd pyModbusTCP
     sudo python setup.py install
 
-Install the current devel-release:
+GitHub with pip:
 
 ::
 
-    sudo pip install git+https://github.com/sourceperl/pyModbusTCP.git@devel
+    sudo pip install git+https://github.com/sourceperl/pyModbusTCP.git
 
 Usage example
 -------------
