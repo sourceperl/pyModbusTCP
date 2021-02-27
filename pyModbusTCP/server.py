@@ -26,6 +26,16 @@ class DataBank:
 
     @classmethod
     def get_bits(cls, address, number=1):
+        """Read data on server bits space
+
+        :param address: start address
+        :type address: int
+        :param number: number of bits (optional)
+        :type number: int
+        :returns: list of bool or None if error
+        :rtype: list or None
+        """
+        # secure extract of data from list used by server thread
         with cls.bits_lock:
             if (address >= 0) and (address + number <= len(cls.bits)):
                 return cls.bits[address: number + address]
@@ -34,6 +44,19 @@ class DataBank:
 
     @classmethod
     def set_bits(cls, address, bit_list):
+        """Write data to server bits space
+
+        :param address: start address
+        :type address: int
+        :param bit_list: a list of bool to write
+        :type bit_list: list
+        :returns: True if success or None if error
+        :rtype: bool or None
+        :raises ValueError: if bit_list members cannot be convert to bool
+        """
+        # ensure bit_list values are bool
+        bit_list = [bool(b) for b in bit_list]
+        # secure copy of data to list used by server thread
         with cls.bits_lock:
             if (address >= 0) and (address + len(bit_list) <= len(cls.bits)):
                 cls.bits[address: address + len(bit_list)] = bit_list
@@ -43,6 +66,16 @@ class DataBank:
 
     @classmethod
     def get_words(cls, address, number=1):
+        """Read data on server words space
+
+        :param address: start address
+        :type address: int
+        :param number: number of words (optional)
+        :type number: int
+        :returns: list of int or None if error
+        :rtype: list or None
+        """
+        # secure extract of data from list used by server thread
         with cls.words_lock:
             if (address >= 0) and (address + number <= len(cls.words)):
                 return cls.words[address: number + address]
@@ -51,6 +84,19 @@ class DataBank:
 
     @classmethod
     def set_words(cls, address, word_list):
+        """Write data to server words space
+
+        :param address: start address
+        :type address: int
+        :param word_list: a list of word to write
+        :type word_list: list
+        :returns: True if success or None if error
+        :rtype: bool or None
+        :raises ValueError: if word_list members cannot be convert to int
+        """
+        # ensure word_list values are int with a max bit length of 16
+        word_list = [int(w) & 0xffff for w in word_list]
+        # secure copy of data to list used by server thread
         with cls.words_lock:
             if (address >= 0) and (address + len(word_list) <= len(cls.words)):
                 cls.words[address: address + len(word_list)] = word_list
