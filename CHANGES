@@ -2,6 +2,9 @@ Revision history for pyModbusTCP
 
 0.x.x Next release
 
+    - add shortcut alias for functions with long names in utils.
+    - rewrite of some functions in utils.
+    - improve test_utils readability.
     - server DataBank enforce type check on set data methods to avoid server crash (thanks to xuantw).
     - now get_2comp can deal with negative python int.
     - remove reference to devel github branch.
