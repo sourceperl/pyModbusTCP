@@ -21,13 +21,16 @@ def get_bits_from_int(val_int, val_size=16):
         :returns: list of boolean "bits" (least significant first)
         :rtype: list
     """
-    # allocate a bit_nb size list
-    bits = [None] * val_size
-    # fill bits list with bit items
-    for i, item in enumerate(bits):
-        bits[i] = bool((val_int >> i) & 0x01)
+    bits = []
+    # populate bits list with bool items of val_int
+    for i in range(val_size):
+        bits.append(bool((val_int >> i) & 0x01))
     # return bits list
     return bits
+
+
+# short alias
+int2bits = get_bits_from_int
 
 
 #########################
@@ -75,16 +78,19 @@ def word_list_to_long(val_list, big_endian=True):
         :returns: list of 32 bits int value
         :rtype: list
     """
-    # allocate list for long int
-    long_list = [None] * int(len(val_list) / 2)
-    # fill registers list with register items
-    for i, item in enumerate(long_list):
+    long_list = []
+    # populate long_list (len is half of 16 bits val_list) with 32 bits value
+    for i in range(int(len(val_list) / 2)):
         if big_endian:
-            long_list[i] = (val_list[i * 2] << 16) + val_list[(i * 2) + 1]
+            long_list.append((val_list[i * 2] << 16) + val_list[(i * 2) + 1])
         else:
-            long_list[i] = (val_list[(i * 2) + 1] << 16) + val_list[i * 2]
+            long_list.append((val_list[(i * 2) + 1] << 16) + val_list[i * 2])
     # return long list
     return long_list
+
+
+# short alias
+words2longs = word_list_to_long
 
 
 def long_list_to_word(val_list, big_endian=True):
@@ -100,18 +106,21 @@ def long_list_to_word(val_list, big_endian=True):
         :returns: list of 16 bits int value
         :rtype: list
     """
-    # allocate list for long int
-    word_list = list()
-    # fill registers list with register items
-    for i, item in enumerate(val_list):
+    word_list = []
+    # populate 16 bits word_list with 32 bits value of val_list
+    for val in val_list:
         if big_endian:
-            word_list.append(val_list[i] >> 16)
-            word_list.append(val_list[i] & 0xffff)
+            word_list.append(val >> 16)
+            word_list.append(val & 0xffff)
         else:
-            word_list.append(val_list[i] & 0xffff)
-            word_list.append(val_list[i] >> 16)
+            word_list.append(val & 0xffff)
+            word_list.append(val >> 16)
     # return long list
     return word_list
+
+
+# short alias
+longs2words = long_list_to_word
 
 
 #########################################################
@@ -142,6 +151,10 @@ def get_2comp(val_int, val_size=16):
     return val_int
 
 
+# short alias
+twos_c = get_2comp
+
+
 def get_list_2comp(val_list, val_size=16):
     """Get the 2's complement of Python list val_list
 
@@ -153,6 +166,10 @@ def get_list_2comp(val_list, val_size=16):
         :rtype: list
     """
     return [get_2comp(val, val_size) for val in val_list]
+
+
+# short alias
+twos_c_l = get_list_2comp
 
 
 ######################
@@ -167,10 +184,10 @@ def crc16(frame):
     :rtype: int
     """
     crc = 0xFFFF
-    for index, item in enumerate(bytearray(frame)):
+    for item in bytearray(frame):
         next_byte = item
         crc ^= next_byte
-        for i in range(8):
+        for _ in range(8):
             lsb = crc & 1
             crc >>= 1
             if lsb:
