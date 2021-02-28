@@ -23,22 +23,30 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(int2bits(0xf007), [True]*3 + [False]*9 + [True]*4)
         self.assertEqual(int2bits(6, 4), [False, True, True, False])
 
-    def test_decode_ieee(self):
+    def test_ieee(self):
         # test IEEE NaN
-        self.assertTrue(math.isnan(decode_ieee(0x7fffffff)))
+        self.assertTrue(math.isnan(decode_ieee(0x7fc00000)))
+        self.assertEqual(encode_ieee(float('nan')), 0x7fc00000)
         # test +/- infinity
         self.assertTrue(math.isinf(decode_ieee(0xff800000)))
         self.assertTrue(math.isinf(decode_ieee(0x7f800000)))
-        # test some values
-        self.assertAlmostEqual(decode_ieee(0x3e99999a), 0.3)
-        self.assertAlmostEqual(decode_ieee(0xbe99999a), -0.3)
-
-    def test_encode_ieee(self):
-        # test IEEE NaN
-        self.assertEqual(encode_ieee(float('nan')), 2143289344)
-        # test some values
-        self.assertAlmostEqual(encode_ieee(0.3), 0x3e99999a)
-        self.assertAlmostEqual(encode_ieee(-0.3), 0xbe99999a)
+        # test big and small values
+        avogad = 6.022140857e+23
+        avo_32 = 0x66ff0c2f
+        avo_64 = 0x44dfe185d2f54b67
+        planck = 6.62606957e-34
+        pla_32 = 0x085c305e
+        pla_64 = 0x390b860bb596a559
+        # IEEE single or double precision format -> float
+        self.assertAlmostEqual(decode_ieee(avo_32), avogad, delta=avogad*1e-7)
+        self.assertAlmostEqual(decode_ieee(avo_64, double=True), avogad)
+        self.assertAlmostEqual(decode_ieee(pla_32), planck)
+        self.assertAlmostEqual(decode_ieee(pla_64, double=True), planck)
+        # float -> IEEE single or double precision format
+        self.assertAlmostEqual(encode_ieee(avogad), avo_32)
+        self.assertAlmostEqual(encode_ieee(avogad, double=True), avo_64)
+        self.assertAlmostEqual(encode_ieee(planck), pla_32)
+        self.assertAlmostEqual(encode_ieee(planck, double=True), pla_64)
 
     def test_word_list_to_long(self):
         # test word_list_to_long() and short alias words2longs()

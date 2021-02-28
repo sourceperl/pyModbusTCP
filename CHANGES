@@ -2,6 +2,7 @@ Revision history for pyModbusTCP
 
 0.x.x Next release
 
+    - encode_ieee and decode_ieee, now support double-precision format with opt double.
     - add shortcut alias for functions with long names in utils.
     - rewrite of some functions in utils.
     - improve test_utils readability.

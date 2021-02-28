@@ -36,30 +36,42 @@ int2bits = get_bits_from_int
 #########################
 # floating-point function
 #########################
-def decode_ieee(val_int):
-    """Decode Python int (32 bits integer) as an IEEE single precision format
+def decode_ieee(val_int, double=False):
+    """Decode Python int (32 bits integer) as an IEEE single or double precision format
 
         Support NaN.
 
-        :param val_int: a 32 bit integer as an int Python value
+        :param val_int: a 32 or 64 bits integer as an int Python value
         :type val_int: int
+        :param double: set to decode as a 64 bits double precision,
+                       default is 32 bits single (optional)
+        :type double: bool
         :returns: float result
         :rtype: float
     """
-    return struct.unpack("f", struct.pack("I", val_int))[0]
+    if double:
+        return struct.unpack("d", struct.pack("Q", val_int))[0]
+    else:
+        return struct.unpack("f", struct.pack("I", val_int))[0]
 
 
-def encode_ieee(val_float):
-    """Encode Python float to int (32 bits integer) as an IEEE single precision
+def encode_ieee(val_float, double=False):
+    """Encode Python float to int (32 bits integer) as an IEEE single or double precision format
 
         Support NaN.
 
         :param val_float: float value to convert
         :type val_float: float
+        :param double: set to encode as a 64 bits double precision,
+                       default is 32 bits single (optional)
+        :type double: bool
         :returns: IEEE 32 bits (single precision) as Python int
         :rtype: int
     """
-    return struct.unpack("I", struct.pack("f", val_float))[0]
+    if double:
+        return struct.unpack("Q", struct.pack("d", val_float))[0]
+    else:
+        return struct.unpack("I", struct.pack("f", val_float))[0]
 
 
 ################################
