@@ -33,50 +33,65 @@ def get_bits_from_int(val_int, val_size=16):
 int2bits = get_bits_from_int
 
 
-#########################
-# floating-point function
-#########################
-def decode_ieee(val_int, double=False):
-    """Decode Python int (32 bits integer) as an IEEE single or double precision format
+def test_bit(value, offset):
+    """Test a bit at offset position
 
-        Support NaN.
-
-        :param val_int: a 32 or 64 bits integer as an int Python value
-        :type val_int: int
-        :param double: set to decode as a 64 bits double precision,
-                       default is 32 bits single (optional)
-        :type double: bool
-        :returns: float result
-        :rtype: float
+    :param value: value of integer to test
+    :type value: int
+    :param offset: bit offset (0 is lsb)
+    :type offset: int
+    :returns: value of bit at offset position
+    :rtype: bool
     """
-    if double:
-        return struct.unpack("d", struct.pack("Q", val_int))[0]
-    else:
-        return struct.unpack("f", struct.pack("I", val_int))[0]
+    mask = 1 << offset
+    return bool(value & mask)
 
 
-def encode_ieee(val_float, double=False):
-    """Encode Python float to int (32 bits integer) as an IEEE single or double precision format
+def set_bit(value, offset):
+    """Set a bit at offset position
 
-        Support NaN.
-
-        :param val_float: float value to convert
-        :type val_float: float
-        :param double: set to encode as a 64 bits double precision,
-                       default is 32 bits single (optional)
-        :type double: bool
-        :returns: IEEE 32 bits (single precision) as Python int
-        :rtype: int
+    :param value: value of integer where set the bit
+    :type value: int
+    :param offset: bit offset (0 is lsb)
+    :type offset: int
+    :returns: value of integer with bit set
+    :rtype: int
     """
-    if double:
-        return struct.unpack("Q", struct.pack("d", val_float))[0]
-    else:
-        return struct.unpack("I", struct.pack("f", val_float))[0]
+    mask = 1 << offset
+    return int(value | mask)
 
 
-################################
-# long format (32 bits) function
-################################
+def reset_bit(value, offset):
+    """Reset a bit at offset position
+
+    :param value: value of integer where reset the bit
+    :type value: int
+    :param offset: bit offset (0 is lsb)
+    :type offset: int
+    :returns: value of integer with bit reset
+    :rtype: int
+    """
+    mask = ~(1 << offset)
+    return int(value & mask)
+
+
+def toggle_bit(value, offset):
+    """Return an integer with the bit at offset position inverted
+
+    :param value: value of integer where invert the bit
+    :type value: int
+    :param offset: bit offset (0 is lsb)
+    :type offset: int
+    :returns: value of integer with bit inverted
+    :rtype: int
+    """
+    mask = 1 << offset
+    return int(value ^ mask)
+
+
+########################
+# Word convert functions
+########################
 def word_list_to_long(val_list, big_endian=True):
     """Word list (16 bits int) to long list (32 bits int)
 
@@ -135,9 +150,9 @@ def long_list_to_word(val_list, big_endian=True):
 longs2words = long_list_to_word
 
 
-#########################################################
-# 2's complement of int value (scalar and list) functions
-#########################################################
+##########################
+# 2's complement functions
+##########################
 def get_2comp(val_int, val_size=16):
     """Get the 2's complement of Python int val_int
 
@@ -184,9 +199,50 @@ def get_list_2comp(val_list, val_size=16):
 twos_c_l = get_list_2comp
 
 
-######################
-# compute CRC of frame
-######################
+###############################
+# IEEE floating-point functions
+###############################
+def decode_ieee(val_int, double=False):
+    """Decode Python int (32 bits integer) as an IEEE single or double precision format
+
+        Support NaN.
+
+        :param val_int: a 32 or 64 bits integer as an int Python value
+        :type val_int: int
+        :param double: set to decode as a 64 bits double precision,
+                       default is 32 bits single (optional)
+        :type double: bool
+        :returns: float result
+        :rtype: float
+    """
+    if double:
+        return struct.unpack("d", struct.pack("Q", val_int))[0]
+    else:
+        return struct.unpack("f", struct.pack("I", val_int))[0]
+
+
+def encode_ieee(val_float, double=False):
+    """Encode Python float to int (32 bits integer) as an IEEE single or double precision format
+
+        Support NaN.
+
+        :param val_float: float value to convert
+        :type val_float: float
+        :param double: set to encode as a 64 bits double precision,
+                       default is 32 bits single (optional)
+        :type double: bool
+        :returns: IEEE 32 bits (single precision) as Python int
+        :rtype: int
+    """
+    if double:
+        return struct.unpack("Q", struct.pack("d", val_float))[0]
+    else:
+        return struct.unpack("I", struct.pack("f", val_float))[0]
+
+
+################
+# misc functions
+################
 def crc16(frame):
     """Compute CRC16
 
@@ -205,62 +261,3 @@ def crc16(frame):
             if lsb:
                 crc ^= 0xA001
     return crc
-
-
-####################
-# misc bit functions
-####################
-def test_bit(value, offset):
-    """Test a bit at offset position
-
-    :param value: value of integer to test
-    :type value: int
-    :param offset: bit offset (0 is lsb)
-    :type offset: int
-    :returns: value of bit at offset position
-    :rtype: bool
-    """
-    mask = 1 << offset
-    return bool(value & mask)
-
-
-def set_bit(value, offset):
-    """Set a bit at offset position
-
-    :param value: value of integer where set the bit
-    :type value: int
-    :param offset: bit offset (0 is lsb)
-    :type offset: int
-    :returns: value of integer with bit set
-    :rtype: int
-    """
-    mask = 1 << offset
-    return int(value | mask)
-
-
-def reset_bit(value, offset):
-    """Reset a bit at offset position
-
-    :param value: value of integer where reset the bit
-    :type value: int
-    :param offset: bit offset (0 is lsb)
-    :type offset: int
-    :returns: value of integer with bit reset
-    :rtype: int
-    """
-    mask = ~(1 << offset)
-    return int(value & mask)
-
-
-def toggle_bit(value, offset):
-    """Return an integer with the bit at offset position inverted
-
-    :param value: value of integer where invert the bit
-    :type value: int
-    :param offset: bit offset (0 is lsb)
-    :type offset: int
-    :returns: value of integer with bit inverted
-    :rtype: int
-    """
-    mask = 1 << offset
-    return int(value ^ mask)
