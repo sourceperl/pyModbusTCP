@@ -4,7 +4,7 @@ Quick start guide
 Overview of the package
 -----------------------
 
-pyModbusTCP give access to modbus/TCP server through the ModbusClient object. 
+pyModbusTCP give access to modbus/TCP server through the ModbusClient object.
 This class is define in the client module.
 
 Since version 0.1.0, a server is available as ModbusServer class. This server
@@ -24,12 +24,12 @@ Package setup
 
 from PyPi::
 
-    # for Python 2.7
-    sudo pip-2.7 install pyModbusTCP
-    # or for Python 3.2
-    sudo pip-3.2 install pyModbusTCP
-    # or upgrade from an older release
-    sudo pip-3.2 install pyModbusTCP --upgrade
+    # for Python 2
+    sudo pip2 install pyModbusTCP
+    # or for Python 3
+    sudo pip3 install pyModbusTCP
+    # upgrade from an older release
+    sudo pip3 install pyModbusTCP --upgrade
 
 from Github::
 
@@ -71,7 +71,7 @@ For open/close socket before/after read or write, do this::
 
         c = ModbusClient(host="localhost", auto_open=True, auto_close=True)
 
-You can also open manually the TCP link. After this, you call a modbus request 
+You can also open manually the TCP link. After this, you call a modbus request
 function (see list in next section)::
 
     if c.open():
@@ -148,7 +148,7 @@ or::
 
     c.debug(True)
 
-when debug is enable all debug message is print on console and you can see 
+when debug is enable all debug message is print on console and you can see
 modbus frame::
 
     c.read_holding_registers(0, 4)
@@ -199,15 +199,23 @@ Sample data mangling, usefull for interface PLC device.
     # display "[True, False, True, False, False, False, False, False]"
     print(utils.get_bits_from_int(0x05, val_size=8))
 
-- gateway between IEEE single precision float and python float::
+- IEEE single/double precision floating-point::
 
     from pyModbusTCP import utils
 
-    # convert python float 0.3 to 0x3e99999a (32 bits IEEE representation)
+    # 32 bits IEEE single precision
+    # encode : python float 0.3 -> int 0x3e99999a
     # display "0x3e99999a"
     print(hex(utils.encode_ieee(0.3)))
-
-    # convert python float 0.3 to 0x3e99999a (32 bits IEEE representation)
+    # decode: python int 0x3e99999a -> float 0.3
     # display "0.300000011921" (it's not 0.3, precision leak with float...)
     print(utils.decode_ieee(0x3e99999a))
+
+    # 64 bits IEEE double precision
+    # encode: python float 6.62606957e-34 -> int 0x390b860bb596a559
+    # display "0x390b860bb596a559"
+    print(hex(utils.encode_ieee(6.62606957e-34, double=True)))
+    # decode: python int 0x390b860bb596a559 -> float 6.62606957e-34
+    # display "6.62606957e-34"
+    print(utils.decode_ieee(0x390b860bb596a559, double=True))
 
