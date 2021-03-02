@@ -92,26 +92,39 @@ def toggle_bit(value, offset):
 ########################
 # Word convert functions
 ########################
-def word_list_to_long(val_list, big_endian=True):
-    """Word list (16 bits int) to long list (32 bits int)
+def word_list_to_long(val_list, big_endian=True, long_long=False):
+    """Word list (16 bits) to long (32 bits) or long long (64 bits) list
 
         By default word_list_to_long() use big endian order. For use little endian, set
-        big_endian param to False.
+        big_endian param to False. Output format could be long long with long_long
+        option set to True.
 
         :param val_list: list of 16 bits int value
         :type val_list: list
         :param big_endian: True for big endian/False for little (optional)
         :type big_endian: bool
+        :param long_long: True for long long 64 bits, default is long 32 bits (optional)
+        :type long_long: bool
         :returns: list of 32 bits int value
         :rtype: list
     """
     long_list = []
-    # populate long_list (len is half of 16 bits val_list) with 32 bits value
-    for i in range(int(len(val_list) / 2)):
+    block_size = 4 if long_long else 2
+    # populate long_list (len is half or quarter of 16 bits val_list) with 32 or 64 bits value
+    for index in range(int(len(val_list) / block_size)):
+        start = block_size * index
+        l = 0
         if big_endian:
-            long_list.append((val_list[i * 2] << 16) + val_list[(i * 2) + 1])
+            if long_long:
+                l += (val_list[start] << 48) + (val_list[start+1] << 32)
+                l += (val_list[start+2] << 16) + (val_list[start+3])
+            else:
+                l += (val_list[start] << 16) + val_list[start+1]
         else:
-            long_list.append((val_list[(i * 2) + 1] << 16) + val_list[i * 2])
+            if long_long:
+                l += (val_list[start+3] << 48) + (val_list[start+2] << 32)
+            l += (val_list[start+1] << 16) + val_list[start]
+        long_list.append(l)
     # return long list
     return long_list
 
@@ -120,28 +133,34 @@ def word_list_to_long(val_list, big_endian=True):
 words2longs = word_list_to_long
 
 
-def long_list_to_word(val_list, big_endian=True):
-    """Long list (32 bits int) to word list (16 bits int)
+def long_list_to_word(val_list, big_endian=True, long_long=False):
+    """Long (32 bits) or long long (64 bits) list to word (16 bits) list
 
         By default long_list_to_word() use big endian order. For use little endian, set
-        big_endian param to False.
+        big_endian param to False. Input format could be long long with long_long
+        param to True.
 
         :param val_list: list of 32 bits int value
         :type val_list: list
         :param big_endian: True for big endian/False for little (optional)
         :type big_endian: bool
+        :param long_long: True for long long 64 bits, default is long 32 bits (optional)
+        :type long_long: bool
         :returns: list of 16 bits int value
         :rtype: list
     """
     word_list = []
-    # populate 16 bits word_list with 32 bits value of val_list
+    # populate 16 bits word_list with 32 or 64 bits value of val_list
     for val in val_list:
+        block_l = []
+        block_l.append(val & 0xffff)
+        block_l.append((val >> 16) & 0xffff)
+        if long_long:
+            block_l.append((val >> 32) & 0xffff)
+            block_l.append((val >> 48) & 0xffff)
         if big_endian:
-            word_list.append(val >> 16)
-            word_list.append(val & 0xffff)
-        else:
-            word_list.append(val & 0xffff)
-            word_list.append(val >> 16)
+            block_l.reverse()
+        word_list.extend(block_l)
     # return long list
     return word_list
 

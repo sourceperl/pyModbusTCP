@@ -55,26 +55,49 @@ class TestUtils(unittest.TestCase):
         # if len of list is odd ignore last value
         self.assertEqual(word_list_to_long([0x1, 0x2, 0x3]), [0x10002])
         # test convert with big and little endian
-        dead_l = [0xdead, 0xbeef]
+        l1 = [0xdead, 0xbeef]
+        l2 = [0xfeed, 0xface, 0xcafe, 0xbeef]
         big = dict(big_endian=True)
         nobig = dict(big_endian=False)
-        self.assertEqual(words2longs(dead_l, **big), [0xdeadbeef])
-        self.assertEqual(words2longs(dead_l*2, **big), [0xdeadbeef]*2)
-        self.assertEqual(words2longs(dead_l, **nobig), [0xbeefdead])
-        self.assertEqual(words2longs(dead_l*2, **nobig), [0xbeefdead]*2)
+        big64 = dict(big_endian=True, long_long=True)
+        nobig64 = dict(big_endian=False, long_long=True)
+        self.assertEqual(words2longs(l1, **big), [0xdeadbeef])
+        self.assertEqual(words2longs(l2, **big), [0xfeedface, 0xcafebeef])
+        self.assertEqual(words2longs(l1, **nobig), [0xbeefdead])
+        self.assertEqual(words2longs(l2, **nobig), [0xfacefeed, 0xbeefcafe])
+        self.assertEqual(words2longs(l1*2, **big64), [0xdeadbeefdeadbeef])
+        self.assertEqual(words2longs(l2*2, **big64), [0xfeedfacecafebeef]*2)
+        self.assertEqual(words2longs(l1*2, **nobig64), [0xbeefdeadbeefdead])
+        self.assertEqual(words2longs(l2*2, **nobig64), [0xbeefcafefacefeed]*2)
 
     def test_long_list_to_word(self):
         # test long_list_to_word() and short alias longs2words()
         # empty list, return empty list
         self.assertEqual(long_list_to_word([]), [])
         # test convert with big and little endian
-        dead_l = [0xdeadbeef]
+        l1 = [0xdeadbeef]
+        l1_big = [0xdead, 0xbeef]
+        l1_nobig = [0xbeef, 0xdead]
+        l1_big64 = [0x0000, 0x0000, 0xdead, 0xbeef]
+        l1_nobig64 = [0xbeef, 0xdead, 0x0000, 0x0000]
+        l2 = [0xfeedface, 0xcafebeef]
+        l2_big = [0xfeed, 0xface, 0xcafe, 0xbeef]
+        l2_nobig = [0xface, 0xfeed, 0xbeef, 0xcafe]
+        l3 = [0xfeedfacecafebeef]
+        l3_big64 = [0xfeed, 0xface, 0xcafe, 0xbeef]
+        l3_nobig64 = [0xbeef, 0xcafe, 0xface, 0xfeed]
         big = dict(big_endian=True)
         nobig = dict(big_endian=False)
-        self.assertEqual(longs2words(dead_l, **big), [0xdead, 0xbeef])
-        self.assertEqual(longs2words(dead_l*2, **big), [0xdead, 0xbeef]*2)
-        self.assertEqual(longs2words(dead_l, **nobig), [0xbeef, 0xdead])
-        self.assertEqual(longs2words(dead_l*2, **nobig), [0xbeef, 0xdead]*2)
+        big64 = dict(big_endian=True, long_long=True)
+        nobig64 = dict(big_endian=False, long_long=True)
+        self.assertEqual(longs2words(l1, **big), l1_big)
+        self.assertEqual(longs2words(l2, **big), l2_big)
+        self.assertEqual(longs2words(l1, **nobig), l1_nobig)
+        self.assertEqual(longs2words(l2, **nobig), l2_nobig)
+        self.assertEqual(longs2words(l1*2, **big64), l1_big64*2)
+        self.assertEqual(longs2words(l3*2, **big64), l3_big64*2)
+        self.assertEqual(longs2words(l1*4, **nobig64), l1_nobig64*4)
+        self.assertEqual(longs2words(l3*4, **nobig64), l3_nobig64*4)
 
     def test_get_2comp(self):
         # test get_2comp() and short alias twos_c()
