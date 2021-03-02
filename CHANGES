@@ -1,6 +1,6 @@
 Revision history for pyModbusTCP
 
-0.x.x Next release
+0.1.10 2021-03-02
 
     - word_list_to_long() and long_list_to_word(), now support 64 bits long long with opt long_long.
     - encode_ieee() and decode_ieee(), now support double-precision format with opt double.
