@@ -1,6 +1,7 @@
 /MANIFEST
 /build/
 /dist/
+/lab/
 *.pyc
 /*.egg-info/
 /.idea/
