@@ -316,7 +316,7 @@ class ModbusServer(object):
                 elif rx_bd_fc is const.WRITE_SINGLE_COIL:
                     (b_address, b_value) = struct.unpack('>HH', rx_body[1:])
                     f_b_value = bool(b_value == 0xFF00)
-                    if DataBank.set_bits(b_address, [f_b_value]):
+                    if DataBank.set_coils(b_address, [f_b_value]):
                         # send write ok frame
                         tx_body = struct.pack('>BHH', rx_bd_fc, b_address, b_value)
                     else:
@@ -324,7 +324,7 @@ class ModbusServer(object):
                 # function Write Single Register (0x06)
                 elif rx_bd_fc is const.WRITE_SINGLE_REGISTER:
                     (w_address, w_value) = struct.unpack('>HH', rx_body[1:])
-                    if DataBank.set_words(w_address, [w_value]):
+                    if DataBank.set_holding_registers(w_address, [w_value]):
                         # send write ok frame
                         tx_body = struct.pack('>BHH', rx_bd_fc, w_address, w_value)
                     else:
@@ -342,7 +342,7 @@ class ModbusServer(object):
                             b_bit_val = struct.unpack('B', rx_body[b_bit_pos:b_bit_pos+1])[0]
                             bits_l[i] = test_bit(b_bit_val, i % 8)
                         # write words to data bank
-                        if DataBank.set_bits(b_address, bits_l):
+                        if DataBank.set_coils(b_address, bits_l):
                             # send write ok frame
                             tx_body = struct.pack('>BHH', rx_bd_fc, b_address, b_count)
                         else:
@@ -361,7 +361,7 @@ class ModbusServer(object):
                             w_offset = i * 2 + 6
                             words_l[i] = struct.unpack('>H', rx_body[w_offset:w_offset + 2])[0]
                         # write words to data bank
-                        if DataBank.set_words(w_address, words_l):
+                        if DataBank.set_holding_registers(w_address, words_l):
                             # send write ok frame
                             tx_body = struct.pack('>BHH', rx_bd_fc, w_address, w_count)
                         else:
