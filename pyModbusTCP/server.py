@@ -2,8 +2,8 @@
 
 # Python module: ModbusServer class (ModBus/TCP Server)
 
-import constants as const
-from  utils import test_bit, set_bit
+from . import constants as const
+from .utils import test_bit, set_bit
 import socket
 import struct
 from threading import Lock, Thread
