@@ -2,8 +2,8 @@
 
 # Python module: ModbusServer class (ModBus/TCP Server)
 
-from . import constants as const
-from .utils import test_bit, set_bit
+import constants as const
+from  utils import test_bit, set_bit
 import socket
 import struct
 from threading import Lock, Thread
@@ -19,13 +19,22 @@ class DataBank:
 
     """ Data class for thread safe access to bits and words space """
 
+
+    # coils, holding registers
     bits_lock = Lock()
     bits = [False] * 0x10000
     words_lock = Lock()
     words = [0] * 0x10000
 
+    # discrete inputs, input registers
+    bits2_lock = Lock()
+    bits2 = [False] * 0x10000
+    words2_lock = Lock()
+    words2 = [0] * 0x10000
+
+
     @classmethod
-    def get_bits(cls, address, number=1):
+    def get_coils(cls, address, number=1):
         """Read data on server bits space
 
         :param address: start address
@@ -41,9 +50,26 @@ class DataBank:
                 return cls.bits[address: number + address]
             else:
                 return None
+    @classmethod
+    def get_discrete_inputs(cls, address, number=1):
+        """Read data on server bits space
+
+        :param address: start address
+        :type address: int
+        :param number: number of bits (optional)
+        :type number: int
+        :returns: list of bool or None if error
+        :rtype: list or None
+        """
+        # secure extract of data from list used by server thread
+        with cls.bits2_lock:
+            if (address >= 0) and (address + number <= len(cls.bits2)):
+                return cls.bits2[address: number + address]
+            else:
+                return None
 
     @classmethod
-    def set_bits(cls, address, bit_list):
+    def set_coils(cls, address, bit_list):
         """Write data to server bits space
 
         :param address: start address
@@ -63,9 +89,30 @@ class DataBank:
                 return True
             else:
                 return None
+    @classmethod
+    def set_discrete_inputs(cls, address, bit_list):
+        """Write data to server bits space
+
+        :param address: start address
+        :type address: int
+        :param bit_list: a list of bool to write
+        :type bit_list: list
+        :returns: True if success or None if error
+        :rtype: bool or None
+        :raises ValueError: if bit_list members cannot be convert to bool
+        """
+        # ensure bit_list values are bool
+        bit_list = [bool(b) for b in bit_list]
+        # secure copy of data to list used by server thread
+        with cls.bits2_lock:
+            if (address >= 0) and (address + len(bit_list) <= len(cls.bits2)):
+                cls.bits2[address: address + len(bit_list)] = bit_list
+                return True
+            else:
+                return None
 
     @classmethod
-    def get_words(cls, address, number=1):
+    def get_holding_registers(cls, address, number=1):
         """Read data on server words space
 
         :param address: start address
@@ -81,9 +128,25 @@ class DataBank:
                 return cls.words[address: number + address]
             else:
                 return None
-
     @classmethod
-    def set_words(cls, address, word_list):
+    def get_input_registers(cls, address, number=1):
+        """Read data on server words space
+
+        :param address: start address
+        :type address: int
+        :param number: number of words (optional)
+        :type number: int
+        :returns: list of int or None if error
+        :rtype: list or None
+        """
+        # secure extract of data from list used by server thread
+        with cls.words2_lock:
+            if (address >= 0) and (address + number <= len(cls.words2)):
+                return cls.words2[address: number + address]
+            else:
+                return None
+    @classmethod
+    def set_holding_registers(cls, address, word_list):
         """Write data to server words space
 
         :param address: start address
@@ -103,7 +166,27 @@ class DataBank:
                 return True
             else:
                 return None
+    @classmethod
+    def set_input_registers(cls, address, word_list):
+        """Write data to server words space
 
+        :param address: start address
+        :type address: int
+        :param word_list: a list of word to write
+        :type word_list: list
+        :returns: True if success or None if error
+        :rtype: bool or None
+        :raises ValueError: if word_list members cannot be convert to int
+        """
+        # ensure word_list values are int with a max bit length of 16
+        word_list = [int(w) & 0xffff for w in word_list]
+        # secure copy of data to list used by server thread
+        with cls.words2_lock:
+            if (address >= 0) and (address + len(word_list) <= len(cls.words2)):
+                cls.words2[address: address + len(word_list)] = word_list
+                return True
+            else:
+                return None
 
 class ModbusServer(object):
 
@@ -146,11 +229,39 @@ class ModbusServer(object):
                 # default except status
                 exp_status = const.EXP_NONE
                 # functions Read Coils (0x01) or Read Discrete Inputs (0x02)
-                if rx_bd_fc in (const.READ_COILS, const.READ_DISCRETE_INPUTS):
+
+                if rx_bd_fc == const.READ_COILS:
+
+                #, const.READ_DISCRETE_INPUTS):
                     (b_address, b_count) = struct.unpack('>HH', rx_body[1:])
                     # check quantity of requested bits
                     if 0x0001 <= b_count <= 0x07D0:
-                        bits_l = DataBank.get_bits(b_address, b_count)
+                        bits_l = DataBank.get_coils(b_address, b_count)
+                        if bits_l:
+                            # allocate bytes list
+                            b_size = int(b_count / 8)
+                            b_size += 1 if (b_count % 8) else 0
+                            bytes_l = [0] * b_size
+                            # populate bytes list with data bank bits
+                            for i, item in enumerate(bits_l):
+                                if item:
+                                    byte_i = int(i/8)
+                                    bytes_l[byte_i] = set_bit(bytes_l[byte_i], i % 8)
+                            # format body of frame with bits
+                            tx_body = struct.pack('BB', rx_bd_fc, len(bytes_l))
+                            # add bytes with bits
+                            for byte in bytes_l:
+                                tx_body += struct.pack('B', byte)
+                        else:
+                            exp_status = const.EXP_DATA_ADDRESS
+                    else:
+                        exp_status = const.EXP_DATA_VALUE
+                elif rx_bd_fc == const.READ_DISCRETE_INPUTS:
+
+                    (b_address, b_count) = struct.unpack('>HH', rx_body[1:])
+                    # check quantity of requested bits
+                    if 0x0001 <= b_count <= 0x07D0:
+                        bits_l = DataBank.get_discrete_inputs(b_address, b_count)
                         if bits_l:
                             # allocate bytes list
                             b_size = int(b_count / 8)
@@ -171,11 +282,27 @@ class ModbusServer(object):
                     else:
                         exp_status = const.EXP_DATA_VALUE
                 # functions Read Holding Registers (0x03) or Read Input Registers (0x04)
-                elif rx_bd_fc in (const.READ_HOLDING_REGISTERS, const.READ_INPUT_REGISTERS):
+
+                elif rx_bd_fc == const.READ_HOLDING_REGISTERS:
+                #, const.READ_INPUT_REGISTERS):
                     (w_address, w_count) = struct.unpack('>HH', rx_body[1:])
                     # check quantity of requested words
                     if 0x0001 <= w_count <= 0x007D:
-                        words_l = DataBank.get_words(w_address, w_count)
+                        words_l = DataBank.get_holding_registers(w_address, w_count)
+                        if words_l:
+                            # format body of frame with words
+                            tx_body = struct.pack('BB', rx_bd_fc, w_count * 2)
+                            for word in words_l:
+                                tx_body += struct.pack('>H', word)
+                        else:
+                            exp_status = const.EXP_DATA_ADDRESS
+                    else:
+                        exp_status = const.EXP_DATA_VALUE
+                elif rx_bd_fc == const.READ_INPUT_REGISTERS:
+                    (w_address, w_count) = struct.unpack('>HH', rx_body[1:])
+                    # check quantity of requested words
+                    if 0x0001 <= w_count <= 0x007D:
+                        words_l = DataBank.get_input_registers(w_address, w_count)
                         if words_l:
                             # format body of frame with words
                             tx_body = struct.pack('BB', rx_bd_fc, w_count * 2)
