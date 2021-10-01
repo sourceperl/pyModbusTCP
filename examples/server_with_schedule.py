@@ -12,7 +12,7 @@ import schedule
 
 # word @0 = second since 00:00 divide by 10 to avoid 16 bits overflow
 def alive_word_job():
-    DataBank.set_words(0, [int(time.time()) % (24*3600) // 10])
+    DataBank.set_holding_registers(0, [int(time.time()) % (24*3600) // 10])
 
 
 if __name__ == "__main__":
