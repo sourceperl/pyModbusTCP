@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # Python module: ModbusClient class (Client ModBus/TCP)
 
 from . import constants as const
