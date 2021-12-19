@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import unittest
 from random import randint, getrandbits
 from pyModbusTCP.server import ModbusServer
@@ -70,11 +68,12 @@ class TestClientServer(unittest.TestCase):
         self.assertEqual(self.client.read_input_registers(0), [0], 'Default value is 0 when server start')
         # single read/write
         self.assertEqual(self.client.write_single_register(0, 0xffff), True)
-        self.assertEqual(self.client.read_input_registers(0), [0xffff])
+        self.assertEqual(self.client.read_holding_registers(0), [0xffff])
         # multi-write at max size
         words_l = [randint(0, 0xffff) for _ in range(0x7b)]
         self.assertEqual(self.client.write_multiple_registers(0, words_l), True)
         self.assertEqual(self.client.read_holding_registers(0, len(words_l)), words_l)
+        self.server.data_bank.set_input_registers(0, words_l)
         self.assertEqual(self.client.read_input_registers(0, len(words_l)), words_l)
         # write over sized
         words_l = [randint(0, 0xffff) for _ in range(0x7c)]
@@ -85,16 +84,19 @@ class TestClientServer(unittest.TestCase):
         # single read/write
         self.assertEqual(self.client.write_single_coil(0, True), True)
         self.assertEqual(self.client.read_coils(0), [True])
+        self.server.data_bank.set_discrete_inputs(0, [True])
         self.assertEqual(self.client.read_discrete_inputs(0), [True])
         # multi-write at min size
         bits_l = [bool(getrandbits(1)) for _ in range(0x1)]
         self.assertEqual(self.client.write_multiple_coils(0, bits_l), True)
         self.assertEqual(self.client.read_coils(0, len(bits_l)), bits_l)
+        self.server.data_bank.set_discrete_inputs(0, bits_l)
         self.assertEqual(self.client.read_discrete_inputs(0, len(bits_l)), bits_l)
         # multi-write at max size
         bits_l = [bool(getrandbits(1)) for _ in range(0x7b0)]
         self.assertEqual(self.client.write_multiple_coils(0, bits_l), True)
         self.assertEqual(self.client.read_coils(0, len(bits_l)), bits_l)
+        self.server.data_bank.set_discrete_inputs(0, bits_l)
         self.assertEqual(self.client.read_discrete_inputs(0, len(bits_l)), bits_l)
         # multi-write over sized
         bits_l = [bool(getrandbits(1)) for _ in range(0x7b1)]

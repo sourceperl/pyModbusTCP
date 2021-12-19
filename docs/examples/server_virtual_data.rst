@@ -3,4 +3,4 @@ Server example with alive word and downtime period
 ==================================================
 
 
-.. literalinclude:: ../../examples/server_with_schedule.py
+.. literalinclude:: ../../examples/server_virtual_data.py

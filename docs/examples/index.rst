@@ -12,4 +12,5 @@ pyModbusTCP examples
    write_bit
    modbus_thread
    server
-   server_with_schedule
+   server_schedule
+   server_virtual_data
