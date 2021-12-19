@@ -1,6 +1,6 @@
-==============================
-Simple blocking server example
-==============================
+===============================
+Server example (simple default)
+===============================
 
 
 .. literalinclude:: ../../examples/server.py

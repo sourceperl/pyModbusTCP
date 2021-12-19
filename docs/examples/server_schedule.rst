@@ -1,6 +1,6 @@
-========================================================================
-An example of Modbus/TCP server with virtual data (system date and time)
-========================================================================
+==================================================
+Server example with alive word and downtime period
+==================================================
 
 
 .. literalinclude:: ../../examples/server_schedule.py
