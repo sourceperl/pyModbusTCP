@@ -51,7 +51,6 @@ class TestModbusClient(unittest.TestCase):
         self.assertEqual(c.unit_id(420), None)
 
 
-# TODO improve this basic test
 class TestClientServer(unittest.TestCase):
 
     def setUp(self):
@@ -73,12 +72,12 @@ class TestClientServer(unittest.TestCase):
         self.assertEqual(self.client.write_single_register(0, 0xffff), True)
         self.assertEqual(self.client.read_input_registers(0), [0xffff])
         # multi-write at max size
-        words_l = [randint(0, 0xffff)] * 0x7b
+        words_l = [randint(0, 0xffff) for _ in range(0x7b)]
         self.assertEqual(self.client.write_multiple_registers(0, words_l), True)
         self.assertEqual(self.client.read_holding_registers(0, len(words_l)), words_l)
         self.assertEqual(self.client.read_input_registers(0, len(words_l)), words_l)
         # write over sized
-        words_l = [randint(0, 0xffff)] * 0x7c
+        words_l = [randint(0, 0xffff) for _ in range(0x7c)]
         self.assertEqual(self.client.write_multiple_registers(0, words_l), None)
         # bit space
         self.assertEqual(self.client.read_coils(0), [False], 'Default value is False when server start')
@@ -88,17 +87,17 @@ class TestClientServer(unittest.TestCase):
         self.assertEqual(self.client.read_coils(0), [True])
         self.assertEqual(self.client.read_discrete_inputs(0), [True])
         # multi-write at min size
-        bits_l = [getrandbits(1)] * 0x1
+        bits_l = [bool(getrandbits(1)) for _ in range(0x1)]
         self.assertEqual(self.client.write_multiple_coils(0, bits_l), True)
         self.assertEqual(self.client.read_coils(0, len(bits_l)), bits_l)
         self.assertEqual(self.client.read_discrete_inputs(0, len(bits_l)), bits_l)
         # multi-write at max size
-        bits_l = [getrandbits(1)] * 0x7b0
+        bits_l = [bool(getrandbits(1)) for _ in range(0x7b0)]
         self.assertEqual(self.client.write_multiple_coils(0, bits_l), True)
         self.assertEqual(self.client.read_coils(0, len(bits_l)), bits_l)
         self.assertEqual(self.client.read_discrete_inputs(0, len(bits_l)), bits_l)
         # multi-write over sized
-        bits_l = [getrandbits(1)] * 0x7b1
+        bits_l = [bool(getrandbits(1)) for _ in range(0x7b1)]
         self.assertEqual(self.client.write_multiple_coils(0, bits_l), None)
 
 
