@@ -15,9 +15,6 @@ The module is currently test on Python 3.4, 3.5, 3.6, 3.7, 3.8, 3.9 and 3.10.
 
 Status:
 
-.. image:: https://api.travis-ci.org/sourceperl/pyModbusTCP.svg?branch=master
-  :target: http://travis-ci.org/sourceperl/pyModbusTCP
-
 .. image:: https://readthedocs.org/projects/pymodbustcp/badge/?version=latest
   :target: http://pymodbustcp.readthedocs.io/en/latest/?badge=latest
 
