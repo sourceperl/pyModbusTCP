@@ -1,5 +1,14 @@
 Revision history for pyModbusTCP
 
+0.2.0 202x-xx-xx
+
+    - modbus server: add ModbusServerDataHandler and DefaultDataBank class.
+    - add or update server examples for new modbus server add.
+    - fix random arrays generation on client test script.
+    - clarify usage of root privilege for open tcp/502 (Errno 13) in server example.
+    - end of support for python 2.7.
+    - remove travis test link.
+
 0.1.10 2021-03-02
 
     - word_list_to_long() and long_list_to_word(), now support 64 bits long long with opt long_long.
