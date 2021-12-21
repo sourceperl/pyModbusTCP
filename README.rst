@@ -1,5 +1,12 @@
-pyModbusTCP
-===========
+.. |badge_tests| image:: https://github.com/sourceperl/pyModbusTCP/actions/workflows/tests.yml/badge.svg?branch=master
+                :target: https://github.com/sourceperl/pyModbusTCP/actions/workflows/tests.yml
+                 :align: right
+
+.. |badge_docs| image:: https://readthedocs.org/projects/pymodbustcp/badge/?version=latest
+               :target: http://pymodbustcp.readthedocs.io/en/latest/?badge=latest
+
+pyModbusTCP |badge_tests| |badge_docs|
+======================================
 
 A simple Modbus/TCP client library for Python.
 
@@ -8,18 +15,11 @@ Since version 0.1.0, a server is also available for test purpose only (don't use
 pyModbusTCP is pure Python code without any extension or external module
 dependency.
 
-Test
-----
+Tests
+-----
 
 The module is currently test on Python 3.5, 3.6, 3.7, 3.8, 3.9 and 3.10.
 
-Status:
-
-.. image:: https://github.com/sourceperl/pyModbusTCP/actions/workflows/tests.yml/badge.svg?branch=master
-  :target: https://github.com/sourceperl/pyModbusTCP/actions/workflows/tests.yml
-
-.. image:: https://readthedocs.org/projects/pymodbustcp/badge/?version=latest
-  :target: http://pymodbustcp.readthedocs.io/en/latest/?badge=latest
 
 Setup
 -----
