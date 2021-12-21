@@ -39,14 +39,14 @@ class ModbusServerDataBank:
     """ Class for thread safe access to data space """
 
     class Conf(NamedTuple):
-        coils_size: int = 0x10000
-        coils_default_value: bool = False
-        d_inputs_size: int = 0x10000
-        d_inputs_default_value: bool = False
-        h_regs_size: int = 0x10000
-        h_regs_default_value: int = 0
-        i_regs_size: int = 0x10000
-        i_regs_default_value: int = 0
+        coils_size = 0x10000
+        coils_default_value = False
+        d_inputs_size = 0x10000
+        d_inputs_default_value = False
+        h_regs_size = 0x10000
+        h_regs_default_value = 0
+        i_regs_size = 0x10000
+        i_regs_default_value = 0
 
     def __init__(self, conf=Conf()):
         # private
