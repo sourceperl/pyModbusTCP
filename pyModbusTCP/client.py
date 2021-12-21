@@ -156,7 +156,7 @@ class ModbusClient:
         except socket.error:
             pass
         # DNS name ?
-        if re.match('^[a-z][a-z0-9\.\-]+$', hostname):
+        if re.match(r'^[a-z][a-z0-9.\-]+$', hostname):
             self.__hostname = hostname
             return self.__hostname
         else:
@@ -1028,7 +1028,8 @@ class ModbusClient:
             s += i + ' '
         print(s)
 
-    def _add_crc(self, frame):
+    @staticmethod
+    def _add_crc(frame):
         """Add CRC to modbus frame (for RTU mode)
 
         :param frame: modbus RTU frame
@@ -1039,7 +1040,8 @@ class ModbusClient:
         crc = struct.pack('<H', crc16(frame))
         return frame + crc
 
-    def _crc_is_ok(self, frame):
+    @staticmethod
+    def _crc_is_ok(frame):
         """Check the CRC of modbus RTU frame
 
         :param frame: modbus RTU frame with CRC
