@@ -1,6 +1,5 @@
 .. |badge_tests| image:: https://github.com/sourceperl/pyModbusTCP/actions/workflows/tests.yml/badge.svg?branch=master
                 :target: https://github.com/sourceperl/pyModbusTCP/actions/workflows/tests.yml
-                 :align: right
 
 .. |badge_docs| image:: https://readthedocs.org/projects/pymodbustcp/badge/?version=latest
                :target: http://pymodbustcp.readthedocs.io/en/latest/?badge=latest
