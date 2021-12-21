@@ -8,38 +8,56 @@ from .utils import test_bit, set_bit
 import socket
 import struct
 from threading import Lock, Thread
-
+from typing import NamedTuple
 from socketserver import BaseRequestHandler, ThreadingTCPServer
-
+from warnings import warn
 
 
 class DataBank:
-    """ This is historical data class provide for backward compatibility """
-    pass
+    """ This is historical data class provide for warn about DataBank change """
+
+    WARN_MSG = 'This class is deprecated, use ModbusServerDataBank instance instead.'
+
+    @classmethod
+    def get_bits(cls, *_args, **_kwargs):
+        warn(cls.WARN_MSG, DeprecationWarning, stacklevel=2)
+
+    @classmethod
+    def set_bits(cls, *_args, **_kwargs):
+        warn(cls.WARN_MSG, DeprecationWarning, stacklevel=2)
+
+    @classmethod
+    def get_words(cls, *_args, **_kwargs):
+        warn(cls.WARN_MSG, DeprecationWarning, stacklevel=2)
+
+    @classmethod
+    def set_words(cls, *_args, **_kwargs):
+        warn(cls.WARN_MSG, DeprecationWarning, stacklevel=2)
 
 
-class DefaultDataBank:
+class ModbusServerDataBank:
     """ Class for thread safe access to data space """
 
-    def __init__(self, coils=True, d_inputs=True, h_regs=True, i_regs=True):
+    class Conf(NamedTuple):
+        coils_size: int = 0x10000
+        coils_default_value: bool = False
+        d_inputs_size: int = 0x10000
+        d_inputs_default_value: bool = False
+        h_regs_size: int = 0x10000
+        h_regs_default_value: int = 0
+        i_regs_size: int = 0x10000
+        i_regs_default_value: int = 0
+
+    def __init__(self, conf=Conf()):
         # private
         self._coils_lock = Lock()
-        self._coils = [False] * 0x10000 if coils else []
+        self._coils = [conf.coils_default_value] * conf.coils_size
         self._d_inputs_lock = Lock()
-        self._d_inputs = [False] * 0x10000 if d_inputs else []
+        self._d_inputs = [conf.d_inputs_default_value] * conf.d_inputs_size
         self._h_regs_lock = Lock()
-        self._h_regs = [0] * 0x10000 if h_regs else []
+        self._h_regs = [conf.h_regs_default_value] * conf.h_regs_size
         self._i_regs_lock = Lock()
-        self._i_regs = [0] * 0x10000 if i_regs else []
-
-        # history compatibility
-        global DataBank
-        DataBank = self
-        # set alias for historical compatibility
-        DataBank.get_bits = self.get_coils
-        DataBank.set_bits = self.set_coils
-        DataBank.get_words = self.get_holding_registers
-        DataBank.set_words = self.set_holding_registers
+        self._i_regs = [conf.i_regs_default_value] * conf.i_regs_size
 
     def get_coils(self, address, number=1):
         """Read data on server coils space
@@ -215,12 +233,12 @@ class ModbusServerDataHandler:
 
         Modbus server data handler constructor.
 
-        :param data_bank: a reference to custom ModbusServerDataHandler
-        :type data_bank: ModbusServerDataHandler
+        :param data_bank: a reference to custom DefaultDataBank
+        :type data_bank: ModbusServerDataBank
         """
         if data_bank is None:
-            self.data_bank = DefaultDataBank()
-        elif isinstance(data_bank, DefaultDataBank):
+            self.data_bank = ModbusServerDataBank()
+        elif isinstance(data_bank, ModbusServerDataBank):
             self.data_bank = data_bank
         else:
             raise ValueError('data_bank is invalid')
@@ -317,17 +335,18 @@ class ModbusServer:
                 # close connection if function code is inconsistent
                 if rx_bd_fc > 0x7F:
                     break
-                # default except status
+                # some default value
                 exp_status = EXP_NONE
+                tx_body = b''
                 # functions Read Coils (0x01) or Read Discrete Inputs (0x02)
                 if rx_bd_fc in (READ_COILS, READ_DISCRETE_INPUTS):
                     (b_address, b_count) = struct.unpack('>HH', rx_body[1:])
                     # check quantity of requested bits
                     if 0x0001 <= b_count <= 0x07D0:
                         if rx_bd_fc == READ_COILS:
-                            ret = self.server._data_hdl.read_coils(b_address, b_count)
+                            ret = self.server.data_hdl.read_coils(b_address, b_count)
                         else:
-                            ret = self.server._data_hdl.read_d_inputs(b_address, b_count)
+                            ret = self.server.data_hdl.read_d_inputs(b_address, b_count)
                         if ret.ok:
                             # allocate bytes list
                             b_size = int(b_count / 8)
@@ -339,7 +358,7 @@ class ModbusServer:
                                     byte_i = int(i / 8)
                                     bytes_l[byte_i] = set_bit(bytes_l[byte_i], i % 8)
                             # format body of frame with bits
-                            tx_body = struct.pack('BB', rx_bd_fc, len(bytes_l))
+                            tx_body += struct.pack('BB', rx_bd_fc, len(bytes_l))
                             # add bytes with bits
                             for byte in bytes_l:
                                 tx_body += struct.pack('B', byte)
@@ -353,12 +372,12 @@ class ModbusServer:
                     # check quantity of requested words
                     if 0x0001 <= w_count <= 0x007D:
                         if rx_bd_fc == READ_HOLDING_REGISTERS:
-                            ret = self.server._data_hdl.read_h_regs(w_address, w_count)
+                            ret = self.server.data_hdl.read_h_regs(w_address, w_count)
                         else:
-                            ret = self.server._data_hdl.read_i_regs(w_address, w_count)
+                            ret = self.server.data_hdl.read_i_regs(w_address, w_count)
                         if ret.ok:
                             # format body of frame with words
-                            tx_body = struct.pack('BB', rx_bd_fc, w_count * 2)
+                            tx_body += struct.pack('BB', rx_bd_fc, w_count * 2)
                             for word in ret.data:
                                 tx_body += struct.pack('>H', word)
                         else:
@@ -369,19 +388,19 @@ class ModbusServer:
                 elif rx_bd_fc is WRITE_SINGLE_COIL:
                     (b_address, b_value) = struct.unpack('>HH', rx_body[1:])
                     f_b_value = bool(b_value == 0xFF00)
-                    ret = self.server._data_hdl.write_coils(b_address, [f_b_value])
+                    ret = self.server.data_hdl.write_coils(b_address, [f_b_value])
                     if ret.ok:
                         # send write ok frame
-                        tx_body = struct.pack('>BHH', rx_bd_fc, b_address, b_value)
+                        tx_body += struct.pack('>BHH', rx_bd_fc, b_address, b_value)
                     else:
                         exp_status = ret.exp_code
                 # function Write Single Register (0x06)
                 elif rx_bd_fc is WRITE_SINGLE_REGISTER:
                     (w_address, w_value) = struct.unpack('>HH', rx_body[1:])
-                    ret = self.server._data_hdl.write_h_regs(w_address, [w_value])
+                    ret = self.server.data_hdl.write_h_regs(w_address, [w_value])
                     if ret.ok:
                         # send write ok frame
-                        tx_body = struct.pack('>BHH', rx_bd_fc, w_address, w_value)
+                        tx_body += struct.pack('>BHH', rx_bd_fc, w_address, w_value)
                     else:
                         exp_status = ret.exp_code
                 # function Write Multiple Coils (0x0F)
@@ -397,10 +416,10 @@ class ModbusServer:
                             b_bit_val = struct.unpack('B', rx_body[b_bit_pos:b_bit_pos + 1])[0]
                             bits_l[i] = test_bit(b_bit_val, i % 8)
                         # write words to data bank
-                        ret = self.server._data_hdl.write_coils(b_address, bits_l)
+                        ret = self.server.data_hdl.write_coils(b_address, bits_l)
                         if ret.ok:
                             # send write ok frame
-                            tx_body = struct.pack('>BHH', rx_bd_fc, b_address, b_count)
+                            tx_body += struct.pack('>BHH', rx_bd_fc, b_address, b_count)
                         else:
                             exp_status = ret.exp_code
                     else:
@@ -417,10 +436,10 @@ class ModbusServer:
                             w_offset = i * 2 + 6
                             words_l[i] = struct.unpack('>H', rx_body[w_offset:w_offset + 2])[0]
                         # write words to data bank
-                        ret = self.server._data_hdl.write_h_regs(w_address, words_l)
+                        ret = self.server.data_hdl.write_h_regs(w_address, words_l)
                         if ret.ok:
                             # send write ok frame
-                            tx_body = struct.pack('>BHH', rx_bd_fc, w_address, w_count)
+                            tx_body += struct.pack('>BHH', rx_bd_fc, w_address, w_count)
                         else:
                             exp_status = ret.exp_code
                     else:
@@ -430,14 +449,15 @@ class ModbusServer:
                 # check exception
                 if exp_status != EXP_NONE:
                     # format body of frame with exception status
-                    tx_body = struct.pack('BB', rx_bd_fc + 0x80, exp_status)
+                    tx_body += struct.pack('BB', rx_bd_fc + 0x80, exp_status)
                 # build frame header
                 tx_head = struct.pack('>HHHB', rx_hd_tr_id, rx_hd_pr_id, len(tx_body) + 1, rx_hd_unit_id)
                 # send frame
                 self.request.send(tx_head + tx_body)
             self.request.close()
 
-    def __init__(self, host='localhost', port=MODBUS_PORT, no_block=False, ipv6=False, data_bank=None, data_handler=None):
+    def __init__(self, host='localhost', port=MODBUS_PORT, no_block=False, ipv6=False, data_bank=None,
+                 data_handler=None):
         """Constructor
 
         Modbus server constructor.
@@ -450,31 +470,31 @@ class ModbusServer:
         :type no_block: bool
         :param ipv6: use ipv6 stack
         :type ipv6: bool
+        :param data_bank: a reference to custom DefaultDataBank
+        :type data_bank: ModbusServerDataBank
         :param data_handler: a reference to custom ModbusServerDataHandler
         :type data_handler: ModbusServerDataHandler
-        :param data_bank: a reference to custom DefaultDataBank
-        :type data_bank: DefaultDataBank
         """
         # public
         self.host = host
         self.port = port
         self.no_block = no_block
         self.ipv6 = ipv6
+        # default data handler is ModbusServerDataHandler or a child of it
+        if data_handler is None:
+            self.data_hdl = ModbusServerDataHandler(data_bank=data_bank)
+        elif isinstance(data_handler, ModbusServerDataHandler):
+            if data_handler:
+                data_handler.data_bank = data_bank
+            self.data_hdl = data_handler
+        else:
+            raise ValueError('data_handler is invalid')
+        # data bank shortcut
+        self.data_bank = self.data_hdl.data_bank
         # private
         self._running = False
         self._service = None
         self._serve_th = None
-        # default data handler is ModbusServerDataHandler or a child of it
-        if data_handler is None:
-            self._data_hdl = ModbusServerDataHandler(data_bank=data_bank)
-        elif isinstance(data_handler, ModbusServerDataHandler):
-            if data_handler:
-                data_handler.data_bank = data_bank
-            self._data_hdl = data_handler
-        else:
-            raise ValueError('data_handler is invalid')
-        # public
-        self.data_bank = self._data_hdl.data_bank
 
     def start(self):
         """Start the server.
@@ -488,8 +508,8 @@ class ModbusServer:
             ThreadingTCPServer.daemon_threads = True
             # init server
             self._service = ThreadingTCPServer((self.host, self.port), self.ModbusService, bind_and_activate=False)
-            # pass data handler for server threads (access in handle() via self.server)
-            self._service._data_hdl = self._data_hdl
+            # pass data handler for server threads (access via self.server in ModbusService.handle())
+            self._service.data_hdl = self.data_hdl
             # set socket options
             self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
@@ -526,7 +546,7 @@ class ModbusServer:
         try:
             self._running = True
             self._service.serve_forever()
-        except:
+        except Exception:
             self._service.server_close()
             raise
         finally:

@@ -7,13 +7,14 @@
 # data address except.
 
 import argparse
-from pyModbusTCP.server import ModbusServer, DefaultDataBank
+from pyModbusTCP.server import ModbusServer, ModbusServerDataBank
 from datetime import datetime
 
 
-class MyDataBank(DefaultDataBank):
+class MyDataBank(ModbusServerDataBank):
     def __init__(self):
-        super().__init__(coils=False, d_inputs=False, h_regs=False, i_regs=False)
+        conf = ModbusServerDataBank.Conf(coils_size=0, d_inputs_size=0, h_regs_size=0, i_regs_size=0)
+        super().__init__(conf=conf)
 
     def get_holding_registers(self, address, number=1):
         now = datetime.now()
