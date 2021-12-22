@@ -935,12 +935,15 @@ class ModbusClient:
                 return None
             rx_header_array = bytearray(rx_header)
             if rx_header_array[1] in [0x01, 0x02, 0x03, 0x04]:
-                rx_buffer = rx_header + self._recv_all(rx_header_array[2] + 2)
+                rx_body = self._recv_all(rx_header_array[2] + 2)
             elif rx_header_array[1] in [0x05, 0x06, 0x10]:
-                rx_buffer = rx_header + self._recv_all(3 + 2)
+                rx_body = self._recv_all(3 + 2)
             else:
                 # receive modbus RTU frame (max size is 256 bytes)
-                rx_buffer = rx_header + self._recv(253)
+                rx_body = self._recv(253)
+            if not rx_body:
+                return None
+            rx_buffer = rx_header + rx_body
             rx_frame = rx_buffer
             # dump frame
             if self.__debug:
