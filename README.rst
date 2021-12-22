@@ -111,8 +111,8 @@ Documentation
 
 Documentation available online at http://pymodbustcp.readthedocs.io/.
 
-Know issue
-----------
+Know issue for older releases (v0.1.x) that support python 2
+------------------------------------------------------------
 
 On windows OS with older Python version (<3), win_inet_pton module is require. This avoid exception "AttributeError:
 'module' object has no attribute 'inet_pton'".
