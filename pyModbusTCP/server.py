@@ -8,7 +8,6 @@ from .utils import test_bit, set_bit
 import socket
 import struct
 from threading import Lock, Thread
-from typing import NamedTuple
 from socketserver import BaseRequestHandler, ThreadingTCPServer
 from warnings import warn
 
@@ -38,26 +37,41 @@ class DataBank:
 class ModbusServerDataBank:
     """ Class for thread safe access to data space """
 
-    class Conf(NamedTuple):
-        coils_size = 0x10000
-        coils_default_value = False
-        d_inputs_size = 0x10000
-        d_inputs_default_value = False
-        h_regs_size = 0x10000
-        h_regs_default_value = 0
-        i_regs_size = 0x10000
-        i_regs_default_value = 0
+    class Conf:
+        def __init__(self, coils_size=0x10000, coils_default_value=False,
+                     d_inputs_size = 0x10000, d_inputs_default_value = False,
+                     h_regs_size = 0x10000, h_regs_default_value = 0,
+                     i_regs_size = 0x10000, i_regs_default_value = 0,
+                     virtual_mode=False):
+            # public
+            self.coils_size = int(coils_size)
+            self.coils_default_value = bool(coils_default_value)
+            self.d_inputs_size = int(d_inputs_size)
+            self.d_inputs_default_value = bool(d_inputs_default_value)
+            self.h_regs_size = int(h_regs_size)
+            self.h_regs_default_value = int(h_regs_default_value)
+            self.i_regs_size = int(i_regs_size)
+            self.i_regs_default_value = int(i_regs_default_value)
+            self.virtual_mode = virtual_mode
+            # specific modes (override other values)
+            if self.virtual_mode:
+                self.coils_size = 0
+                self.d_inputs_size = 0
+                self.h_regs_size = 0
+                self.i_regs_size = 0
 
     def __init__(self, conf=Conf()):
+        # public
+        self.conf = conf
         # private
         self._coils_lock = Lock()
-        self._coils = [conf.coils_default_value] * conf.coils_size
+        self._coils = [self.conf.coils_default_value] * self.conf.coils_size
         self._d_inputs_lock = Lock()
-        self._d_inputs = [conf.d_inputs_default_value] * conf.d_inputs_size
+        self._d_inputs = [self.conf.d_inputs_default_value] * self.conf.d_inputs_size
         self._h_regs_lock = Lock()
-        self._h_regs = [conf.h_regs_default_value] * conf.h_regs_size
+        self._h_regs = [self.conf.h_regs_default_value] * self.conf.h_regs_size
         self._i_regs_lock = Lock()
-        self._i_regs = [conf.i_regs_default_value] * conf.i_regs_size
+        self._i_regs = [self.conf.i_regs_default_value] * self.conf.i_regs_size
 
     def get_coils(self, address, number=1):
         """Read data on server coils space

@@ -5,6 +5,8 @@
 # Map the system date and time to @ 0 to 5 on the "holding registers" space. Only the reading
 # of these registers in this address space is authorized. All other requests return an illegal
 # data address except.
+#
+# run this as root to listen on TCP priviliged ports (<= 1024) to avoid [Errno 13]
 
 import argparse
 from pyModbusTCP.server import ModbusServer, ModbusServerDataBank
@@ -13,15 +15,20 @@ from datetime import datetime
 
 class MyDataBank(ModbusServerDataBank):
     def __init__(self):
-        conf = ModbusServerDataBank.Conf(coils_size=0, d_inputs_size=0, h_regs_size=0, i_regs_size=0)
+        # turn off allocation of memory for standard modbus object types
+        # only "holding registers" space will be replace by dynamic build values
+        conf = ModbusServerDataBank.Conf(virtual_mode=True)
         super().__init__(conf=conf)
 
     def get_holding_registers(self, address, number=1):
+        # populate virtual registers dict with current datetime values
         now = datetime.now()
-        virtual_d = {0: now.day, 1: now.month, 2: now.year,
-                     3: now.hour, 4: now.minute, 5: now.second}
+        v_regs_d = {0: now.day, 1: now.month, 2: now.year,
+                    3: now.hour, 4: now.minute, 5: now.second}
+        # build a list of virtual regs to return to server data handler
+        # return None if any of virtual registers is missing
         try:
-            return [virtual_d[a] for a in range(address, address+number)]
+            return [v_regs_d[a] for a in range(address, address+number)]
         except KeyError:
             return None
 
