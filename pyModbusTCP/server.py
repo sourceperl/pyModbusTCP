@@ -62,7 +62,6 @@ class ModbusServerInfos:
         return '[%s] %s' % (mbap_str, pdu_str)
 
 
-
 class ModbusServerDataBank:
     """ Class for thread safe access to data space """
 
@@ -82,7 +81,7 @@ class ModbusServerDataBank:
             self.i_regs_size = int(i_regs_size)
             self.i_regs_default_value = int(i_regs_default_value)
             self.virtual_mode = virtual_mode
-            # specific modes (override other values)
+            # specific modes (override some values)
             if self.virtual_mode:
                 self.coils_size = 0
                 self.d_inputs_size = 0
@@ -166,7 +165,6 @@ class ModbusServerDataBank:
             for address, from_value, to_value in changes_list:
                 self.on_coils_change(address, from_value, to_value, srv_infos=_srv_infos)
         return True
-
 
     def get_discrete_inputs(self, address, number=1, _srv_infos=None):
         """Read data on server discrete inputs space
@@ -453,7 +451,7 @@ class ModbusServer:
                     break
                 # some default value
                 exp_status = EXP_NONE
-                tx_body = b''
+                tx_pdu = b''
                 # set modbus server infos
                 client_addr, client_port = self.request.getpeername()
                 srv_infos = ModbusServerInfos(client_addr=client_addr, client_port=client_port,
@@ -478,10 +476,10 @@ class ModbusServer:
                                     byte_i = int(i / 8)
                                     bytes_l[byte_i] = set_bit(bytes_l[byte_i], i % 8)
                             # format body of frame with bits
-                            tx_body += struct.pack('BB', rx_bd_fc, len(bytes_l))
+                            tx_pdu += struct.pack('BB', rx_bd_fc, len(bytes_l))
                             # add bytes with bits
                             for byte in bytes_l:
-                                tx_body += struct.pack('B', byte)
+                                tx_pdu += struct.pack('B', byte)
                         else:
                             exp_status = ret.exp_code
                     else:
@@ -497,9 +495,9 @@ class ModbusServer:
                             ret = self.server.data_hdl.read_i_regs(w_address, w_count, srv_infos=srv_infos)
                         if ret.ok:
                             # format body of frame with words
-                            tx_body += struct.pack('BB', rx_bd_fc, w_count * 2)
+                            tx_pdu += struct.pack('BB', rx_bd_fc, w_count * 2)
                             for word in ret.data:
-                                tx_body += struct.pack('>H', word)
+                                tx_pdu += struct.pack('>H', word)
                         else:
                             exp_status = ret.exp_code
                     else:
@@ -511,7 +509,7 @@ class ModbusServer:
                     ret = self.server.data_hdl.write_coils(b_address, [f_b_value], srv_infos=srv_infos)
                     if ret.ok:
                         # send write ok frame
-                        tx_body += struct.pack('>BHH', rx_bd_fc, b_address, b_value)
+                        tx_pdu += struct.pack('>BHH', rx_bd_fc, b_address, b_value)
                     else:
                         exp_status = ret.exp_code
                 # function Write Single Register (0x06)
@@ -520,7 +518,7 @@ class ModbusServer:
                     ret = self.server.data_hdl.write_h_regs(w_address, [w_value], srv_infos=srv_infos)
                     if ret.ok:
                         # send write ok frame
-                        tx_body += struct.pack('>BHH', rx_bd_fc, w_address, w_value)
+                        tx_pdu += struct.pack('>BHH', rx_bd_fc, w_address, w_value)
                     else:
                         exp_status = ret.exp_code
                 # function Write Multiple Coils (0x0F)
@@ -539,7 +537,7 @@ class ModbusServer:
                         ret = self.server.data_hdl.write_coils(b_address, bits_l, srv_infos=srv_infos)
                         if ret.ok:
                             # send write ok frame
-                            tx_body += struct.pack('>BHH', rx_bd_fc, b_address, b_count)
+                            tx_pdu += struct.pack('>BHH', rx_bd_fc, b_address, b_count)
                         else:
                             exp_status = ret.exp_code
                     else:
@@ -559,7 +557,7 @@ class ModbusServer:
                         ret = self.server.data_hdl.write_h_regs(w_address, words_l, srv_infos=srv_infos)
                         if ret.ok:
                             # send write ok frame
-                            tx_body += struct.pack('>BHH', rx_bd_fc, w_address, w_count)
+                            tx_pdu += struct.pack('>BHH', rx_bd_fc, w_address, w_count)
                         else:
                             exp_status = ret.exp_code
                     else:
@@ -569,15 +567,15 @@ class ModbusServer:
                 # check exception
                 if exp_status != EXP_NONE:
                     # format body of frame with exception status
-                    tx_body += struct.pack('BB', rx_bd_fc + 0x80, exp_status)
+                    tx_pdu += struct.pack('BB', rx_bd_fc + 0x80, exp_status)
                 # build frame header
-                tx_head = struct.pack('>HHHB', rx_hd_tr_id, rx_hd_pr_id, len(tx_body) + 1, rx_hd_unit_id)
+                tx_mbap = struct.pack('>HHHB', rx_hd_tr_id, rx_hd_pr_id, len(tx_pdu) + 1, rx_hd_unit_id)
                 # send frame
-                self.request.send(tx_head + tx_body)
+                self.request.send(tx_mbap + tx_pdu)
             self.request.close()
 
-    def __init__(self, host='localhost', port=MODBUS_PORT, no_block=False, ipv6=False, data_bank=None,
-                 data_handler=None):
+    def __init__(self, host='localhost', port=MODBUS_PORT, no_block=False, ipv6=False,
+                 data_bank=None, data_hdl=None):
         """Constructor
 
         Modbus server constructor.
@@ -592,8 +590,8 @@ class ModbusServer:
         :type ipv6: bool
         :param data_bank: a reference to custom DefaultDataBank
         :type data_bank: ModbusServerDataBank
-        :param data_handler: a reference to custom ModbusServerDataHandler
-        :type data_handler: ModbusServerDataHandler
+        :param data_hdl: a reference to custom ModbusServerDataHandler
+        :type data_hdl: ModbusServerDataHandler
         """
         # public
         self.host = host
@@ -601,14 +599,14 @@ class ModbusServer:
         self.no_block = no_block
         self.ipv6 = ipv6
         # default data handler is ModbusServerDataHandler or a child of it
-        if data_handler is None:
+        if data_hdl is None:
             self.data_hdl = ModbusServerDataHandler(data_bank=data_bank)
-        elif isinstance(data_handler, ModbusServerDataHandler):
-            if data_handler:
-                data_handler.data_bank = data_bank
-            self.data_hdl = data_handler
+        elif isinstance(data_hdl, ModbusServerDataHandler):
+            self.data_hdl = data_hdl
+            if data_bank:
+                raise ValueError('when data_hdl is set, you must define data_bank in it')
         else:
-            raise ValueError('data_handler is invalid')
+            raise ValueError('data_hdl is not a ModbusServerDataHandler (or child of it) instance')
         # data bank shortcut
         self.data_bank = self.data_hdl.data_bank
         # private
@@ -619,9 +617,9 @@ class ModbusServer:
     def start(self):
         """Start the server.
 
-        Do nothing if server is already running.
-        This function will block if no_block is not set to True.
+        This function will block if no_block is not set.
         """
+        # do nothing if server is already running
         if not self.is_run:
             # set class attribute
             ThreadingTCPServer.address_family = socket.AF_INET6 if self.ipv6 else socket.AF_INET
