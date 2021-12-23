@@ -4,6 +4,13 @@ from pyModbusTCP.server import ModbusServer
 from pyModbusTCP.client import ModbusClient
 
 
+# some const
+MAX_READABLE_REGS = 125
+MAX_WRITABLE_REGS = 123
+MAX_READABLE_BITS = 2000
+MAX_WRITABLE_BITS = 1968
+
+
 class TestModbusClient(unittest.TestCase):
     def test_except_init_host(self):
         # should raise an exception for bad hostname
@@ -61,47 +68,91 @@ class TestClientServer(unittest.TestCase):
 
     def tearDown(self):
         self.client.close()
+        self.server.stop()
 
-    def test_read_and_write(self):
-        # word space
-        self.assertEqual(self.client.read_holding_registers(0), [0], 'Default value is 0 when server start')
-        self.assertEqual(self.client.read_input_registers(0), [0], 'Default value is 0 when server start')
-        # single read/write
-        self.assertEqual(self.client.write_single_register(0, 0xffff), True)
-        self.assertEqual(self.client.read_holding_registers(0), [0xffff])
-        # multi-write at max size
-        words_l = [randint(0, 0xffff) for _ in range(0x7b)]
-        self.assertEqual(self.client.write_multiple_registers(0, words_l), True)
-        self.assertEqual(self.client.read_holding_registers(0, len(words_l)), words_l)
-        self.server.data_bank.set_input_registers(0, words_l)
-        self.assertEqual(self.client.read_input_registers(0, len(words_l)), words_l)
-        # write over sized
-        words_l = [randint(0, 0xffff) for _ in range(0x7c)]
-        self.assertEqual(self.client.write_multiple_registers(0, words_l), None)
-        # bit space
-        self.assertEqual(self.client.read_coils(0), [False], 'Default value is False when server start')
-        self.assertEqual(self.client.read_discrete_inputs(0), [False], 'Default value is False when server start')
-        # single read/write
-        self.assertEqual(self.client.write_single_coil(0, True), True)
-        self.assertEqual(self.client.read_coils(0), [True])
-        self.server.data_bank.set_discrete_inputs(0, [True])
-        self.assertEqual(self.client.read_discrete_inputs(0), [True])
-        # multi-write at min size
-        bits_l = [bool(getrandbits(1)) for _ in range(0x1)]
-        self.assertEqual(self.client.write_multiple_coils(0, bits_l), True)
-        self.assertEqual(self.client.read_coils(0, len(bits_l)), bits_l)
-        self.server.data_bank.set_discrete_inputs(0, bits_l)
-        self.assertEqual(self.client.read_discrete_inputs(0, len(bits_l)), bits_l)
-        # multi-write at max size
-        bits_l = [bool(getrandbits(1)) for _ in range(0x7b0)]
-        self.assertEqual(self.client.write_multiple_coils(0, bits_l), True)
-        self.assertEqual(self.client.read_coils(0, len(bits_l)), bits_l)
-        self.server.data_bank.set_discrete_inputs(0, bits_l)
-        self.assertEqual(self.client.read_discrete_inputs(0, len(bits_l)), bits_l)
-        # multi-write over sized
-        bits_l = [bool(getrandbits(1)) for _ in range(0x7b1)]
-        self.assertEqual(self.client.write_multiple_coils(0, bits_l), None)
-
+    def test_coils_space(self):
+        #### coils ####
+        for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_WRITABLE_BITS]:
+            # coils space: default value at startup
+            self.assertEqual(self.client.read_coils(addr), [False], 'Default value is False when server start')
+            # coils space: single read/write
+            bit = bool(getrandbits(1))
+            self.assertEqual(self.client.write_single_coil(addr, bit), True)
+            self.assertEqual(self.client.read_coils(addr), [bit])
+            # coils space: multiple read/write at min size
+            bits_l = [bool(getrandbits(1))]
+            self.assertEqual(self.client.write_multiple_coils(addr, bits_l), True)
+            self.assertEqual(self.client.read_coils(addr, len(bits_l)), bits_l)
+            # coils space: multiple read/write at max size
+            bits_l = [bool(getrandbits(1)) for _ in range(MAX_WRITABLE_BITS)]
+            self.assertEqual(self.client.write_multiple_coils(addr, bits_l), True)
+            self.assertEqual(self.client.read_coils(addr, len(bits_l)), bits_l)
+            # coils space: multi-write over sized
+            bits_l = [bool(getrandbits(1)) for _ in range(MAX_WRITABLE_BITS + 1)]
+            self.assertEqual(self.client.write_multiple_coils(addr, bits_l), None)
+        # coils space: read/write over limit
+        self.assertEqual(self.client.read_coils(0xfffe, 3), None)
+        self.assertEqual(self.client.write_single_coil(0x10000, 0), None)
+        self.assertEqual(self.client.write_multiple_coils(0xfff0, [0] * 17), None)
+        #### discrete inputs ####
+        for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_READABLE_BITS]:
+            # discrete inputs space: default value at startup
+            self.assertEqual(self.client.read_discrete_inputs(addr), [False], 'Default value is False when server start')
+            # discrete inputs space: single read/write
+            bit = bool(getrandbits(1))
+            self.server.data_bank.set_discrete_inputs(addr, [bit])
+            self.assertEqual(self.client.read_discrete_inputs(addr), [bit])
+            # discrete inputs space: multiple read/write at min size
+            bits_l = [bool(getrandbits(1))]
+            self.server.data_bank.set_discrete_inputs(addr, bits_l)
+            self.assertEqual(self.client.read_discrete_inputs(addr, len(bits_l)), bits_l)
+            # discrete inputs space: multiple read/write at max size
+            bits_l = [bool(getrandbits(1)) for _ in range(MAX_READABLE_BITS)]
+            self.server.data_bank.set_discrete_inputs(addr, bits_l)
+            self.assertEqual(self.client.read_discrete_inputs(addr, len(bits_l)), bits_l)
+            # discrete inputs space: multiple read/write at max size
+            bits_l = [bool(getrandbits(1)) for _ in range(MAX_READABLE_BITS + 1)]
+            self.server.data_bank.set_discrete_inputs(addr, bits_l)
+            self.assertEqual(self.client.read_discrete_inputs(addr, len(bits_l)), None)
+        # discrete inputs space: read/write over limit
+        self.assertEqual(self.client.read_discrete_inputs(0xffff, 2), None)
+        #### holding registers ####
+        for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_WRITABLE_REGS]:
+            # holding registers space: default value at startup
+            self.assertEqual(self.client.read_holding_registers(addr), [0], 'Default value is 0 when server start')
+            # holding registers space: single read/write
+            word = randint(0, 0xffff)
+            self.assertEqual(self.client.write_single_register(addr, word), True)
+            self.assertEqual(self.client.read_holding_registers(addr), [word])
+            # holding registers space: multi-write at max size
+            words_l = [randint(0, 0xffff) for _ in range(MAX_WRITABLE_REGS)]
+            self.assertEqual(self.client.write_multiple_registers(addr, words_l), True)
+            self.assertEqual(self.client.read_holding_registers(addr, len(words_l)), words_l)
+            # holding registers space: write over sized
+            words_l = [randint(0, 0xffff) for _ in range(MAX_WRITABLE_REGS + 1)]
+            self.assertEqual(self.client.write_multiple_registers(addr, words_l), None)
+        # holding registers space: read/write over limit
+        self.assertEqual(self.client.read_holding_registers(0xfff0, 17), None)
+        self.assertEqual(self.client.write_single_register(0x10000, 0), None)
+        self.assertEqual(self.client.write_multiple_registers(0xfff0, [0] * 17), None)
+        #### input registers ####
+        for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_READABLE_REGS]:
+            # input registers space: default value at startup
+            self.assertEqual(self.client.read_input_registers(addr), [0], 'Default value is 0 when server start')
+            # input registers space: single read/write
+            word = randint(0, 0xffff)
+            self.server.data_bank.set_input_registers(addr, [word])
+            self.assertEqual(self.client.read_input_registers(addr), [word])
+            # input registers space: multiple read/write at max size
+            words_l = [randint(0, 0xffff) for _ in range(MAX_READABLE_REGS)]
+            self.server.data_bank.set_input_registers(addr, words_l)
+            self.assertEqual(self.client.read_input_registers(addr, len(words_l)), words_l)
+            # input registers space: multiple read/write over sized
+            words_l = [randint(0, 0xffff) for _ in range(MAX_READABLE_REGS + 1)]
+            self.server.data_bank.set_input_registers(addr, words_l)
+            self.assertEqual(self.client.read_input_registers(addr, len(words_l)), None)
+        # input registers space: read/write over limit
+        self.assertEqual(self.client.read_input_registers(0xfff0, 17), None)
 
 if __name__ == '__main__':
     unittest.main()
