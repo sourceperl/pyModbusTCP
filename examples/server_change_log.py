@@ -32,4 +32,3 @@ if __name__ == '__main__':
     # init modbus server and start it
     server = ModbusServer(host=args.host, port=args.port, data_bank=MyDataBank())
     server.start()
-
