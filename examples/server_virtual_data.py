@@ -17,8 +17,7 @@ class MyDataBank(ModbusServerDataBank):
     def __init__(self):
         # turn off allocation of memory for standard modbus object types
         # only "holding registers" space will be replace by dynamic build values
-        conf = ModbusServerDataBank.Conf(virtual_mode=True)
-        super().__init__(conf=conf)
+        super().__init__(conf=ModbusServerDataBank.Conf(virtual_mode=True))
 
     def get_holding_registers(self, address, number=1):
         # populate virtual registers dict with current datetime values
