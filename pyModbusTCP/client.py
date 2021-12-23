@@ -338,18 +338,17 @@ class ModbusClient:
         :rtype: list of bool or None
         """
         # check params
-        if not (0 <= int(bit_addr) <= 65535):
+        if not (0 <= int(bit_addr) <= 0xffff):
             self.__debug_msg('read_coils(): bit_addr out of range')
             return None
         if not (1 <= int(bit_nb) <= 2000):
             self.__debug_msg('read_coils(): bit_nb out of range')
             return None
-        if (int(bit_addr) + int(bit_nb)) > 65536:
+        if (int(bit_addr) + int(bit_nb)) > 0x10000:
             self.__debug_msg('read_coils(): read after ad 65535')
             return None
         # build frame
-        tx_buffer = self._mbus_frame(
-            const.READ_COILS, struct.pack('>HH', bit_addr, bit_nb))
+        tx_buffer = self._mbus_frame(const.READ_COILS, struct.pack('>HH', bit_addr, bit_nb))
         # send request
         s_send = self._send_mbus(tx_buffer)
         # check error
@@ -367,7 +366,7 @@ class ModbusClient:
             self.close()
             return None
         # extract field "byte count"
-        rx_byte_count = struct.unpack("B", f_body[0:1])[0]
+        rx_byte_count = struct.unpack('B', f_body[0:1])[0]
         # frame with bits value -> bits[] list
         f_bits = bytearray(f_body[1:])
         # check rx_byte_count: match nb of bits request and check buffer size
@@ -396,18 +395,17 @@ class ModbusClient:
         :rtype: list of bool or None
         """
         # check params
-        if not (0 <= int(bit_addr) <= 65535):
+        if not (0 <= int(bit_addr) <= 0xffff):
             self.__debug_msg('read_discrete_inputs(): bit_addr out of range')
             return None
         if not (1 <= int(bit_nb) <= 2000):
             self.__debug_msg('read_discrete_inputs(): bit_nb out of range')
             return None
-        if (int(bit_addr) + int(bit_nb)) > 65536:
+        if (int(bit_addr) + int(bit_nb)) > 0x10000:
             self.__debug_msg('read_discrete_inputs(): read after ad 65535')
             return None
         # build frame
-        tx_buffer = self._mbus_frame(
-            const.READ_DISCRETE_INPUTS, struct.pack('>HH', bit_addr, bit_nb))
+        tx_buffer = self._mbus_frame(const.READ_DISCRETE_INPUTS, struct.pack('>HH', bit_addr, bit_nb))
         # send request
         s_send = self._send_mbus(tx_buffer)
         # check error
@@ -425,7 +423,7 @@ class ModbusClient:
             self.close()
             return None
         # extract field "byte count"
-        rx_byte_count = struct.unpack("B", f_body[0:1])[0]
+        rx_byte_count = struct.unpack('B', f_body[0:1])[0]
         # frame with bits value -> bits[] list
         f_bits = bytearray(f_body[1:])
         # check rx_byte_count: match nb of bits request and check buffer size
@@ -454,13 +452,13 @@ class ModbusClient:
         :rtype: list of int or None
         """
         # check params
-        if not (0 <= int(reg_addr) <= 65535):
+        if not (0 <= int(reg_addr) <= 0xffff):
             self.__debug_msg('read_holding_registers(): reg_addr out of range')
             return None
         if not (1 <= int(reg_nb) <= 125):
             self.__debug_msg('read_holding_registers(): reg_nb out of range')
             return None
-        if (int(reg_addr) + int(reg_nb)) > 65536:
+        if (int(reg_addr) + int(reg_nb)) > 0x10000:
             self.__debug_msg('read_holding_registers(): read after ad 65535')
             return None
         # build frame
@@ -479,8 +477,7 @@ class ModbusClient:
         # check min frame body size
         if len(f_body) < 2:
             self.__last_error = const.MB_RECV_ERR
-            self.__debug_msg(
-                'read_holding_registers(): rx frame under min size')
+            self.__debug_msg('read_holding_registers(): rx frame under min size')
             self.close()
             return None
         # extract field "byte count"
@@ -491,8 +488,7 @@ class ModbusClient:
         if not ((rx_byte_count >= 2 * reg_nb) and
                 (rx_byte_count == len(f_regs))):
             self.__last_error = const.MB_RECV_ERR
-            self.__debug_msg(
-                'read_holding_registers(): rx byte count mismatch')
+            self.__debug_msg('read_holding_registers(): rx byte count mismatch')
             self.close()
             return None
         # allocate a reg_nb size list
@@ -517,15 +513,14 @@ class ModbusClient:
         if not (0x0000 <= int(reg_addr) <= 0xffff):
             self.__debug_msg('read_input_registers(): reg_addr out of range')
             return None
-        if not (0x0001 <= int(reg_nb) <= 0x007d):
+        if not (0x0001 <= int(reg_nb) <= 125):
             self.__debug_msg('read_input_registers(): reg_nb out of range')
             return None
         if (int(reg_addr) + int(reg_nb)) > 0x10000:
             self.__debug_msg('read_input_registers(): read after ad 65535')
             return None
         # build frame
-        tx_buffer = self._mbus_frame(
-            const.READ_INPUT_REGISTERS, struct.pack('>HH', reg_addr, reg_nb))
+        tx_buffer = self._mbus_frame(const.READ_INPUT_REGISTERS, struct.pack('>HH', reg_addr, reg_nb))
         # send request
         s_send = self._send_mbus(tx_buffer)
         # check error
@@ -572,13 +567,12 @@ class ModbusClient:
         :rtype: bool or None
         """
         # check params
-        if not (0 <= int(bit_addr) <= 65535):
+        if not (0 <= int(bit_addr) <= 0xffff):
             self.__debug_msg('write_single_coil(): bit_addr out of range')
             return None
         # build frame
-        bit_value = 0xFF if bit_value else 0x00
-        tx_buffer = self._mbus_frame(
-            const.WRITE_SINGLE_COIL, struct.pack('>HBB', bit_addr, bit_value, 0))
+        bit_value = 0xff if bit_value else 0x00
+        tx_buffer = self._mbus_frame(const.WRITE_SINGLE_COIL, struct.pack('>HBB', bit_addr, bit_value, 0))
         # send request
         s_send = self._send_mbus(tx_buffer)
         # check error
@@ -596,8 +590,7 @@ class ModbusClient:
             self.close()
             return None
         # register extract
-        (rx_bit_addr, rx_bit_value, rx_padding) = struct.unpack(
-            '>HBB', f_body[:4])
+        (rx_bit_addr, rx_bit_value, rx_padding) = struct.unpack('>HBB', f_body[:4])
         # check bit write
         is_ok = (rx_bit_addr == bit_addr) and (rx_bit_value == bit_value)
         return True if is_ok else None
@@ -613,15 +606,14 @@ class ModbusClient:
         :rtype: bool or None
         """
         # check params
-        if not (0 <= int(reg_addr) <= 65535):
+        if not (0 <= int(reg_addr) <= 0xffff):
             self.__debug_msg('write_single_register(): reg_addr out of range')
             return None
-        if not (0 <= int(reg_value) <= 65535):
+        if not (0 <= int(reg_value) <= 0xffff):
             self.__debug_msg('write_single_register(): reg_value out of range')
             return None
         # build frame
-        tx_buffer = self._mbus_frame(const.WRITE_SINGLE_REGISTER,
-                                     struct.pack('>HH', reg_addr, reg_value))
+        tx_buffer = self._mbus_frame(const.WRITE_SINGLE_REGISTER, struct.pack('>HH', reg_addr, reg_value))
         # send request
         s_send = self._send_mbus(tx_buffer)
         # check error
@@ -660,9 +652,8 @@ class ModbusClient:
         if not (0x0000 <= int(bits_addr) <= 0xffff):
             self.__debug_msg('write_multiple_coils(): bits_addr out of range')
             return None
-        if not (0x0001 <= int(bits_nb) <= 0x07b0):
-            self.__debug_msg(
-                'write_multiple_coils(): number of bits out of range')
+        if not (0x0001 <= int(bits_nb) <= 1968):
+            self.__debug_msg('write_multiple_coils(): number of bits out of range')
             return None
         if (int(bits_addr) + int(bits_nb)) > 0x10000:
             self.__debug_msg('write_multiple_coils(): write after ad 65535')
@@ -722,16 +713,13 @@ class ModbusClient:
         regs_nb = len(regs_value)
         # check params
         if not (0x0000 <= int(regs_addr) <= 0xffff):
-            self.__debug_msg(
-                'write_multiple_registers(): regs_addr out of range')
+            self.__debug_msg('write_multiple_registers(): regs_addr out of range')
             return None
-        if not (0x0001 <= int(regs_nb) <= 0x007b):
-            self.__debug_msg(
-                'write_multiple_registers(): number of registers out of range')
+        if not (0x0001 <= int(regs_nb) <= 123):
+            self.__debug_msg('write_multiple_registers(): number of registers out of range')
             return None
         if (int(regs_addr) + int(regs_nb)) > 0x10000:
-            self.__debug_msg(
-                'write_multiple_registers(): write after ad 65535')
+            self.__debug_msg('write_multiple_registers(): write after ad 65535')
             return None
         # build frame
         # format reg value string
@@ -739,8 +727,7 @@ class ModbusClient:
         for reg in regs_value:
             # check current register value
             if not (0 <= int(reg) <= 0xffff):
-                self.__debug_msg(
-                    'write_multiple_registers(): regs_value out of range')
+                self.__debug_msg('write_multiple_registers(): regs_value out of range')
                 return None
             # pack register for build frame
             regs_val_str += struct.pack('>H', reg)
