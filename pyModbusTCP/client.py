@@ -327,8 +327,8 @@ class ModbusClient:
         else:
             return None
 
-    def send_custom_pdu(self, pdu):
-        """Send a modbus custom PDU request
+    def custom_request(self, pdu):
+        """Send a custom modbus request
 
         :param pdu: a modbus PDU (protocol data unit)
         :type pdu: str (Python2) or class bytes (Python3)
