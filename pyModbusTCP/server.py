@@ -8,8 +8,13 @@ from .utils import test_bit, set_bit
 import socket
 import struct
 from threading import Lock, Thread
-from socketserver import BaseRequestHandler, ThreadingTCPServer
 from warnings import warn
+
+# python2 compatibility
+try:
+    from socketserver import BaseRequestHandler, ThreadingTCPServer
+except ImportError:
+    from SocketServer import BaseRequestHandler, ThreadingTCPServer
 
 
 class DataBank:

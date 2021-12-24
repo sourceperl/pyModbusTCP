@@ -71,7 +71,7 @@ class TestClientServer(unittest.TestCase):
         self.server.stop()
 
     def test_coils_space(self):
-        #### coils ####
+        #### coils ####
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_WRITABLE_BITS]:
             # coils space: default value at startup
             self.assertEqual(self.client.read_coils(addr), [False], 'Default value is False when server start')
