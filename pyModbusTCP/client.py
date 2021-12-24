@@ -327,6 +327,31 @@ class ModbusClient:
         else:
             return None
 
+    def send_custom_pdu(self, pdu):
+        """Send a modbus custom PDU request
+
+        :param pdu: a modbus PDU (protocol data unit)
+        :type pdu: str (Python2) or class bytes (Python3)
+        :returns: modbus frame PDU or None if error
+        :rtype: str (Python2) or class bytes (Python3) or None
+        """
+        # send custom request
+        if not self._send(self._add_headers(pdu)):
+            return None
+        # receive
+        rx_pdu = self._recv_pdu()
+        # check error
+        if not rx_pdu:
+            return None
+        # check min frame body size
+        if len(rx_pdu) < 2:
+            self.__last_error = const.MB_RECV_ERR
+            self.__debug_msg('send_custom_pdu(): rx frame under min size')
+            self.close()
+            return None
+        # return bits list
+        return rx_pdu
+
     def read_coils(self, bit_addr, bit_nb=1):
         """Modbus function READ_COILS (0x01)
 
@@ -348,30 +373,32 @@ class ModbusClient:
             self.__debug_msg('read_coils(): read after ad 65535')
             return None
         # build frame
-        tx_buffer = self._mbus_frame(const.READ_COILS, struct.pack('>HH', bit_addr, bit_nb))
+        tx_buffer = self._add_headers(struct.pack('>BHH', const.READ_COILS, bit_addr, bit_nb))
         # send request
-        s_send = self._send_mbus(tx_buffer)
+        s_send = self._send(tx_buffer)
         # check error
         if not s_send:
             return None
         # receive
-        f_body = self._recv_mbus()
+        rx_pdu = self._recv_pdu()
         # check error
-        if not f_body:
+        if not rx_pdu:
             return None
+        # enforce bytearray for py2
+        rx_pdu = bytearray(rx_pdu)
         # check min frame body size
-        if len(f_body) < 2:
+        if len(rx_pdu) < 3:
             self.__last_error = const.MB_RECV_ERR
             self.__debug_msg('read_coils(): rx frame under min size')
             self.close()
             return None
         # extract field "byte count"
-        rx_byte_count = struct.unpack('B', f_body[0:1])[0]
+        byte_count = rx_pdu[1]
         # frame with bits value -> bits[] list
-        f_bits = bytearray(f_body[1:])
+        f_bits = rx_pdu[2:]
         # check rx_byte_count: match nb of bits request and check buffer size
-        if not ((rx_byte_count >= int((bit_nb + 7) / 8)) and
-                (rx_byte_count == len(f_bits))):
+        if not ((byte_count >= int((bit_nb + 7) / 8)) and
+                (byte_count == len(f_bits))):
             self.__last_error = const.MB_RECV_ERR
             self.__debug_msg('read_coils(): rx byte count mismatch')
             self.close()
@@ -379,7 +406,7 @@ class ModbusClient:
         # allocate a bit_nb size list
         bits = [None] * bit_nb
         # fill bits list with bit items
-        for i, item in enumerate(bits):
+        for i, _ in enumerate(bits):
             bits[i] = bool(f_bits[int(i / 8)] >> (i % 8) & 0x01)
         # return bits list
         return bits
@@ -405,30 +432,32 @@ class ModbusClient:
             self.__debug_msg('read_discrete_inputs(): read after ad 65535')
             return None
         # build frame
-        tx_buffer = self._mbus_frame(const.READ_DISCRETE_INPUTS, struct.pack('>HH', bit_addr, bit_nb))
+        tx_buffer = self._add_headers(struct.pack('>BHH', const.READ_DISCRETE_INPUTS, bit_addr, bit_nb))
         # send request
-        s_send = self._send_mbus(tx_buffer)
+        s_send = self._send(tx_buffer)
         # check error
         if not s_send:
             return None
         # receive
-        f_body = self._recv_mbus()
+        rx_pdu = self._recv_pdu()
         # check error
-        if not f_body:
+        if not rx_pdu:
             return None
+        # enforce bytearray for py2
+        rx_pdu = bytearray(rx_pdu)
         # check min frame body size
-        if len(f_body) < 2:
+        if len(rx_pdu) < 3:
             self.__last_error = const.MB_RECV_ERR
             self.__debug_msg('read_discrete_inputs(): rx frame under min size')
             self.close()
             return None
         # extract field "byte count"
-        rx_byte_count = struct.unpack('B', f_body[0:1])[0]
+        byte_count = rx_pdu[1]
         # frame with bits value -> bits[] list
-        f_bits = bytearray(f_body[1:])
+        f_bits = rx_pdu[2:]
         # check rx_byte_count: match nb of bits request and check buffer size
-        if not ((rx_byte_count >= int((bit_nb + 7) / 8)) and
-                (rx_byte_count == len(f_bits))):
+        if not ((byte_count >= int((bit_nb + 7) / 8)) and
+                (byte_count == len(f_bits))):
             self.__last_error = const.MB_RECV_ERR
             self.__debug_msg('read_discrete_inputs(): rx byte count mismatch')
             self.close()
@@ -462,31 +491,32 @@ class ModbusClient:
             self.__debug_msg('read_holding_registers(): read after ad 65535')
             return None
         # build frame
-        tx_buffer = self._mbus_frame(
-            const.READ_HOLDING_REGISTERS, struct.pack('>HH', reg_addr, reg_nb))
+        tx_buffer = self._add_headers(struct.pack('>BHH', const.READ_HOLDING_REGISTERS, reg_addr, reg_nb))
         # send request
-        s_send = self._send_mbus(tx_buffer)
+        s_send = self._send(tx_buffer)
         # check error
         if not s_send:
             return None
         # receive
-        f_body = self._recv_mbus()
+        rx_pdu = self._recv_pdu()
         # check error
-        if not f_body:
+        if not rx_pdu:
             return None
+        # enforce bytearray for py2
+        rx_pdu = bytearray(rx_pdu)
         # check min frame body size
-        if len(f_body) < 2:
+        if len(rx_pdu) < 3:
             self.__last_error = const.MB_RECV_ERR
             self.__debug_msg('read_holding_registers(): rx frame under min size')
             self.close()
             return None
         # extract field "byte count"
-        rx_byte_count = struct.unpack('B', f_body[0:1])[0]
+        byte_count = rx_pdu[1]
         # frame with regs value
-        f_regs = f_body[1:]
+        f_regs = rx_pdu[2:]
         # check rx_byte_count: buffer size must be consistent and have at least the requested number of registers
-        if not ((rx_byte_count >= 2 * reg_nb) and
-                (rx_byte_count == len(f_regs))):
+        if not ((byte_count >= 2 * reg_nb) and
+                (byte_count == len(f_regs))):
             self.__last_error = const.MB_RECV_ERR
             self.__debug_msg('read_holding_registers(): rx byte count mismatch')
             self.close()
@@ -494,7 +524,7 @@ class ModbusClient:
         # allocate a reg_nb size list
         registers = [None] * reg_nb
         # fill registers list with register items
-        for i, item in enumerate(registers):
+        for i, _ in enumerate(registers):
             registers[i] = struct.unpack('>H', f_regs[i * 2:i * 2 + 2])[0]
         # return registers list
         return registers
@@ -520,30 +550,32 @@ class ModbusClient:
             self.__debug_msg('read_input_registers(): read after ad 65535')
             return None
         # build frame
-        tx_buffer = self._mbus_frame(const.READ_INPUT_REGISTERS, struct.pack('>HH', reg_addr, reg_nb))
+        tx_buffer = self._add_headers(struct.pack('>BHH', const.READ_INPUT_REGISTERS, reg_addr, reg_nb))
         # send request
-        s_send = self._send_mbus(tx_buffer)
+        s_send = self._send(tx_buffer)
         # check error
         if not s_send:
             return None
         # receive
-        f_body = self._recv_mbus()
+        rx_pdu = self._recv_pdu()
         # check error
-        if not f_body:
+        if not rx_pdu:
             return None
+        # enforce bytearray for py2
+        rx_pdu = bytearray(rx_pdu)
         # check min frame body size
-        if len(f_body) < 2:
+        if len(rx_pdu) < 3:
             self.__last_error = const.MB_RECV_ERR
             self.__debug_msg('read_input_registers(): rx frame under min size')
             self.close()
             return None
         # extract field "byte count"
-        rx_byte_count = struct.unpack('B', f_body[0:1])[0]
+        byte_count = rx_pdu[1]
         # frame with regs value
-        f_regs = f_body[1:]
+        f_regs = rx_pdu[2:]
         # check rx_byte_count: buffer size must be consistent and have at least the requested number of registers
-        if not ((rx_byte_count >= 2 * reg_nb) and
-                (rx_byte_count == len(f_regs))):
+        if not ((byte_count >= 2 * reg_nb) and
+                (byte_count == len(f_regs))):
             self.__last_error = const.MB_RECV_ERR
             self.__debug_msg('read_input_registers(): rx byte count mismatch')
             self.close()
@@ -551,7 +583,7 @@ class ModbusClient:
         # allocate a reg_nb size list
         registers = [None] * reg_nb
         # fill registers list with register items
-        for i, item in enumerate(registers):
+        for i, _ in enumerate(registers):
             registers[i] = struct.unpack('>H', f_regs[i * 2:i * 2 + 2])[0]
         # return registers list
         return registers
@@ -572,27 +604,29 @@ class ModbusClient:
             return None
         # build frame
         bit_value = 0xff if bit_value else 0x00
-        tx_buffer = self._mbus_frame(const.WRITE_SINGLE_COIL, struct.pack('>HBB', bit_addr, bit_value, 0))
+        tx_buffer = self._add_headers(struct.pack('>BHBB', const.WRITE_SINGLE_COIL, bit_addr, bit_value, 0))
         # send request
-        s_send = self._send_mbus(tx_buffer)
+        s_send = self._send(tx_buffer)
         # check error
         if not s_send:
             return None
         # receive
-        f_body = self._recv_mbus()
+        rx_pdu = self._recv_pdu()
         # check error
-        if not f_body:
+        if not rx_pdu:
             return None
+        # enforce bytearray for py2
+        rx_pdu = bytearray(rx_pdu)
         # check fix frame size
-        if len(f_body) != 4:
+        if len(rx_pdu) != 5:
             self.__last_error = const.MB_RECV_ERR
             self.__debug_msg('write_single_coil(): rx frame size error')
             self.close()
             return None
         # register extract
-        (rx_bit_addr, rx_bit_value, rx_padding) = struct.unpack('>HBB', f_body[:4])
+        (ret_bit_addr, ret_bit_value, _) = struct.unpack('>HBB', rx_pdu[1:5])
         # check bit write
-        is_ok = (rx_bit_addr == bit_addr) and (rx_bit_value == bit_value)
+        is_ok = (ret_bit_addr == bit_addr) and (ret_bit_value == bit_value)
         return True if is_ok else None
 
     def write_single_register(self, reg_addr, reg_value):
@@ -613,27 +647,29 @@ class ModbusClient:
             self.__debug_msg('write_single_register(): reg_value out of range')
             return None
         # build frame
-        tx_buffer = self._mbus_frame(const.WRITE_SINGLE_REGISTER, struct.pack('>HH', reg_addr, reg_value))
+        tx_buffer = self._add_headers(struct.pack('>BHH', const.WRITE_SINGLE_REGISTER, reg_addr, reg_value))
         # send request
-        s_send = self._send_mbus(tx_buffer)
+        s_send = self._send(tx_buffer)
         # check error
         if not s_send:
             return None
         # receive
-        f_body = self._recv_mbus()
+        rx_pdu = self._recv_pdu()
         # check error
-        if not f_body:
+        if not rx_pdu:
             return None
+        # enforce bytearray for py2
+        rx_pdu = bytearray(rx_pdu)
         # check fix frame size
-        if len(f_body) != 4:
+        if len(rx_pdu) != 5:
             self.__last_error = const.MB_RECV_ERR
             self.__debug_msg('write_single_register(): rx frame size error')
             self.close()
             return None
         # register extract
-        rx_reg_addr, rx_reg_value = struct.unpack('>HH', f_body)
+        ret_reg_addr, ret_reg_value = struct.unpack('>HH', rx_pdu[1:5])
         # check register write
-        is_ok = (rx_reg_addr == reg_addr) and (rx_reg_value == reg_value)
+        is_ok = (ret_reg_addr == reg_addr) and (ret_reg_value == reg_value)
         return True if is_ok else None
 
     def write_multiple_coils(self, bits_addr, bits_value):
@@ -675,28 +711,30 @@ class ModbusClient:
             bits_val_str += struct.pack('B', byte)
         bytes_nb = len(bits_val_str)
         # format modbus frame body
-        body = struct.pack('>HHB', bits_addr, bits_nb, bytes_nb) + bits_val_str
-        tx_buffer = self._mbus_frame(const.WRITE_MULTIPLE_COILS, body)
+        body = struct.pack('>BHHB', const.WRITE_MULTIPLE_COILS, bits_addr, bits_nb, bytes_nb) + bits_val_str
+        tx_buffer = self._add_headers(body)
         # send request
-        s_send = self._send_mbus(tx_buffer)
+        s_send = self._send(tx_buffer)
         # check error
         if not s_send:
             return None
         # receive
-        f_body = self._recv_mbus()
+        rx_pdu = self._recv_pdu()
         # check error
-        if not f_body:
+        if not rx_pdu:
             return None
+        # enforce bytearray for py2
+        rx_pdu = bytearray(rx_pdu)
         # check fix frame size
-        if len(f_body) != 4:
+        if len(rx_pdu) != 5:
             self.__last_error = const.MB_RECV_ERR
             self.__debug_msg('write_multiple_coils(): rx frame size error')
             self.close()
             return None
         # register extract
-        (rx_bit_addr, rx_bit_nb) = struct.unpack('>HH', f_body[:4])
+        (ret_bit_addr, _) = struct.unpack('>HH', rx_pdu[1:5])
         # check regs write
-        is_ok = (rx_bit_addr == bits_addr)
+        is_ok = (ret_bit_addr == bits_addr)
         return True if is_ok else None
 
     def write_multiple_registers(self, regs_addr, regs_value):
@@ -723,7 +761,7 @@ class ModbusClient:
             return None
         # build frame
         # format reg value string
-        regs_val_str = b""
+        regs_val_str = b''
         for reg in regs_value:
             # check current register value
             if not (0 <= int(reg) <= 0xffff):
@@ -733,28 +771,30 @@ class ModbusClient:
             regs_val_str += struct.pack('>H', reg)
         bytes_nb = len(regs_val_str)
         # format modbus frame body
-        body = struct.pack('>HHB', regs_addr, regs_nb, bytes_nb) + regs_val_str
-        tx_buffer = self._mbus_frame(const.WRITE_MULTIPLE_REGISTERS, body)
+        body = struct.pack('>BHHB', const.WRITE_MULTIPLE_REGISTERS, regs_addr, regs_nb, bytes_nb) + regs_val_str
+        tx_buffer = self._add_headers(body)
         # send request
-        s_send = self._send_mbus(tx_buffer)
+        s_send = self._send(tx_buffer)
         # check error
         if not s_send:
             return None
         # receive
-        f_body = self._recv_mbus()
+        rx_pdu = self._recv_pdu()
         # check error
-        if not f_body:
+        if not rx_pdu:
             return None
+        # enforce bytearray for py2
+        rx_pdu = bytearray(rx_pdu)
         # check fix frame size
-        if len(f_body) != 4:
+        if len(rx_pdu) != 5:
             self.__last_error = const.MB_RECV_ERR
             self.__debug_msg('write_multiple_registers(): rx frame size error')
             self.close()
             return None
         # register extract
-        (rx_reg_addr, rx_reg_nb) = struct.unpack('>HH', f_body[:4])
+        (ret_reg_addr, _) = struct.unpack('>HH', rx_pdu[1:5])
         # check regs write
-        is_ok = (rx_reg_addr == regs_addr)
+        is_ok = (ret_reg_addr == regs_addr)
         return True if is_ok else None
 
     def _can_read(self):
@@ -773,33 +813,34 @@ class ModbusClient:
             self.close()
             return None
 
-    def _send(self, data):
+    def _send(self, frame):
         """Send data over current socket
 
-        :param data: registers value to write
-        :type data: str (Python2) or class bytes (Python3)
-        :returns: True if send ok or None if error
-        :rtype: bool or None
+        :param frame: modbus frame to send (with MBAP for TCP/CRC for RTU)
+        :type frame: str (Python2) or class bytes (Python3)
+        :returns: True on success
+        :rtype: bool
         """
+        # for auto_open mode, check TCP and open if need
+        if self.__auto_open and not self.is_open():
+            self.open()
         # check link
         if self.__sock is None:
             self.__last_error = const.MB_SOCK_CLOSE_ERR
             self.__debug_msg('call _send on close socket')
-            return None
+            return False
         # send
-        data_l = len(data)
         try:
-            send_l = self.__sock.send(data)
+            self.__sock.send(frame)
         except socket.error:
-            send_l = None
-        # handle send error
-        if (send_l is None) or (send_l != data_l):
             self.__last_error = const.MB_SEND_ERR
             self.__debug_msg('_send error')
             self.close()
-            return None
-        else:
-            return send_l
+            return False
+        # debug
+        if self.__debug:
+            self._pretty_dump('Tx', frame)
+        return True
 
     def _recv(self, max_size):
         """Receive data over current socket
@@ -842,47 +883,28 @@ class ModbusClient:
             r_buffer += r_packet
         return r_buffer
 
-    def _send_mbus(self, frame):
-        """Send modbus frame
-
-        :param frame: modbus frame to send (with MBAP for TCP/CRC for RTU)
-        :type frame: str (Python2) or class bytes (Python3)
-        :returns: number of bytes send or None if error
-        :rtype: int or None
-        """
-        # for auto_open mode, check TCP and open if need
-        if self.__auto_open and not self.is_open():
-            self.open()
-        # send request
-        bytes_send = self._send(frame)
-        if bytes_send:
-            if self.__debug:
-                self._pretty_dump('Tx', frame)
-            return bytes_send
-        else:
-            return None
-
-    def _recv_mbus(self):
+    def _recv_pdu(self):
         """Receive a modbus frame
 
-        :returns: modbus frame body or None if error
+        Modbus/TCP: first read mbap head and
+
+        :returns: modbus frame PDU or None if error
         :rtype: str (Python2) or class bytes (Python3) or None
         """
         # receive
         # modbus TCP receive
         if self.__mode == const.MODBUS_TCP:
             # 7 bytes header (mbap)
-            rx_buffer = self._recv_all(7)
+            rx_mbap = self._recv_all(7)
             # check recv
-            if not (rx_buffer and len(rx_buffer) == 7):
+            if not (rx_mbap and len(rx_mbap) == 7):
                 self.__last_error = const.MB_RECV_ERR
                 self.__debug_msg('_recv MBAP error')
                 self.close()
                 return None
-            rx_frame = rx_buffer
             # decode header
             (rx_hd_tr_id, rx_hd_pr_id,
-             rx_hd_length, rx_hd_unit_id) = struct.unpack('>HHHB', rx_frame)
+             rx_hd_length, rx_hd_unit_id) = struct.unpack('>HHHB', rx_mbap)
             # check header
             if not ((rx_hd_tr_id == self.__hd_tr_id) and
                     (rx_hd_pr_id == 0) and
@@ -891,129 +913,120 @@ class ModbusClient:
                 self.__last_error = const.MB_RECV_ERR
                 self.__debug_msg('MBAP format error')
                 if self.__debug:
-                    rx_frame += self._recv_all(rx_hd_length - 1)
-                    self._pretty_dump('Rx', rx_frame)
+                    self._pretty_dump('Rx', rx_mbap)
                 self.close()
                 return None
             # end of frame
-            rx_buffer = self._recv_all(rx_hd_length - 1)
-            if not (rx_buffer and
-                    (len(rx_buffer) == rx_hd_length - 1) and
-                    (len(rx_buffer) >= 2)):
+            rx_pdu = self._recv_all(rx_hd_length - 1)
+            if not (rx_pdu and
+                    (len(rx_pdu) == rx_hd_length - 1) and
+                    (len(rx_pdu) >= 2)):
                 self.__last_error = const.MB_RECV_ERR
                 self.__debug_msg('_recv frame body error')
                 self.close()
                 return None
-            rx_frame += rx_buffer
             # dump frame
             if self.__debug:
-                self._pretty_dump('Rx', rx_frame)
+                self._pretty_dump('Rx', rx_mbap + rx_pdu)
             # body decode
-            rx_bd_fc = struct.unpack('B', rx_buffer[0:1])[0]
-            f_body = rx_buffer[1:]
+            rx_fc = struct.unpack('B', rx_pdu[0:1])[0]
         # modbus RTU receive
         elif self.__mode == const.MODBUS_RTU:
             # receive modbus RTU frame (max size is 256 bytes)
-            rx_buffer = self._recv(256)
+            rx_rtu = self._recv(256)
             # on _recv error
-            if not rx_buffer:
+            if not rx_rtu:
                 return None
-            rx_frame = rx_buffer
             # dump frame
             if self.__debug:
-                self._pretty_dump('Rx', rx_frame)
+                self._pretty_dump('Rx', rx_rtu)
             # RTU frame min size is 5 bytes
-            if len(rx_buffer) < 5:
+            if len(rx_rtu) < 5:
                 self.__last_error = const.MB_RECV_ERR
                 self.__debug_msg('short frame error')
                 self.close()
                 return None
             # check CRC
-            if not self._crc_is_ok(rx_frame):
+            if not self._crc_is_ok(rx_rtu):
                 self.__last_error = const.MB_CRC_ERR
                 self.__debug_msg('CRC error')
                 self.close()
                 return None
             # body decode
-            (rx_unit_id, rx_bd_fc) = struct.unpack("BB", rx_frame[:2])
+            (rx_unit_id, rx_fc) = struct.unpack('BB', rx_rtu[:2])
             # check
             if not (rx_unit_id == self.__unit_id):
                 self.__last_error = const.MB_RECV_ERR
                 self.__debug_msg('unit ID mismatch error')
                 self.close()
                 return None
-            # format f_body: remove unit ID, function code and CRC 2 last bytes
-            f_body = rx_frame[2:-2]
+            # rx_pdu: remove unit ID (first byte) and CRC (2 last bytes) of RTU frame
+            rx_pdu = rx_rtu[1:-2]
         # for auto_close mode, close socket after each request
         if self.__auto_close:
             self.close()
-        # check except
-        if rx_bd_fc > 0x80:
-            # except code
-            exp_code = struct.unpack('B', f_body[0:1])[0]
+        # check except status
+        if rx_fc > 0x80:
+            exp_code = struct.unpack('B', rx_pdu[1:2])[0]
             self.__last_error = const.MB_EXCEPT_ERR
             self.__last_except = exp_code
             self.__debug_msg('except (code ' + str(exp_code) + ')')
             return None
         else:
-            # return
-            return f_body
+            return rx_pdu
 
-    def _mbus_frame(self, fc, body):
-        """Build modbus frame (add MBAP for Modbus/TCP, slave AD + CRC for RTU)
+    def _add_headers(self, pdu):
+        """Return full modbus frame with headers
 
-        :param fc: modbus function code
-        :type fc: int
-        :param body: modbus frame body
-        :type body: str (Python2) or class bytes (Python3)
-        :returns: modbus frame
+        Modbus/TCP: add MBAP (modbus application protocol header)
+        Modbus RTU: add slave address and CRC
+
+        :param pdu: modbus PDU (protocol data unit)
+        :type pdu: str (Python2) or class bytes (Python3)
+        :returns: full modbus frame
         :rtype: str (Python2) or class bytes (Python3)
         """
-        # build frame body
-        f_body = struct.pack('B', fc) + body
         # modbus/TCP
         if self.__mode == const.MODBUS_TCP:
-            # build frame ModBus Application Protocol header (mbap)
+            # build MBAP
             self.__hd_tr_id = random.randint(0, 65535)
             tx_hd_pr_id = 0
-            tx_hd_length = len(f_body) + 1
-            f_mbap = struct.pack('>HHHB', self.__hd_tr_id, tx_hd_pr_id,
+            tx_hd_length = len(pdu) + 1
+            mbap = struct.pack('>HHHB', self.__hd_tr_id, tx_hd_pr_id,
                                  tx_hd_length, self.__unit_id)
-            return f_mbap + f_body
+            # full modbus/TCP frame = [MBAP]PDU
+            return mbap + pdu
         # modbus RTU
         elif self.__mode == const.MODBUS_RTU:
-            # format [slave addr(unit_id)]frame_body[CRC16]
-            slave_ad = struct.pack('B', self.__unit_id)
-            return self._add_crc(slave_ad + f_body)
+            # full modbus RTU frame = [slave addr]PDU[CRC16]
+            slave_addr = struct.pack('B', self.__unit_id)
+            return self._add_crc(slave_addr + pdu)
 
-    def _pretty_dump(self, label, data):
-        """Print modbus/TCP frame ('[header]body')
-        or RTU ('body[CRC]') on stdout
+    def _pretty_dump(self, label, frame):
+        """Dump a modbus frame
 
-        :param label: modbus function code
+        modbus/TCP format: [MBAP]PDU
+        modbus RTU format: body[CRC]
+
+        :param label: head label
         :type label: str
         :param data: modbus frame
         :type data: str (Python2) or class bytes (Python3)
         """
         # split data string items to a list of hex value
-        dump = ['%02X' % c for c in bytearray(data)]
+        dump = ['%02X' % c for c in bytearray(frame)]
         # format for TCP or RTU
         if self.__mode == const.MODBUS_TCP:
-            if len(dump) > 6:
-                # [MBAP] ...
-                dump[0] = '[' + dump[0]
-                dump[6] += ']'
+            dump_mbap = ' '.join(dump[0:7])
+            dump_pdu = ' '.join(dump[7:])
+            msg = '[%s] %s' % (dump_mbap, dump_pdu)
         elif self.__mode == const.MODBUS_RTU:
-            if len(dump) > 4:
-                # ... [CRC]
-                dump[-2] = '[' + dump[-2]
-                dump[-1] += ']'
+            dump_body = ' '.join(dump[:-2])
+            dump_crc = ' '.join(dump[-2:])
+            msg = '%s [%s]' % (dump_body, dump_crc)
         # print result
         print(label)
-        s = ''
-        for i in dump:
-            s += i + ' '
-        print(s)
+        print(msg)
 
     @staticmethod
     def _add_crc(frame):
