@@ -13,7 +13,7 @@ SERVER_PORT = 502
 c = ModbusClient()
 
 # uncomment this line to see debug message
-#c.debug(True)
+# c.debug(True)
 
 # define modbus server host, port
 c.host(SERVER_HOST)

@@ -993,7 +993,7 @@ class ModbusClient:
             tx_hd_pr_id = 0
             tx_hd_length = len(pdu) + 1
             mbap = struct.pack('>HHHB', self.__hd_tr_id, tx_hd_pr_id,
-                                 tx_hd_length, self.__unit_id)
+                               tx_hd_length, self.__unit_id)
             # full modbus/TCP frame = [MBAP]PDU
             return mbap + pdu
         # modbus RTU

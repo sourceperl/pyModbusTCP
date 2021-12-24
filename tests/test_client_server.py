@@ -71,7 +71,7 @@ class TestClientServer(unittest.TestCase):
         self.server.stop()
 
     def test_coils_space(self):
-        #### coils ####
+        # coils
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_WRITABLE_BITS]:
             # coils space: default value at startup
             self.assertEqual(self.client.read_coils(addr), [False], 'Default value is False when server start')
@@ -94,7 +94,8 @@ class TestClientServer(unittest.TestCase):
         self.assertEqual(self.client.read_coils(0xfffe, 3), None)
         self.assertEqual(self.client.write_single_coil(0x10000, 0), None)
         self.assertEqual(self.client.write_multiple_coils(0xfff0, [0] * 17), None)
-        #### discrete inputs ####
+
+        # discrete inputs
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_READABLE_BITS]:
             # discrete inputs space: default value at startup
             self.assertEqual(self.client.read_discrete_inputs(addr), [False], 'Default value is False when server start')
@@ -116,7 +117,8 @@ class TestClientServer(unittest.TestCase):
             self.assertEqual(self.client.read_discrete_inputs(addr, len(bits_l)), None)
         # discrete inputs space: read/write over limit
         self.assertEqual(self.client.read_discrete_inputs(0xffff, 2), None)
-        #### holding registers ####
+
+        # holding registers
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_WRITABLE_REGS]:
             # holding registers space: default value at startup
             self.assertEqual(self.client.read_holding_registers(addr), [0], 'Default value is 0 when server start')
@@ -135,7 +137,8 @@ class TestClientServer(unittest.TestCase):
         self.assertEqual(self.client.read_holding_registers(0xfff0, 17), None)
         self.assertEqual(self.client.write_single_register(0x10000, 0), None)
         self.assertEqual(self.client.write_multiple_registers(0xfff0, [0] * 17), None)
-        #### input registers ####
+
+        # input registers
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_READABLE_REGS]:
             # input registers space: default value at startup
             self.assertEqual(self.client.read_input_registers(addr), [0], 'Default value is 0 when server start')
@@ -153,6 +156,7 @@ class TestClientServer(unittest.TestCase):
             self.assertEqual(self.client.read_input_registers(addr, len(words_l)), None)
         # input registers space: read/write over limit
         self.assertEqual(self.client.read_input_registers(0xfff0, 17), None)
+
 
 if __name__ == '__main__':
     unittest.main()

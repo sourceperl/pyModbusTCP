@@ -113,18 +113,18 @@ def word_list_to_long(val_list, big_endian=True, long_long=False):
     # populate long_list (len is half or quarter of 16 bits val_list) with 32 or 64 bits value
     for index in range(int(len(val_list) / block_size)):
         start = block_size * index
-        l = 0
+        long = 0
         if big_endian:
             if long_long:
-                l += (val_list[start] << 48) + (val_list[start+1] << 32)
-                l += (val_list[start+2] << 16) + (val_list[start+3])
+                long += (val_list[start] << 48) + (val_list[start+1] << 32)
+                long += (val_list[start+2] << 16) + (val_list[start+3])
             else:
-                l += (val_list[start] << 16) + val_list[start+1]
+                long += (val_list[start] << 16) + val_list[start+1]
         else:
             if long_long:
-                l += (val_list[start+3] << 48) + (val_list[start+2] << 32)
-            l += (val_list[start+1] << 16) + val_list[start]
-        long_list.append(l)
+                long += (val_list[start+3] << 48) + (val_list[start+2] << 32)
+            long += (val_list[start+1] << 16) + val_list[start]
+        long_list.append(long)
     # return long list
     return long_list
 
