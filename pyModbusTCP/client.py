@@ -336,7 +336,7 @@ class ModbusClient:
         :rtype: str (Python2) or class bytes (Python3) or None
         """
         # send custom request
-        if not self._send(self._add_headers(pdu)):
+        if not self._send_pdu(pdu):
             return None
         # receive
         rx_pdu = self._recv_pdu()
@@ -372,14 +372,10 @@ class ModbusClient:
         if (int(bit_addr) + int(bit_nb)) > 0x10000:
             self.__debug_msg('read_coils(): read after ad 65535')
             return None
-        # build frame
-        tx_buffer = self._add_headers(struct.pack('>BHH', const.READ_COILS, bit_addr, bit_nb))
-        # send request
-        s_send = self._send(tx_buffer)
-        # check error
-        if not s_send:
+        # build pdu and send request
+        if not self._send_pdu(struct.pack('>BHH', const.READ_COILS, bit_addr, bit_nb)):
             return None
-        # receive
+        # receive pdu
         rx_pdu = self._recv_pdu()
         # check error
         if not rx_pdu:
@@ -431,14 +427,10 @@ class ModbusClient:
         if (int(bit_addr) + int(bit_nb)) > 0x10000:
             self.__debug_msg('read_discrete_inputs(): read after ad 65535')
             return None
-        # build frame
-        tx_buffer = self._add_headers(struct.pack('>BHH', const.READ_DISCRETE_INPUTS, bit_addr, bit_nb))
-        # send request
-        s_send = self._send(tx_buffer)
-        # check error
-        if not s_send:
+        # build pdu and send request
+        if not self._send_pdu(struct.pack('>BHH', const.READ_DISCRETE_INPUTS, bit_addr, bit_nb)):
             return None
-        # receive
+        # receive pdu
         rx_pdu = self._recv_pdu()
         # check error
         if not rx_pdu:
@@ -490,14 +482,10 @@ class ModbusClient:
         if (int(reg_addr) + int(reg_nb)) > 0x10000:
             self.__debug_msg('read_holding_registers(): read after ad 65535')
             return None
-        # build frame
-        tx_buffer = self._add_headers(struct.pack('>BHH', const.READ_HOLDING_REGISTERS, reg_addr, reg_nb))
-        # send request
-        s_send = self._send(tx_buffer)
-        # check error
-        if not s_send:
+        # build pdu and send request
+        if not self._send_pdu(struct.pack('>BHH', const.READ_HOLDING_REGISTERS, reg_addr, reg_nb)):
             return None
-        # receive
+        # receive pdu
         rx_pdu = self._recv_pdu()
         # check error
         if not rx_pdu:
@@ -549,14 +537,10 @@ class ModbusClient:
         if (int(reg_addr) + int(reg_nb)) > 0x10000:
             self.__debug_msg('read_input_registers(): read after ad 65535')
             return None
-        # build frame
-        tx_buffer = self._add_headers(struct.pack('>BHH', const.READ_INPUT_REGISTERS, reg_addr, reg_nb))
-        # send request
-        s_send = self._send(tx_buffer)
-        # check error
-        if not s_send:
+        # build pdu and send request
+        if not self._send_pdu(struct.pack('>BHH', const.READ_INPUT_REGISTERS, reg_addr, reg_nb)):
             return None
-        # receive
+        # receive pdu
         rx_pdu = self._recv_pdu()
         # check error
         if not rx_pdu:
@@ -602,15 +586,12 @@ class ModbusClient:
         if not (0 <= int(bit_addr) <= 0xffff):
             self.__debug_msg('write_single_coil(): bit_addr out of range')
             return None
-        # build frame
+        # format "bit value" field
         bit_value = 0xff if bit_value else 0x00
-        tx_buffer = self._add_headers(struct.pack('>BHBB', const.WRITE_SINGLE_COIL, bit_addr, bit_value, 0))
-        # send request
-        s_send = self._send(tx_buffer)
-        # check error
-        if not s_send:
+        # build pdu and send request
+        if not self._send_pdu(struct.pack('>BHBB', const.WRITE_SINGLE_COIL, bit_addr, bit_value, 0)):
             return None
-        # receive
+        # receive pdu
         rx_pdu = self._recv_pdu()
         # check error
         if not rx_pdu:
@@ -646,14 +627,10 @@ class ModbusClient:
         if not (0 <= int(reg_value) <= 0xffff):
             self.__debug_msg('write_single_register(): reg_value out of range')
             return None
-        # build frame
-        tx_buffer = self._add_headers(struct.pack('>BHH', const.WRITE_SINGLE_REGISTER, reg_addr, reg_value))
-        # send request
-        s_send = self._send(tx_buffer)
-        # check error
-        if not s_send:
+        # build pdu and send request
+        if not self._send_pdu(struct.pack('>BHH', const.WRITE_SINGLE_REGISTER, reg_addr, reg_value)):
             return None
-        # receive
+        # receive pdu
         rx_pdu = self._recv_pdu()
         # check error
         if not rx_pdu:
@@ -710,13 +687,9 @@ class ModbusClient:
         for byte in bytes_l:
             bits_val_str += struct.pack('B', byte)
         bytes_nb = len(bits_val_str)
-        # format modbus frame body
-        body = struct.pack('>BHHB', const.WRITE_MULTIPLE_COILS, bits_addr, bits_nb, bytes_nb) + bits_val_str
-        tx_buffer = self._add_headers(body)
-        # send request
-        s_send = self._send(tx_buffer)
-        # check error
-        if not s_send:
+        # build pdu and send request
+        tx_pdu = struct.pack('>BHHB', const.WRITE_MULTIPLE_COILS, bits_addr, bits_nb, bytes_nb) + bits_val_str
+        if not self._send_pdu(tx_pdu):
             return None
         # receive
         rx_pdu = self._recv_pdu()
@@ -770,13 +743,9 @@ class ModbusClient:
             # pack register for build frame
             regs_val_str += struct.pack('>H', reg)
         bytes_nb = len(regs_val_str)
-        # format modbus frame body
-        body = struct.pack('>BHHB', const.WRITE_MULTIPLE_REGISTERS, regs_addr, regs_nb, bytes_nb) + regs_val_str
-        tx_buffer = self._add_headers(body)
-        # send request
-        s_send = self._send(tx_buffer)
-        # check error
-        if not s_send:
+        # build pdu and send request
+        tx_pdu = struct.pack('>BHHB', const.WRITE_MULTIPLE_REGISTERS, regs_addr, regs_nb, bytes_nb) + regs_val_str
+        if not self._send_pdu(tx_pdu):
             return None
         # receive
         rx_pdu = self._recv_pdu()
@@ -814,16 +783,13 @@ class ModbusClient:
             return None
 
     def _send(self, frame):
-        """Send data over current socket
+        """Send frame over current socket
 
         :param frame: modbus frame to send (with MBAP for TCP/CRC for RTU)
         :type frame: str (Python2) or class bytes (Python3)
         :returns: True on success
         :rtype: bool
         """
-        # for auto_open mode, check TCP and open if need
-        if self.__auto_open and not self.is_open():
-            self.open()
         # check link
         if self.__sock is None:
             self.__last_error = const.MB_SOCK_CLOSE_ERR
@@ -837,9 +803,26 @@ class ModbusClient:
             self.__debug_msg('_send error')
             self.close()
             return False
+        return True
+
+    def _send_pdu(self, pdu):
+        """Convert modbus PDU to frame and send it
+
+        :param pdu: modbus frame PDU
+        :type pdu: str (Python2) or class bytes (Python3)
+        :returns: True on success
+        :rtype: bool
+        """
+        # for auto_open mode, check TCP and open if need
+        if self.__auto_open and not self.is_open():
+            self.open()
+        # add headers to pdu and send frame
+        tx_frame = self._add_headers(pdu)
+        if not self._send(tx_frame):
+            return False
         # debug
         if self.__debug:
-            self._pretty_dump('Tx', frame)
+            self._pretty_dump('Tx', tx_frame)
         return True
 
     def _recv(self, max_size):
