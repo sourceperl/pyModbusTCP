@@ -450,6 +450,8 @@ class ModbusServer:
                 # close connection if lack of bytes in frame pdu
                 if not (rx_pdu and (len(rx_pdu) == rx_hd_length - 1)):
                     break
+                # enforce bytearray for py2
+                rx_pdu = bytearray(rx_pdu)
                 # pdu decode: function code
                 rx_bd_fc = struct.unpack('B', rx_pdu[0:1])[0]
                 # close connection if function code is inconsistent
@@ -464,107 +466,140 @@ class ModbusServer:
                                               rx_mbap=rx_mbap, rx_pdu=rx_pdu)
                 # functions Read Coils (0x01) or Read Discrete Inputs (0x02)
                 if rx_bd_fc in (READ_COILS, READ_DISCRETE_INPUTS):
-                    (b_address, b_count) = struct.unpack('>HH', rx_pdu[1:])
+                    # ensure pdu size
+                    if len(rx_pdu[1:]) != struct.calcsize('>HH'):
+                        break
+                    # decode pdu
+                    (start_addr, quantity_bits) = struct.unpack('>HH', rx_pdu[1:])
                     # check quantity of requested bits
-                    if 0x0001 <= b_count <= 0x07D0:
+                    if 0x0001 <= quantity_bits <= 0x07D0:
+                        # data handler read request: for coils or discrete inputs space
                         if rx_bd_fc == READ_COILS:
-                            ret = self.server.data_hdl.read_coils(b_address, b_count, srv_infos=srv_infos)
+                            ret = self.server.data_hdl.read_coils(start_addr, quantity_bits, srv_infos=srv_infos)
                         else:
-                            ret = self.server.data_hdl.read_d_inputs(b_address, b_count, srv_infos=srv_infos)
+                            ret = self.server.data_hdl.read_d_inputs(start_addr, quantity_bits, srv_infos=srv_infos)
+                        # format regular or except response
                         if ret.ok:
                             # allocate bytes list
-                            b_size = int(b_count / 8)
-                            b_size += 1 if (b_count % 8) else 0
+                            b_size = int(quantity_bits / 8)
+                            b_size += 1 if (quantity_bits % 8) else 0
                             bytes_l = [0] * b_size
                             # populate bytes list with data bank bits
                             for i, item in enumerate(ret.data):
                                 if item:
-                                    byte_i = int(i / 8)
-                                    bytes_l[byte_i] = set_bit(bytes_l[byte_i], i % 8)
+                                    bytes_l[i//8] = set_bit(bytes_l[i//8], i % 8)
                             # build pdu
                             tx_pdu += struct.pack('BB', rx_bd_fc, len(bytes_l))
                             # add requested bits
-                            for byte in bytes_l:
-                                tx_pdu += struct.pack('B', byte)
+                            tx_pdu += struct.pack('%dB' % len(bytes_l), *bytes_l)
                         else:
                             exp_status = ret.exp_code
                     else:
                         exp_status = EXP_DATA_VALUE
                 # functions Read Holding Registers (0x03) or Read Input Registers (0x04)
                 elif rx_bd_fc in (READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS):
-                    (w_address, w_count) = struct.unpack('>HH', rx_pdu[1:])
+                    # ensure pdu size
+                    if len(rx_pdu[1:]) != struct.calcsize('>HH'):
+                        break
+                    # decode pdu
+                    (start_addr, quantity_regs) = struct.unpack('>HH', rx_pdu[1:])
                     # check quantity of requested words
-                    if 0x0001 <= w_count <= 0x007D:
+                    if 0x0001 <= quantity_regs <= 0x007D:
+                        # data handler read request: for holding or input registers space
                         if rx_bd_fc == READ_HOLDING_REGISTERS:
-                            ret = self.server.data_hdl.read_h_regs(w_address, w_count, srv_infos=srv_infos)
+                            ret = self.server.data_hdl.read_h_regs(start_addr, quantity_regs, srv_infos=srv_infos)
                         else:
-                            ret = self.server.data_hdl.read_i_regs(w_address, w_count, srv_infos=srv_infos)
+                            ret = self.server.data_hdl.read_i_regs(start_addr, quantity_regs, srv_infos=srv_infos)
+                        # format regular or except response
                         if ret.ok:
                             # build pdu
-                            tx_pdu += struct.pack('BB', rx_bd_fc, w_count * 2)
+                            tx_pdu += struct.pack('BB', rx_bd_fc, quantity_regs * 2)
                             # add requested words
-                            for word in ret.data:
-                                tx_pdu += struct.pack('>H', word)
+                            tx_pdu += struct.pack('>%dH' % len(ret.data), *ret.data)
                         else:
                             exp_status = ret.exp_code
                     else:
                         exp_status = EXP_DATA_VALUE
                 # function Write Single Coil (0x05)
                 elif rx_bd_fc is WRITE_SINGLE_COIL:
-                    (b_address, b_value) = struct.unpack('>HH', rx_pdu[1:])
-                    f_b_value = bool(b_value == 0xFF00)
-                    ret = self.server.data_hdl.write_coils(b_address, [f_b_value], srv_infos=srv_infos)
+                    # ensure pdu size
+                    if len(rx_pdu[1:]) != struct.calcsize('>HH'):
+                        break
+                    # decode pdu
+                    (coil_addr, coil_value) = struct.unpack('>HH', rx_pdu[1:])
+                    # format coil raw value to bool
+                    coil_as_bool = bool(coil_value == 0xFF00)
+                    # data handler update request
+                    ret = self.server.data_hdl.write_coils(coil_addr, [coil_as_bool], srv_infos=srv_infos)
+                    # format regular or except response
                     if ret.ok:
-                        # send write ok frame
-                        tx_pdu += struct.pack('>BHH', rx_bd_fc, b_address, b_value)
+                        tx_pdu += struct.pack('>BHH', rx_bd_fc, start_addr, coil_value)
                     else:
                         exp_status = ret.exp_code
                 # function Write Single Register (0x06)
                 elif rx_bd_fc is WRITE_SINGLE_REGISTER:
-                    (w_address, w_value) = struct.unpack('>HH', rx_pdu[1:])
-                    ret = self.server.data_hdl.write_h_regs(w_address, [w_value], srv_infos=srv_infos)
+                    # ensure pdu size
+                    if len(rx_pdu[1:]) != struct.calcsize('>HH'):
+                        break
+                    # decode pdu
+                    (reg_addr, reg_value) = struct.unpack('>HH', rx_pdu[1:])
+                    # data handler update request
+                    ret = self.server.data_hdl.write_h_regs(reg_addr, [reg_value], srv_infos=srv_infos)
+                    # format regular or except response
                     if ret.ok:
-                        # send write ok frame
-                        tx_pdu += struct.pack('>BHH', rx_bd_fc, w_address, w_value)
+                        tx_pdu += struct.pack('>BHH', rx_bd_fc, reg_addr, reg_value)
                     else:
                         exp_status = ret.exp_code
                 # function Write Multiple Coils (0x0F)
                 elif rx_bd_fc is WRITE_MULTIPLE_COILS:
-                    (b_address, b_count, byte_count) = struct.unpack('>HHB', rx_pdu[1:6])
+                    # ensure pdu size
+                    if len(rx_pdu[1:6]) != struct.calcsize('>HHB'):
+                        break
+                    # decode pdu
+                    (start_addr, quantity_bits, byte_count) = struct.unpack('>HHB', rx_pdu[1:6])
+                    # ensure minimal pdu size for data part
+                    if len(rx_pdu[6:]) < byte_count:
+                        break
                     # check quantity of updated coils
-                    if (0x0001 <= b_count <= 0x07B0) and (byte_count >= (b_count / 8)):
+                    if (0x0001 <= quantity_bits <= 0x07B0) and (byte_count >= (quantity_bits / 8)):
                         # allocate bits list
-                        bits_l = [False] * b_count
+                        bits_l = [False] * quantity_bits
                         # populate bits list with bits from rx frame
-                        for i, item in enumerate(bits_l):
-                            b_bit_pos = int(i / 8) + 6
-                            b_bit_val = struct.unpack('B', rx_pdu[b_bit_pos:b_bit_pos + 1])[0]
-                            bits_l[i] = test_bit(b_bit_val, i % 8)
-                        # write words to data bank
-                        ret = self.server.data_hdl.write_coils(b_address, bits_l, srv_infos=srv_infos)
+                        for i, _ in enumerate(bits_l):
+                            bit_val = rx_pdu[i//8 + 6]
+                            bits_l[i] = test_bit(bit_val, i % 8)
+                        # data handler update request
+                        ret = self.server.data_hdl.write_coils(start_addr, bits_l, srv_infos=srv_infos)
+                        # format regular or except response
                         if ret.ok:
-                            # send write ok frame
-                            tx_pdu += struct.pack('>BHH', rx_bd_fc, b_address, b_count)
+                            tx_pdu += struct.pack('>BHH', rx_bd_fc, start_addr, quantity_bits)
                         else:
                             exp_status = ret.exp_code
                     else:
                         exp_status = EXP_DATA_VALUE
                 # function Write Multiple Registers (0x10)
                 elif rx_bd_fc is WRITE_MULTIPLE_REGISTERS:
-                    (w_address, w_count, byte_count) = struct.unpack('>HHB', rx_pdu[1:6])
+                    # ensure pdu size
+                    if len(rx_pdu[1:6]) != struct.calcsize('>HHB'):
+                        break
+                    # decode pdu
+                    (start_addr, quantity_regs, byte_count) = struct.unpack('>HHB', rx_pdu[1:6])
+                    # ensure minimal pdu size for data part
+                    if len(rx_pdu[6:]) < byte_count:
+                        break
                     # check quantity of updated words
-                    if (0x0001 <= w_count <= 0x007B) and (byte_count == w_count * 2):
+                    if (0x0001 <= quantity_regs <= 0x007B) and (byte_count == quantity_regs * 2):
                         # allocate words list
-                        words_l = [0] * w_count
+                        regs_l = [0] * quantity_regs
                         # populate words list with words from rx frame
-                        for i, item in enumerate(words_l):
-                            w_offset = i * 2 + 6
-                            words_l[i] = struct.unpack('>H', rx_pdu[w_offset:w_offset + 2])[0]
-                        # write words to data bank
-                        ret = self.server.data_hdl.write_h_regs(w_address, words_l, srv_infos=srv_infos)
+                        for i, _ in enumerate(regs_l):
+                            offset = i * 2 + 6
+                            regs_l[i] = struct.unpack('>H', rx_pdu[offset:offset + 2])[0]
+                        # data handler update request
+                        ret = self.server.data_hdl.write_h_regs(start_addr, regs_l, srv_infos=srv_infos)
+                        # format regular or except response
                         if ret.ok:
-                            # send write ok frame
-                            tx_pdu += struct.pack('>BHH', rx_bd_fc, w_address, w_count)
+                            tx_pdu += struct.pack('>BHH', rx_bd_fc, start_addr, quantity_regs)
                         else:
                             exp_status = ret.exp_code
                     else:
