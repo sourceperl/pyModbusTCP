@@ -949,7 +949,7 @@ class ModbusClient:
         if self.__auto_close:
             self.close()
         # check except status
-        if rx_fc > 0x80:
+        if rx_fc >= 0x80:
             exp_code = struct.unpack('B', rx_pdu[1:2])[0]
             self.__last_error = const.MB_EXCEPT_ERR
             self.__last_except = exp_code
