@@ -2,6 +2,7 @@ import unittest
 from random import randint, getrandbits
 from pyModbusTCP.server import ModbusServer
 from pyModbusTCP.client import ModbusClient
+from pyModbusTCP.constants import SUPPORTED_FUNCTION_CODES, EXP_ILLEGAL_FUNCTION, MB_EXCEPT_ERR
 
 
 # some const
@@ -70,7 +71,7 @@ class TestClientServer(unittest.TestCase):
         self.client.close()
         self.server.stop()
 
-    def test_coils_space(self):
+    def test_client_server(self):
         # coils
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_WRITABLE_BITS]:
             # coils space: default value at startup
@@ -156,6 +157,15 @@ class TestClientServer(unittest.TestCase):
             self.assertEqual(self.client.read_input_registers(addr, len(words_l)), None)
         # input registers space: read/write over limit
         self.assertEqual(self.client.read_input_registers(0xfff0, 17), None)
+
+        # test server responses to abnormal events
+        # unsupported function codes must return except EXP_ILLEGAL_FUNCTION
+        for func_code in range(0x80):
+            if func_code not in SUPPORTED_FUNCTION_CODES:
+                # test with a min PDU length of 2 bytes (avoid short frame error)
+                self.assertEqual(self.client.custom_request(bytearray([func_code, 0x00])), None)
+                self.assertEqual(self.client.last_error(), MB_EXCEPT_ERR)
+                self.assertEqual(self.client.last_except(), EXP_ILLEGAL_FUNCTION)
 
 
 if __name__ == '__main__':
