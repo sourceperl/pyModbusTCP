@@ -422,11 +422,12 @@ class ModbusServer:
 
     class ModbusService(BaseRequestHandler):
 
-        def recv_all(self, size):
-            if hasattr(socket, "MSG_WAITALL"):
+        def _recv_all(self, size):
+            # on platform with MSG_WAITALL flag: use it
+            if hasattr(socket, 'MSG_WAITALL'):
                 data = self.request.recv(size, socket.MSG_WAITALL)
+            # on platform (like Windows) without MSG_WAITALL: emulate it
             else:
-                # Windows lacks MSG_WAITALL
                 data = b''
                 while len(data) < size:
                     data += self.request.recv(size - len(data))
@@ -434,7 +435,7 @@ class ModbusServer:
 
         def handle(self):
             while True:
-                rx_mbap = self.recv_all(7)
+                rx_mbap = self._recv_all(7)
                 # close connection if no standard 7 bytes header
                 if not (rx_mbap and len(rx_mbap) == 7):
                     break
@@ -444,12 +445,12 @@ class ModbusServer:
                 # close connection if frame header content inconsistency
                 if not ((rx_hd_pr_id == 0) and (2 < rx_hd_length < 256)):
                     break
-                # receive body
-                rx_pdu = self.recv_all(rx_hd_length - 1)
-                # close connection if lack of bytes in frame body
+                # receive pdu
+                rx_pdu = self._recv_all(rx_hd_length - 1)
+                # close connection if lack of bytes in frame pdu
                 if not (rx_pdu and (len(rx_pdu) == rx_hd_length - 1)):
                     break
-                # body decode: function code
+                # pdu decode: function code
                 rx_bd_fc = struct.unpack('B', rx_pdu[0:1])[0]
                 # close connection if function code is inconsistent
                 if rx_bd_fc > 0x7F:
@@ -480,9 +481,9 @@ class ModbusServer:
                                 if item:
                                     byte_i = int(i / 8)
                                     bytes_l[byte_i] = set_bit(bytes_l[byte_i], i % 8)
-                            # format body of frame with bits
+                            # build pdu
                             tx_pdu += struct.pack('BB', rx_bd_fc, len(bytes_l))
-                            # add bytes with bits
+                            # add requested bits
                             for byte in bytes_l:
                                 tx_pdu += struct.pack('B', byte)
                         else:
@@ -499,8 +500,9 @@ class ModbusServer:
                         else:
                             ret = self.server.data_hdl.read_i_regs(w_address, w_count, srv_infos=srv_infos)
                         if ret.ok:
-                            # format body of frame with words
+                            # build pdu
                             tx_pdu += struct.pack('BB', rx_bd_fc, w_count * 2)
+                            # add requested words
                             for word in ret.data:
                                 tx_pdu += struct.pack('>H', word)
                         else:
@@ -571,9 +573,9 @@ class ModbusServer:
                     exp_status = EXP_ILLEGAL_FUNCTION
                 # check exception
                 if exp_status != EXP_NONE:
-                    # format body of frame with exception status
+                    # build pdu with exception status
                     tx_pdu += struct.pack('BB', rx_bd_fc + 0x80, exp_status)
-                # build frame header
+                # build mbap
                 tx_mbap = struct.pack('>HHHB', rx_hd_tr_id, rx_hd_pr_id, len(tx_pdu) + 1, rx_hd_unit_id)
                 # send frame
                 self.request.send(tx_mbap + tx_pdu)
