@@ -440,22 +440,22 @@ class ModbusServer:
                 if not (rx_mbap and len(rx_mbap) == 7):
                     break
                 # decode header
-                (rx_hd_tr_id, rx_hd_pr_id,
-                 rx_hd_length, rx_hd_unit_id) = struct.unpack('>HHHB', rx_mbap)
+                (rx_mbap_tr_id, rx_mbap_pr_id,
+                 rx_mbap_length, rx_mbap_unit_id) = struct.unpack('>HHHB', rx_mbap)
                 # close connection if frame header content inconsistency
-                if not ((rx_hd_pr_id == 0) and (2 < rx_hd_length < 256)):
+                if not ((rx_mbap_pr_id == 0) and (2 < rx_mbap_length < 256)):
                     break
                 # receive pdu
-                rx_pdu = self._recv_all(rx_hd_length - 1)
+                rx_pdu = self._recv_all(rx_mbap_length - 1)
                 # close connection if lack of bytes in frame pdu
-                if not (rx_pdu and (len(rx_pdu) == rx_hd_length - 1)):
+                if not (rx_pdu and (len(rx_pdu) == rx_mbap_length - 1)):
                     break
                 # enforce bytearray for py2
                 rx_pdu = bytearray(rx_pdu)
                 # pdu decode: function code
-                rx_bd_fc = struct.unpack('B', rx_pdu[0:1])[0]
+                rx_func_code = struct.unpack('B', rx_pdu[0:1])[0]
                 # close connection if function code is inconsistent
-                if rx_bd_fc > 0x7F:
+                if rx_func_code > 0x7F:
                     break
                 # some default value
                 exp_status = EXP_NONE
@@ -465,7 +465,7 @@ class ModbusServer:
                 srv_infos = ModbusServerInfos(client_addr=client_addr, client_port=client_port,
                                               rx_mbap=rx_mbap, rx_pdu=rx_pdu)
                 # functions Read Coils (0x01) or Read Discrete Inputs (0x02)
-                if rx_bd_fc in (READ_COILS, READ_DISCRETE_INPUTS):
+                if rx_func_code in (READ_COILS, READ_DISCRETE_INPUTS):
                     # ensure pdu size
                     if len(rx_pdu[1:]) != struct.calcsize('>HH'):
                         break
@@ -474,7 +474,7 @@ class ModbusServer:
                     # check quantity of requested bits
                     if 0x0001 <= quantity_bits <= 0x07D0:
                         # data handler read request: for coils or discrete inputs space
-                        if rx_bd_fc == READ_COILS:
+                        if rx_func_code == READ_COILS:
                             ret = self.server.data_hdl.read_coils(start_addr, quantity_bits, srv_infos=srv_infos)
                         else:
                             ret = self.server.data_hdl.read_d_inputs(start_addr, quantity_bits, srv_infos=srv_infos)
@@ -489,7 +489,7 @@ class ModbusServer:
                                 if item:
                                     bytes_l[i//8] = set_bit(bytes_l[i//8], i % 8)
                             # build pdu
-                            tx_pdu += struct.pack('BB', rx_bd_fc, len(bytes_l))
+                            tx_pdu += struct.pack('BB', rx_func_code, len(bytes_l))
                             # add requested bits
                             tx_pdu += struct.pack('%dB' % len(bytes_l), *bytes_l)
                         else:
@@ -497,7 +497,7 @@ class ModbusServer:
                     else:
                         exp_status = EXP_DATA_VALUE
                 # functions Read Holding Registers (0x03) or Read Input Registers (0x04)
-                elif rx_bd_fc in (READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS):
+                elif rx_func_code in (READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS):
                     # ensure pdu size
                     if len(rx_pdu[1:]) != struct.calcsize('>HH'):
                         break
@@ -506,14 +506,14 @@ class ModbusServer:
                     # check quantity of requested words
                     if 0x0001 <= quantity_regs <= 0x007D:
                         # data handler read request: for holding or input registers space
-                        if rx_bd_fc == READ_HOLDING_REGISTERS:
+                        if rx_func_code == READ_HOLDING_REGISTERS:
                             ret = self.server.data_hdl.read_h_regs(start_addr, quantity_regs, srv_infos=srv_infos)
                         else:
                             ret = self.server.data_hdl.read_i_regs(start_addr, quantity_regs, srv_infos=srv_infos)
                         # format regular or except response
                         if ret.ok:
                             # build pdu
-                            tx_pdu += struct.pack('BB', rx_bd_fc, quantity_regs * 2)
+                            tx_pdu += struct.pack('BB', rx_func_code, quantity_regs * 2)
                             # add requested words
                             tx_pdu += struct.pack('>%dH' % len(ret.data), *ret.data)
                         else:
@@ -521,7 +521,7 @@ class ModbusServer:
                     else:
                         exp_status = EXP_DATA_VALUE
                 # function Write Single Coil (0x05)
-                elif rx_bd_fc is WRITE_SINGLE_COIL:
+                elif rx_func_code is WRITE_SINGLE_COIL:
                     # ensure pdu size
                     if len(rx_pdu[1:]) != struct.calcsize('>HH'):
                         break
@@ -533,11 +533,11 @@ class ModbusServer:
                     ret = self.server.data_hdl.write_coils(coil_addr, [coil_as_bool], srv_infos=srv_infos)
                     # format regular or except response
                     if ret.ok:
-                        tx_pdu += struct.pack('>BHH', rx_bd_fc, start_addr, coil_value)
+                        tx_pdu += struct.pack('>BHH', rx_func_code, coil_addr, coil_value)
                     else:
                         exp_status = ret.exp_code
                 # function Write Single Register (0x06)
-                elif rx_bd_fc is WRITE_SINGLE_REGISTER:
+                elif rx_func_code is WRITE_SINGLE_REGISTER:
                     # ensure pdu size
                     if len(rx_pdu[1:]) != struct.calcsize('>HH'):
                         break
@@ -547,11 +547,11 @@ class ModbusServer:
                     ret = self.server.data_hdl.write_h_regs(reg_addr, [reg_value], srv_infos=srv_infos)
                     # format regular or except response
                     if ret.ok:
-                        tx_pdu += struct.pack('>BHH', rx_bd_fc, reg_addr, reg_value)
+                        tx_pdu += struct.pack('>BHH', rx_func_code, reg_addr, reg_value)
                     else:
                         exp_status = ret.exp_code
                 # function Write Multiple Coils (0x0F)
-                elif rx_bd_fc is WRITE_MULTIPLE_COILS:
+                elif rx_func_code is WRITE_MULTIPLE_COILS:
                     # ensure pdu size
                     if len(rx_pdu[1:6]) != struct.calcsize('>HHB'):
                         break
@@ -572,13 +572,13 @@ class ModbusServer:
                         ret = self.server.data_hdl.write_coils(start_addr, bits_l, srv_infos=srv_infos)
                         # format regular or except response
                         if ret.ok:
-                            tx_pdu += struct.pack('>BHH', rx_bd_fc, start_addr, quantity_bits)
+                            tx_pdu += struct.pack('>BHH', rx_func_code, start_addr, quantity_bits)
                         else:
                             exp_status = ret.exp_code
                     else:
                         exp_status = EXP_DATA_VALUE
                 # function Write Multiple Registers (0x10)
-                elif rx_bd_fc is WRITE_MULTIPLE_REGISTERS:
+                elif rx_func_code is WRITE_MULTIPLE_REGISTERS:
                     # ensure pdu size
                     if len(rx_pdu[1:6]) != struct.calcsize('>HHB'):
                         break
@@ -599,7 +599,7 @@ class ModbusServer:
                         ret = self.server.data_hdl.write_h_regs(start_addr, regs_l, srv_infos=srv_infos)
                         # format regular or except response
                         if ret.ok:
-                            tx_pdu += struct.pack('>BHH', rx_bd_fc, start_addr, quantity_regs)
+                            tx_pdu += struct.pack('>BHH', rx_func_code, start_addr, quantity_regs)
                         else:
                             exp_status = ret.exp_code
                     else:
@@ -609,9 +609,9 @@ class ModbusServer:
                 # check exception
                 if exp_status != EXP_NONE:
                     # build pdu with exception status
-                    tx_pdu += struct.pack('BB', rx_bd_fc + 0x80, exp_status)
+                    tx_pdu += struct.pack('BB', rx_func_code + 0x80, exp_status)
                 # build mbap
-                tx_mbap = struct.pack('>HHHB', rx_hd_tr_id, rx_hd_pr_id, len(tx_pdu) + 1, rx_hd_unit_id)
+                tx_mbap = struct.pack('>HHHB', rx_mbap_tr_id, rx_mbap_pr_id, len(tx_pdu) + 1, rx_mbap_unit_id)
                 # send frame
                 self.request.send(tx_mbap + tx_pdu)
             self.request.close()
