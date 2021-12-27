@@ -71,11 +71,17 @@ class TestClientServer(unittest.TestCase):
         self.client.close()
         self.server.stop()
 
-    def test_client_server(self):
+    def test_default_startup_values(self):
+        # some read at random address to test startup values
+        for addr in [randint(0, 0xffff) for _ in range(100)]:
+            self.assertEqual(self.client.read_coils(addr), [False], 'Default value is False when server start')
+            self.assertEqual(self.client.read_discrete_inputs(addr), [False], 'Default value is False when server start')
+            self.assertEqual(self.client.read_holding_registers(addr), [0], 'Default value is 0 when server start')
+            self.assertEqual(self.client.read_input_registers(addr), [0], 'Default value is 0 when server start')
+
+    def test_read_write_requests(self):
         # coils
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_WRITABLE_BITS]:
-            # coils space: default value at startup
-            self.assertEqual(self.client.read_coils(addr), [False], 'Default value is False when server start')
             # coils space: single read/write
             bit = bool(getrandbits(1))
             self.assertEqual(self.client.write_single_coil(addr, bit), True)
@@ -98,8 +104,6 @@ class TestClientServer(unittest.TestCase):
 
         # discrete inputs
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_READABLE_BITS]:
-            # discrete inputs space: default value at startup
-            self.assertEqual(self.client.read_discrete_inputs(addr), [False], 'Default value is False when server start')
             # discrete inputs space: single read/write
             bit = bool(getrandbits(1))
             self.server.data_bank.set_discrete_inputs(addr, [bit])
@@ -121,8 +125,6 @@ class TestClientServer(unittest.TestCase):
 
         # holding registers
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_WRITABLE_REGS]:
-            # holding registers space: default value at startup
-            self.assertEqual(self.client.read_holding_registers(addr), [0], 'Default value is 0 when server start')
             # holding registers space: single read/write
             word = randint(0, 0xffff)
             self.assertEqual(self.client.write_single_register(addr, word), True)
@@ -141,8 +143,6 @@ class TestClientServer(unittest.TestCase):
 
         # input registers
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_READABLE_REGS]:
-            # input registers space: default value at startup
-            self.assertEqual(self.client.read_input_registers(addr), [0], 'Default value is 0 when server start')
             # input registers space: single read/write
             word = randint(0, 0xffff)
             self.server.data_bank.set_input_registers(addr, [word])
@@ -158,6 +158,7 @@ class TestClientServer(unittest.TestCase):
         # input registers space: read/write over limit
         self.assertEqual(self.client.read_input_registers(0xfff0, 17), None)
 
+    def test_server_strength(self):
         # test server responses to abnormal events
         # unsupported function codes must return except EXP_ILLEGAL_FUNCTION
         for func_code in range(0x80):
