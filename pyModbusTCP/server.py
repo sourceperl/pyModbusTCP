@@ -422,21 +422,41 @@ class ModbusServer:
 
     class ModbusService(BaseRequestHandler):
 
-        def _recv_all(self, size):
+        def _recv(self, bufsize, flags=0):
+            try:
+                return self.request.recv(bufsize, flags)
+            except socket.error:
+                return b''
+
+        def _send_all(self, bytes, flags=0):
+            try:
+                self.request.sendall(bytes, flags)
+                return True
+            except socket.error:
+                return False
+
+        def _recv_all(self, bufsize, flags=0):
             # on platform with MSG_WAITALL flag: use it
             if hasattr(socket, 'MSG_WAITALL'):
-                data = self.request.recv(size, socket.MSG_WAITALL)
+                data = self._recv(bufsize, flags | socket.MSG_WAITALL)
             # on platform (like Windows) without MSG_WAITALL: emulate it
             else:
                 data = b''
-                while len(data) < size:
-                    data += self.request.recv(size - len(data))
+                while len(data) < bufsize:
+                    data_chunk = self._recv(bufsize - len(data), flags)
+                    if data_chunk:
+                        data += data_chunk
+                    else:
+                        data = b''
+                        break
             return data
 
         def handle(self):
+            # main loop
             while True:
+                # receive mbap from client
                 rx_mbap = self._recv_all(7)
-                # close connection if no standard 7 bytes header
+                # close connection if no standard 7 bytes mbap header
                 if not (rx_mbap and len(rx_mbap) == 7):
                     break
                 # decode header
@@ -613,7 +633,9 @@ class ModbusServer:
                 # build mbap
                 tx_mbap = struct.pack('>HHHB', rx_mbap_tr_id, rx_mbap_pr_id, len(tx_pdu) + 1, rx_mbap_unit_id)
                 # send frame
-                self.request.send(tx_mbap + tx_pdu)
+                if not self._send_all(tx_mbap + tx_pdu):
+                    break
+            # on main loop breaking: close the current socket
             self.request.close()
 
     def __init__(self, host='localhost', port=MODBUS_PORT, no_block=False, ipv6=False,
