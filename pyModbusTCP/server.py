@@ -5,9 +5,10 @@ from .constants import READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS,
     EXP_NONE, EXP_ILLEGAL_FUNCTION, EXP_DATA_ADDRESS, EXP_DATA_VALUE, \
     MODBUS_PORT
 from .utils import test_bit, set_bit
+import select
 import socket
 import struct
-from threading import Lock, Thread
+from threading import Lock, Thread, Event
 from warnings import warn
 
 # python2 compatibility
@@ -422,6 +423,12 @@ class ModbusServer:
 
     class ModbusService(BaseRequestHandler):
 
+        def _can_recv(self, timeout=0.5):
+            if select.select([self.request], [], [], timeout)[0]:
+                return True
+            else:
+                return False
+
         def _recv(self, bufsize, flags=0):
             try:
                 return self.request.recv(bufsize, flags)
@@ -454,6 +461,9 @@ class ModbusServer:
         def handle(self):
             # main loop
             while True:
+                # exit from this thread if main server stop running
+                if not self.server._evt_running.is_set():
+                    break
                 # receive mbap from client
                 rx_mbap = self._recv_all(7)
                 # close connection if no standard 7 bytes mbap header
@@ -674,7 +684,7 @@ class ModbusServer:
         # data bank shortcut
         self.data_bank = self.data_hdl.data_bank
         # private
-        self._running = False
+        self._evt_running = Event()
         self._service = None
         self._serve_th = None
 
@@ -690,7 +700,8 @@ class ModbusServer:
             ThreadingTCPServer.daemon_threads = True
             # init server
             self._service = ThreadingTCPServer((self.host, self.port), self.ModbusService, bind_and_activate=False)
-            # pass data handler for server threads (access via self.server in ModbusService.handle())
+            # pass some things shared with server threads (access via self.server in ModbusService.handle())
+            self._service._evt_running = self._evt_running
             self._service.data_hdl = self.data_hdl
             # set socket options
             self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -722,14 +733,16 @@ class ModbusServer:
         """Return True if server running.
 
         """
-        return self._running
+        return self._evt_running.is_set()
 
     def _serve(self):
         try:
-            self._running = True
+            self._evt_running.set()
             self._service.serve_forever()
         except Exception:
             self._service.server_close()
             raise
+        except KeyboardInterrupt:
+            self._service.server_close()
         finally:
-            self._running = False
+            self._evt_running.clear()
