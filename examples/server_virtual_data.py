@@ -19,7 +19,7 @@ class MyDataBank(ModbusServerDataBank):
         # only "holding registers" space will be replace by dynamic build values
         super().__init__(conf=ModbusServerDataBank.Conf(virtual_mode=True))
 
-    def get_holding_registers(self, address, number=1):
+    def get_holding_registers(self, address, number=1, srv_infos=None):
         # populate virtual registers dict with current datetime values
         now = datetime.now()
         v_regs_d = {0: now.day, 1: now.month, 2: now.year,

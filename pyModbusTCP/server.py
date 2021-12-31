@@ -5,7 +5,7 @@ from .constants import READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS,
     EXP_NONE, EXP_ILLEGAL_FUNCTION, EXP_DATA_ADDRESS, EXP_DATA_VALUE, \
     MODBUS_PORT
 from .utils import test_bit, set_bit
-import select
+from random import randint
 import socket
 import struct
 from threading import Lock, Thread, Event
@@ -51,20 +51,20 @@ class DataHandlerReturn:
 
 
 class ModbusServerInfos:
-    def __init__(self, client_addr, client_port, rx_mbap, rx_pdu):
-        self.client_addr = client_addr
-        self.client_port = client_port
-        self.rx_mbap = rx_mbap
-        self.rx_pdu = rx_pdu
+    def __init__(self):
+        self.client_addr = ''
+        self.client_port = 502
+        self.client_raw_mbap = bytearray()
+        self.client_raw_pdu = bytearray()
 
     @property
-    def rx_frame(self):
-        return self.rx_mbap + self.rx_pdu
+    def client_raw_frame(self):
+        return self.client_raw_mbap + self.client_raw_pdu
 
     @property
-    def rx_frame_as_str(self):
-        mbap_str = ' '.join(['%02X' % c for c in bytearray(self.rx_mbap)])
-        pdu_str = ' '.join(['%02X' % c for c in bytearray(self.rx_pdu)])
+    def client_raw_frame_as_str(self):
+        mbap_str = ' '.join(['%02X' % c for c in bytearray(self.client_raw_mbap)])
+        pdu_str = ' '.join(['%02X' % c for c in bytearray(self.client_raw_pdu)])
         return '[%s] %s' % (mbap_str, pdu_str)
 
 
@@ -108,7 +108,7 @@ class ModbusServerDataBank:
         elif isinstance(conf, ModbusServerDataBank.Conf):
             self.conf = conf
         else:
-            raise ValueError('conf is invalid')
+            raise ValueError('conf arg is invalid')
         # private
         self._coils_lock = Lock()
         self._coils = [self.conf.coils_default_value] * self.conf.coils_size
@@ -119,15 +119,15 @@ class ModbusServerDataBank:
         self._i_regs_lock = Lock()
         self._i_regs = [self.conf.i_regs_default_value] * self.conf.i_regs_size
 
-    def get_coils(self, address, number=1, _srv_infos=None):
+    def get_coils(self, address, number=1, srv_infos=None):
         """Read data on server coils space
 
         :param address: start address
         :type address: int
         :param number: number of bits (optional)
         :type number: int
-        :param _srv_infos: some server infos (must be set by server only)
-        :type _srv_infos: ModbusServerInfos
+        :param srv_infos: some server infos (must be set by server only)
+        :type srv_infos: ModbusServerInfos
         :returns: list of bool or None if error
         :rtype: list or None
         """
@@ -138,15 +138,15 @@ class ModbusServerDataBank:
             else:
                 return None
 
-    def set_coils(self, address, bit_list, _srv_infos=None):
+    def set_coils(self, address, bit_list, srv_infos=None):
         """Write data to server coils space
 
         :param address: start address
         :type address: int
         :param bit_list: a list of bool to write
         :type bit_list: list
-        :param _srv_infos: some server infos (must be set by server only)
-        :type _srv_infos: ModbusServerInfos
+        :param srv_infos: some server infos (must be set by server only)
+        :type srv_infos: ModbusServerInfos
         :returns: True if success or None if error
         :rtype: bool or None
         :raises ValueError: if bit_list members cannot be convert to bool
@@ -166,21 +166,21 @@ class ModbusServerDataBank:
             else:
                 return None
         # on server update
-        if _srv_infos:
+        if srv_infos:
             # notify changes with on change method (after atomic update)
             for address, from_value, to_value in changes_list:
-                self.on_coils_change(address, from_value, to_value, srv_infos=_srv_infos)
+                self.on_coils_change(address, from_value, to_value, srv_infos=srv_infos)
         return True
 
-    def get_discrete_inputs(self, address, number=1, _srv_infos=None):
+    def get_discrete_inputs(self, address, number=1, srv_infos=None):
         """Read data on server discrete inputs space
 
         :param address: start address
         :type address: int
         :param number: number of bits (optional)
         :type number: int
-        :param _srv_infos: some server infos (must be set by server only)
-        :type _srv_infos: ModbusServerInfos
+        :param srv_infos: some server infos (must be set by server only)
+        :type srv_infos: ModbusServerInfos
         :returns: list of bool or None if error
         :rtype: list or None
         """
@@ -213,15 +213,15 @@ class ModbusServerDataBank:
                 return None
         return True
 
-    def get_holding_registers(self, address, number=1, _srv_infos=None):
+    def get_holding_registers(self, address, number=1, srv_infos=None):
         """Read data on server holding registers space
 
         :param address: start address
         :type address: int
         :param number: number of words (optional)
         :type number: int
-        :param _srv_infos: some server infos (must be set by server only)
-        :type _srv_infos: ModbusServerInfos
+        :param srv_infos: some server infos (must be set by server only)
+        :type srv_infos: ModbusServerInfos
         :returns: list of int or None if error
         :rtype: list or None
         """
@@ -232,15 +232,15 @@ class ModbusServerDataBank:
             else:
                 return None
 
-    def set_holding_registers(self, address, word_list, _srv_infos=None):
+    def set_holding_registers(self, address, word_list, srv_infos=None):
         """Write data to server holding registers space
 
         :param address: start address
         :type address: int
         :param word_list: a list of word to write
         :type word_list: list
-        :param _srv_infos: some server infos (must be set by server only)
-        :type _srv_infos: ModbusServerInfos
+        :param srv_infos: some server infos (must be set by server only)
+        :type srv_infos: ModbusServerInfos
         :returns: True if success or None if error
         :rtype: bool or None
         :raises ValueError: if word_list members cannot be convert to int
@@ -260,21 +260,21 @@ class ModbusServerDataBank:
             else:
                 return None
         # on server update
-        if _srv_infos:
+        if srv_infos:
             # notify changes with on change method (after atomic update)
             for address, from_value, to_value in changes_list:
-                self.on_holding_registers_change(address, from_value, to_value, srv_infos=_srv_infos)
+                self.on_holding_registers_change(address, from_value, to_value, srv_infos=srv_infos)
         return True
 
-    def get_input_registers(self, address, number=1, _srv_infos=None):
+    def get_input_registers(self, address, number=1, srv_infos=None):
         """Read data on server input registers space
 
         :param address: start address
         :type address: int
         :param number: number of words (optional)
         :type number: int
-        :param _srv_infos: some server infos (must be set by server only)
-        :type _srv_infos: ModbusServerInfos
+        :param srv_infos: some server infos (must be set by server only)
+        :type srv_infos: ModbusServerInfos
         :returns: list of int or None if error
         :rtype: list or None
         """
@@ -361,11 +361,11 @@ class ModbusServerDataHandler:
         elif isinstance(data_bank, ModbusServerDataBank):
             self.data_bank = data_bank
         else:
-            raise ValueError('data_bank is invalid')
+            raise ValueError('data_bank arg is invalid')
 
     def read_coils(self, address, count, srv_infos):
         # read bits from DataBank
-        bits_l = self.data_bank.get_coils(address, count, _srv_infos=srv_infos)
+        bits_l = self.data_bank.get_coils(address, count, srv_infos=srv_infos)
         # return DataStatus to server
         if bits_l is not None:
             return DataHandlerReturn(exp_code=EXP_NONE, data=bits_l)
@@ -374,7 +374,7 @@ class ModbusServerDataHandler:
 
     def write_coils(self, address, bits_l, srv_infos):
         # write bits to DataBank
-        update_ok = self.data_bank.set_coils(address, bits_l, _srv_infos=srv_infos)
+        update_ok = self.data_bank.set_coils(address, bits_l, srv_infos=srv_infos)
         # return DataStatus to server
         if update_ok:
             return DataHandlerReturn(exp_code=EXP_NONE)
@@ -383,7 +383,7 @@ class ModbusServerDataHandler:
 
     def read_d_inputs(self, address, count, srv_infos):
         # read bits from DataBank
-        bits_l = self.data_bank.get_discrete_inputs(address, count, _srv_infos=srv_infos)
+        bits_l = self.data_bank.get_discrete_inputs(address, count, srv_infos=srv_infos)
         # return DataStatus to server
         if bits_l is not None:
             return DataHandlerReturn(exp_code=EXP_NONE, data=bits_l)
@@ -392,7 +392,7 @@ class ModbusServerDataHandler:
 
     def read_h_regs(self, address, count, srv_infos):
         # read words from DataBank
-        words_l = self.data_bank.get_holding_registers(address, count, _srv_infos=srv_infos)
+        words_l = self.data_bank.get_holding_registers(address, count, srv_infos=srv_infos)
         # return DataStatus to server
         if words_l is not None:
             return DataHandlerReturn(exp_code=EXP_NONE, data=words_l)
@@ -401,7 +401,7 @@ class ModbusServerDataHandler:
 
     def write_h_regs(self, address, words_l, srv_infos):
         # write words to DataBank
-        update_ok = self.data_bank.set_holding_registers(address, words_l, _srv_infos=srv_infos)
+        update_ok = self.data_bank.set_holding_registers(address, words_l, srv_infos=srv_infos)
         # return DataStatus to server
         if update_ok:
             return DataHandlerReturn(exp_code=EXP_NONE)
@@ -410,7 +410,7 @@ class ModbusServerDataHandler:
 
     def read_i_regs(self, address, count, srv_infos):
         # read words from DataBank
-        words_l = self.data_bank.get_input_registers(address, count, _srv_infos=srv_infos)
+        words_l = self.data_bank.get_input_registers(address, count, srv_infos=srv_infos)
         # return DataStatus to server
         if words_l is not None:
             return DataHandlerReturn(exp_code=EXP_NONE, data=words_l)
@@ -421,232 +421,311 @@ class ModbusServerDataHandler:
 class ModbusServer:
     """ Modbus TCP server """
 
+    class InternalError(Exception):
+        pass
+
+    class MBAP:
+        def __init__(self, raw=None):
+            # public
+            self.transaction_id = randint(0, 0xffff)
+            self.protocol_id = 0
+            self.length = 0
+            self.unit_id = 1
+            # if raw arg is define, decode it now
+            if raw is not None:
+                self.raw_decode(raw)
+
+        @property
+        def raw(self):
+            try:
+                return struct.pack('>HHHB', self.transaction_id,
+                                   self.protocol_id, self.length,
+                                   self.unit_id)
+            except struct.error as e:
+                raise ModbusServer.InternalError('MBAP raw encode pack error: %s' % e)
+
+        def raw_decode(self, value):
+            # close connection if no standard 7 bytes mbap header
+            if not (value and len(value) == 7):
+                raise ModbusServer.InternalError('MBAP must have a length of 7 bytes')
+            # decode header
+            (self.transaction_id, self.protocol_id,
+             self.length, self.unit_id) = struct.unpack('>HHHB', value)
+            # check frame header content inconsistency
+            if self.protocol_id != 0:
+                raise ModbusServer.InternalError('MBAP protocol ID must be 0')
+            if not 2 < self.length < 256:
+                raise ModbusServer.InternalError('MBAP length must be between 2 and 256')
+
+        def raw_with_pdu(self, pdu):
+            self.length = len(pdu) + 1
+            return self.raw + pdu.raw
+
+    class PDU:
+        def __init__(self, raw=b''):
+            # enforce bytearray for py2
+            self.raw = bytearray(raw)
+
+        def __len__(self):
+            return len(self.raw)
+
+        @property
+        def func_code(self):
+            return self.raw[0]
+
+        @property
+        def except_code(self):
+            return self.raw[1]
+
+        @property
+        def is_except(self):
+            return self.func_code > 0x7F
+
+        @property
+        def is_valid(self):
+            # PDU min length is 2 bytes
+            return self.__len__() < 2
+
+        def clean(self):
+            self.raw = bytearray()
+
+        def build_except(self, func_code, exp_status):
+            self.clean()
+            self.add_pack('BB', func_code + 0x80, exp_status)
+            return self
+
+        def add_pack(self, fmt, *args):
+            try:
+                self.raw += bytearray(struct.pack(fmt, *args))
+            except struct.error:
+                err_msg = 'unable to format PDU message (fmt: %s, values: %s)' % (fmt, args)
+                raise ModbusServer.InternalError(err_msg)
+
+        def unpack(self, fmt, from_byte=None, to_byte=None):
+            raw_section = self.raw[from_byte:to_byte]
+            try:
+                return struct.unpack(fmt, raw_section)
+            except struct.error:
+                err_msg = 'unable to decode PDU message  (fmt: %s, values: %s)' % (fmt, raw_section)
+                raise ModbusServer.InternalError(err_msg)
+
     class ModbusService(BaseRequestHandler):
 
-        def _can_recv(self, timeout=0.5):
-            if select.select([self.request], [], [], timeout)[0]:
-                return True
-            else:
-                return False
+        @property
+        def server_running(self):
+            return self.server.evt_running.is_set()
 
-        def _recv(self, bufsize, flags=0):
+        def _send_all(self, data, flags=0):
             try:
-                return self.request.recv(bufsize, flags)
-            except socket.error:
-                return b''
-
-        def _send_all(self, bytes, flags=0):
-            try:
-                self.request.sendall(bytes, flags)
+                self.request.sendall(data, flags)
                 return True
-            except socket.error:
+            except socket.timeout:
                 return False
 
         def _recv_all(self, bufsize, flags=0):
-            # on platform with MSG_WAITALL flag: use it
+            # use MSG_WAITALL flag when available
             if hasattr(socket, 'MSG_WAITALL'):
-                data = self._recv(bufsize, flags | socket.MSG_WAITALL)
-            # on platform (like Windows) without MSG_WAITALL: emulate it
+                flags |= socket.MSG_WAITALL
+            # on platform (like Windows) without MSG_WAITALL: we emulate it here
+            data = b''
+            while len(data) < bufsize:
+                try:
+                    # avoid pending thread after stop() of main server
+                    # exit from this thread and close socket with ThreadExit
+                    if not self.server_running:
+                        raise ModbusServer.InternalError('main server is not running')
+                    # read data from current socket (block but can raise a timeout)
+                    data += self.request.recv(bufsize - len(data), flags)
+                except socket.timeout:
+                    # just redo srv run test and recv on timeout
+                    pass
+            return bytearray(data)
+
+        def _read_bits(self, rx_pdu):
+            # functions Read Coils (0x01) or Read Discrete Inputs (0x02)
+            # init PDU() for return value
+            ret_pdu = ModbusServer.PDU()
+            # decode pdu
+            (start_addr, quantity_bits) = rx_pdu.unpack('>HH', from_byte=1, to_byte=5)
+            # check quantity of requested bits
+            if 0x0001 <= quantity_bits <= 0x07D0:
+                # data handler read request: for coils or discrete inputs space
+                if rx_pdu.func_code == READ_COILS:
+                    ret_hdl = self.server.data_hdl.read_coils(start_addr, quantity_bits, srv_infos=self.srv_infos)
+                else:
+                    ret_hdl = self.server.data_hdl.read_d_inputs(start_addr, quantity_bits, srv_infos=self.srv_infos)
+                # format regular or except response
+                if ret_hdl.ok:
+                    # allocate bytes list
+                    b_size = int(quantity_bits / 8)
+                    b_size += 1 if (quantity_bits % 8) else 0
+                    bytes_l = [0] * b_size
+                    # populate bytes list with data bank bits
+                    for i, item in enumerate(ret_hdl.data):
+                        if item:
+                            bytes_l[i // 8] = set_bit(bytes_l[i // 8], i % 8)
+                    # build pdu
+                    ret_pdu.add_pack('BB', rx_pdu.func_code, len(bytes_l))
+                    ret_pdu.add_pack('%dB' % len(bytes_l), *bytes_l)
+                else:
+                    ret_pdu.build_except(rx_pdu.func_code, ret_hdl.exp_code)
             else:
-                data = b''
-                while len(data) < bufsize:
-                    data_chunk = self._recv(bufsize - len(data), flags)
-                    if data_chunk:
-                        data += data_chunk
-                    else:
-                        data = b''
-                        break
-            return data
+                ret_pdu.build_except(rx_pdu.func_code, EXP_DATA_VALUE)
+            return ret_pdu
+
+        def _read_words(self, rx_pdu):
+            # functions Read Holding Registers (0x03) or Read Input Registers (0x04)
+            # init PDU() for return value
+            ret_pdu = ModbusServer.PDU()
+            # decode pdu
+            (start_addr, quantity_regs) = rx_pdu.unpack('>HH', from_byte=1, to_byte=5)
+            # check quantity of requested words
+            if 0x0001 <= quantity_regs <= 0x007D:
+                # data handler read request: for holding or input registers space
+                if rx_pdu.func_code == READ_HOLDING_REGISTERS:
+                    ret_hdl = self.server.data_hdl.read_h_regs(start_addr, quantity_regs, srv_infos=self.srv_infos)
+                else:
+                    ret_hdl = self.server.data_hdl.read_i_regs(start_addr, quantity_regs, srv_infos=self.srv_infos)
+                # format regular or except response
+                if ret_hdl.ok:
+                    # build pdu
+                    ret_pdu.add_pack('BB', rx_pdu.func_code, quantity_regs * 2)
+                    # add_pack requested words
+                    ret_pdu.add_pack('>%dH' % len(ret_hdl.data), *ret_hdl.data)
+                else:
+                    ret_pdu.build_except(rx_pdu.func_code, ret_hdl.exp_code)
+            else:
+                ret_pdu.build_except(rx_pdu.func_code, EXP_DATA_VALUE)
+            return ret_pdu
+
+        def _write_single_coil(self, rx_pdu):
+            # function Write Single Coil (0x05)
+            # init PDU() for return value
+            ret_pdu = ModbusServer.PDU()
+            # decode pdu
+            (coil_addr, coil_value) = rx_pdu.unpack('>HH', from_byte=1, to_byte=5)
+            # format coil raw value to bool
+            coil_as_bool = bool(coil_value == 0xFF00)
+            # data handler update request
+            ret_hdl = self.server.data_hdl.write_coils(coil_addr, [coil_as_bool], srv_infos=self.srv_infos)
+            # format regular or except response
+            if ret_hdl.ok:
+                ret_pdu.add_pack('>BHH', rx_pdu.func_code, coil_addr, coil_value)
+            else:
+                ret_pdu.build_except(rx_pdu.func_code, ret_hdl.exp_code)
+            return ret_pdu
+
+        def _write_single_register(self, rx_pdu):
+            # function Write Single Register (0x06)
+            # init PDU() for return value
+            ret_pdu = ModbusServer.PDU()
+            # decode pdu
+            (reg_addr, reg_value) = rx_pdu.unpack('>HH', from_byte=1, to_byte=5)
+            # data handler update request
+            ret_hdl = self.server.data_hdl.write_h_regs(reg_addr, [reg_value], srv_infos=self.srv_infos)
+            # format regular or except response
+            if ret_hdl.ok:
+                ret_pdu.add_pack('>BHH', rx_pdu.func_code, reg_addr, reg_value)
+            else:
+                ret_pdu.build_except(rx_pdu.func_code, ret_hdl.exp_code)
+            return ret_pdu
+
+        def _write_multiple_coils(self, rx_pdu):
+            # function Write Multiple Coils (0x0F)
+            # init PDU() for return value
+            ret_pdu = ModbusServer.PDU()
+            # decode pdu
+            (start_addr, quantity_bits, byte_count) = rx_pdu.unpack('>HHB', from_byte=1, to_byte=6)
+            # check quantity of updated coils and ensure minimal pdu size
+            bytes_need = quantity_bits // 8 + (1 if quantity_bits % 8 else 0)
+            if 0x0001 <= quantity_bits <= 0x07B0 and \
+               bytes_need <= byte_count <= len(rx_pdu.raw[6:]):
+                # allocate bits list
+                bits_l = [False] * quantity_bits
+                # populate bits list with bits from rx frame
+                for i, _ in enumerate(bits_l):
+                    bit_val = rx_pdu.raw[i // 8 + 6]
+                    bits_l[i] = test_bit(bit_val, i % 8)
+                # data handler update request
+                ret_hdl = self.server.data_hdl.write_coils(start_addr, bits_l, srv_infos=self.srv_infos)
+                # format regular or except response
+                if ret_hdl.ok:
+                    ret_pdu.add_pack('>BHH', rx_pdu.func_code, start_addr, quantity_bits)
+                else:
+                    ret_pdu.build_except(rx_pdu.func_code, ret_hdl.exp_code)
+            else:
+                ret_pdu.build_except(rx_pdu.func_code, EXP_DATA_VALUE)
+            return ret_pdu
+
+        def _write_multiple_registers(self, rx_pdu):
+            # function Write Multiple Registers (0x10)
+            # init PDU() for return value
+            ret_pdu = ModbusServer.PDU()
+            # decode pdu
+            (start_addr, quantity_regs, byte_count) = rx_pdu.unpack('>HHB', from_byte=1, to_byte=6)
+            # check quantity of updated registers and ensure minimal pdu size
+            if 0x0001 <= quantity_regs <= 0x007B and byte_count == quantity_regs * 2 and \
+               len(rx_pdu.raw[6:]) >= byte_count:
+                # allocate words list
+                regs_l = [0] * quantity_regs
+                # populate words list with words from rx frame
+                for i, _ in enumerate(regs_l):
+                    offset = i * 2 + 6
+                    regs_l[i] = rx_pdu.unpack('>H', from_byte=offset, to_byte=offset + 2)[0]
+                # data handler update request
+                ret_hdl = self.server.data_hdl.write_h_regs(start_addr, regs_l, srv_infos=self.srv_infos)
+                # format regular or except response
+                if ret_hdl.ok:
+                    ret_pdu.add_pack('>BHH', rx_pdu.func_code, start_addr, quantity_regs)
+                else:
+                    ret_pdu.build_except(rx_pdu.func_code, ret_hdl.exp_code)
+            else:
+                ret_pdu.build_except(rx_pdu.func_code, EXP_DATA_VALUE)
+            return ret_pdu
+
+        def setup(self):
+            # set a socket timeout of 1s on blocking operations (like send/recv)
+            # this avoid hang thread deletion when main server exit (see _recv_all method)
+            self.request.settimeout(1)
+            # init and update server infos structure
+            self.srv_infos = ModbusServerInfos()
+            (addr, port) = self.request.getpeername()
+            self.srv_infos.client_addr = addr
+            self.srv_infos.client_port = port
 
         def handle(self):
-            # main loop
-            while True:
-                # exit from this thread if main server stop running
-                if not self.server._evt_running.is_set():
-                    break
-                # receive mbap from client
-                rx_mbap = self._recv_all(7)
-                # close connection if no standard 7 bytes mbap header
-                if not (rx_mbap and len(rx_mbap) == 7):
-                    break
-                # decode header
-                (rx_mbap_tr_id, rx_mbap_pr_id,
-                 rx_mbap_length, rx_mbap_unit_id) = struct.unpack('>HHHB', rx_mbap)
-                # close connection if frame header content inconsistency
-                if not ((rx_mbap_pr_id == 0) and (2 < rx_mbap_length < 256)):
-                    break
-                # receive pdu
-                rx_pdu = self._recv_all(rx_mbap_length - 1)
-                # close connection if lack of bytes in frame pdu
-                if not (rx_pdu and (len(rx_pdu) == rx_mbap_length - 1)):
-                    break
-                # enforce bytearray for py2
-                rx_pdu = bytearray(rx_pdu)
-                # pdu decode: function code
-                rx_func_code = struct.unpack('B', rx_pdu[0:1])[0]
-                # close connection if function code is inconsistent
-                if rx_func_code > 0x7F:
-                    break
-                # some default value
-                exp_status = EXP_NONE
-                tx_pdu = b''
-                # set modbus server infos
-                client_addr, client_port = self.request.getpeername()
-                srv_infos = ModbusServerInfos(client_addr=client_addr, client_port=client_port,
-                                              rx_mbap=rx_mbap, rx_pdu=rx_pdu)
-                # functions Read Coils (0x01) or Read Discrete Inputs (0x02)
-                if rx_func_code in (READ_COILS, READ_DISCRETE_INPUTS):
-                    # ensure pdu size
-                    if len(rx_pdu[1:]) != struct.calcsize('>HH'):
-                        break
-                    # decode pdu
-                    (start_addr, quantity_bits) = struct.unpack('>HH', rx_pdu[1:])
-                    # check quantity of requested bits
-                    if 0x0001 <= quantity_bits <= 0x07D0:
-                        # data handler read request: for coils or discrete inputs space
-                        if rx_func_code == READ_COILS:
-                            ret = self.server.data_hdl.read_coils(start_addr, quantity_bits, srv_infos=srv_infos)
-                        else:
-                            ret = self.server.data_hdl.read_d_inputs(start_addr, quantity_bits, srv_infos=srv_infos)
-                        # format regular or except response
-                        if ret.ok:
-                            # allocate bytes list
-                            b_size = int(quantity_bits / 8)
-                            b_size += 1 if (quantity_bits % 8) else 0
-                            bytes_l = [0] * b_size
-                            # populate bytes list with data bank bits
-                            for i, item in enumerate(ret.data):
-                                if item:
-                                    bytes_l[i//8] = set_bit(bytes_l[i//8], i % 8)
-                            # build pdu
-                            tx_pdu += struct.pack('BB', rx_func_code, len(bytes_l))
-                            # add requested bits
-                            tx_pdu += struct.pack('%dB' % len(bytes_l), *bytes_l)
-                        else:
-                            exp_status = ret.exp_code
-                    else:
-                        exp_status = EXP_DATA_VALUE
-                # functions Read Holding Registers (0x03) or Read Input Registers (0x04)
-                elif rx_func_code in (READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS):
-                    # ensure pdu size
-                    if len(rx_pdu[1:]) != struct.calcsize('>HH'):
-                        break
-                    # decode pdu
-                    (start_addr, quantity_regs) = struct.unpack('>HH', rx_pdu[1:])
-                    # check quantity of requested words
-                    if 0x0001 <= quantity_regs <= 0x007D:
-                        # data handler read request: for holding or input registers space
-                        if rx_func_code == READ_HOLDING_REGISTERS:
-                            ret = self.server.data_hdl.read_h_regs(start_addr, quantity_regs, srv_infos=srv_infos)
-                        else:
-                            ret = self.server.data_hdl.read_i_regs(start_addr, quantity_regs, srv_infos=srv_infos)
-                        # format regular or except response
-                        if ret.ok:
-                            # build pdu
-                            tx_pdu += struct.pack('BB', rx_func_code, quantity_regs * 2)
-                            # add requested words
-                            tx_pdu += struct.pack('>%dH' % len(ret.data), *ret.data)
-                        else:
-                            exp_status = ret.exp_code
-                    else:
-                        exp_status = EXP_DATA_VALUE
-                # function Write Single Coil (0x05)
-                elif rx_func_code is WRITE_SINGLE_COIL:
-                    # ensure pdu size
-                    if len(rx_pdu[1:]) != struct.calcsize('>HH'):
-                        break
-                    # decode pdu
-                    (coil_addr, coil_value) = struct.unpack('>HH', rx_pdu[1:])
-                    # format coil raw value to bool
-                    coil_as_bool = bool(coil_value == 0xFF00)
-                    # data handler update request
-                    ret = self.server.data_hdl.write_coils(coil_addr, [coil_as_bool], srv_infos=srv_infos)
-                    # format regular or except response
-                    if ret.ok:
-                        tx_pdu += struct.pack('>BHH', rx_func_code, coil_addr, coil_value)
-                    else:
-                        exp_status = ret.exp_code
-                # function Write Single Register (0x06)
-                elif rx_func_code is WRITE_SINGLE_REGISTER:
-                    # ensure pdu size
-                    if len(rx_pdu[1:]) != struct.calcsize('>HH'):
-                        break
-                    # decode pdu
-                    (reg_addr, reg_value) = struct.unpack('>HH', rx_pdu[1:])
-                    # data handler update request
-                    ret = self.server.data_hdl.write_h_regs(reg_addr, [reg_value], srv_infos=srv_infos)
-                    # format regular or except response
-                    if ret.ok:
-                        tx_pdu += struct.pack('>BHH', rx_func_code, reg_addr, reg_value)
-                    else:
-                        exp_status = ret.exp_code
-                # function Write Multiple Coils (0x0F)
-                elif rx_func_code is WRITE_MULTIPLE_COILS:
-                    # ensure pdu size
-                    if len(rx_pdu[1:6]) != struct.calcsize('>HHB'):
-                        break
-                    # decode pdu
-                    (start_addr, quantity_bits, byte_count) = struct.unpack('>HHB', rx_pdu[1:6])
-                    # ensure minimal pdu size for data part
-                    if len(rx_pdu[6:]) < byte_count:
-                        break
-                    # check quantity of updated coils
-                    if (0x0001 <= quantity_bits <= 0x07B0) and (byte_count >= (quantity_bits / 8)):
-                        # allocate bits list
-                        bits_l = [False] * quantity_bits
-                        # populate bits list with bits from rx frame
-                        for i, _ in enumerate(bits_l):
-                            bit_val = rx_pdu[i//8 + 6]
-                            bits_l[i] = test_bit(bit_val, i % 8)
-                        # data handler update request
-                        ret = self.server.data_hdl.write_coils(start_addr, bits_l, srv_infos=srv_infos)
-                        # format regular or except response
-                        if ret.ok:
-                            tx_pdu += struct.pack('>BHH', rx_func_code, start_addr, quantity_bits)
-                        else:
-                            exp_status = ret.exp_code
-                    else:
-                        exp_status = EXP_DATA_VALUE
-                # function Write Multiple Registers (0x10)
-                elif rx_func_code is WRITE_MULTIPLE_REGISTERS:
-                    # ensure pdu size
-                    if len(rx_pdu[1:6]) != struct.calcsize('>HHB'):
-                        break
-                    # decode pdu
-                    (start_addr, quantity_regs, byte_count) = struct.unpack('>HHB', rx_pdu[1:6])
-                    # ensure minimal pdu size for data part
-                    if len(rx_pdu[6:]) < byte_count:
-                        break
-                    # check quantity of updated words
-                    if (0x0001 <= quantity_regs <= 0x007B) and (byte_count == quantity_regs * 2):
-                        # allocate words list
-                        regs_l = [0] * quantity_regs
-                        # populate words list with words from rx frame
-                        for i, _ in enumerate(regs_l):
-                            offset = i * 2 + 6
-                            regs_l[i] = struct.unpack('>H', rx_pdu[offset:offset + 2])[0]
-                        # data handler update request
-                        ret = self.server.data_hdl.write_h_regs(start_addr, regs_l, srv_infos=srv_infos)
-                        # format regular or except response
-                        if ret.ok:
-                            tx_pdu += struct.pack('>BHH', rx_func_code, start_addr, quantity_regs)
-                        else:
-                            exp_status = ret.exp_code
-                    else:
-                        exp_status = EXP_DATA_VALUE
-                else:
-                    exp_status = EXP_ILLEGAL_FUNCTION
-                # check exception
-                if exp_status != EXP_NONE:
-                    # build pdu with exception status
-                    tx_pdu += struct.pack('BB', rx_func_code + 0x80, exp_status)
-                # build mbap
-                tx_mbap = struct.pack('>HHHB', rx_mbap_tr_id, rx_mbap_pr_id, len(tx_pdu) + 1, rx_mbap_unit_id)
-                # send frame
-                if not self._send_all(tx_mbap + tx_pdu):
-                    break
-            # on main loop breaking: close the current socket
-            self.request.close()
+            # close current socket on error or ThreadExit custom except
+            try:
+                # main processing loop
+                while True:
+                    # receive mbap from client
+                    raw_mbap = self._recv_all(7)
+                    rx_mbap = ModbusServer.MBAP(raw=raw_mbap)
+                    # receive pdu from client
+                    raw_pdu = self._recv_all(rx_mbap.length - 1)
+                    rx_pdu = ModbusServer.PDU(raw=raw_pdu)
+                    # set modbus server infos
+                    self.srv_infos.client_raw_mbap = raw_mbap
+                    self.srv_infos.client_raw_pdu = raw_pdu
+                    # modbus functions maps
+                    f_maps = {READ_COILS: self._read_bits,
+                              READ_DISCRETE_INPUTS: self._read_bits,
+                              READ_HOLDING_REGISTERS: self._read_words,
+                              READ_INPUT_REGISTERS: self._read_words,
+                              WRITE_SINGLE_COIL: self._write_single_coil,
+                              WRITE_SINGLE_REGISTER: self._write_single_register,
+                              WRITE_MULTIPLE_COILS: self._write_multiple_coils,
+                              WRITE_MULTIPLE_REGISTERS: self._write_multiple_registers}
+                    # call ad-hoc function (if unavailable send EXP_ILLEGAL_FUNCTION)
+                    try:
+                        tx_pdu = f_maps[rx_pdu.func_code](rx_pdu)
+                    except KeyError:
+                        tx_pdu = ModbusServer.PDU().build_except(rx_pdu.func_code, EXP_ILLEGAL_FUNCTION)
+                    # send frame
+                    self._send_all(rx_mbap.raw_with_pdu(tx_pdu))
+            except (ModbusServer.InternalError, socket.error):
+                # on main loop except: exit from it and close the current socket
+                self.request.close()
 
     def __init__(self, host='localhost', port=MODBUS_PORT, no_block=False, ipv6=False,
                  data_bank=None, data_hdl=None):
@@ -701,7 +780,7 @@ class ModbusServer:
             # init server
             self._service = ThreadingTCPServer((self.host, self.port), self.ModbusService, bind_and_activate=False)
             # pass some things shared with server threads (access via self.server in ModbusService.handle())
-            self._service._evt_running = self._evt_running
+            self._service.evt_running = self._evt_running
             self._service.data_hdl = self.data_hdl
             # set socket options
             self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
