@@ -526,16 +526,11 @@ class ModbusServer:
             data = b''
             while len(data) < size:
                 try:
-                    # avoid pending thread after stop() of main server
-                    # exit from this thread and close socket with ThreadExit
+                    # avoid to keep this TCP thread run after server.stop() on main server
                     if not self.server_running:
                         raise ModbusServer.InternalError('main server is not running')
-                    # use MSG_WAITALL flag when available
-                    if hasattr(socket, 'MSG_WAITALL'):
-                        data += self.request.recv(size - len(data), socket.MSG_WAITALL)
-                    # on platform (like Windows) without MSG_WAITALL: we emulate it with while loop
-                    else:
-                        data += self.request.recv(size - len(data))
+                    # recv all data or a chunk of it
+                    data += self.request.recv(size - len(data))
                 except socket.timeout:
                     # just redo main server run test and recv operations on timeout
                     pass
