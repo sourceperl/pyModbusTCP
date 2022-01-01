@@ -52,19 +52,15 @@ class DataHandlerReturn:
 
 class ModbusServerInfos:
     def __init__(self):
-        self.client_addr = ''
-        self.client_port = 502
-        self.client_raw_mbap = bytearray()
-        self.client_raw_pdu = bytearray()
+        self.client_addr = None
+        self.client_port = None
+        self.rx_mbap = None
+        self.rx_pdu = None
 
     @property
-    def client_raw_frame(self):
-        return self.client_raw_mbap + self.client_raw_pdu
-
-    @property
-    def client_raw_frame_as_str(self):
-        mbap_str = ' '.join(['%02X' % c for c in bytearray(self.client_raw_mbap)])
-        pdu_str = ' '.join(['%02X' % c for c in bytearray(self.client_raw_pdu)])
+    def rx_frame_as_str(self):
+        mbap_str = ' '.join(['%02X' % c for c in bytearray(self.rx_mbap.raw)])
+        pdu_str = ' '.join(['%02X' % c for c in bytearray(self.rx_pdu.raw)])
         return '[%s] %s' % (mbap_str, pdu_str)
 
 
@@ -631,10 +627,12 @@ class ModbusServer:
             ret_pdu = ModbusServer.PDU()
             # decode pdu
             (start_addr, quantity_bits, byte_count) = rx_pdu.unpack('>HHB', from_byte=1, to_byte=6)
-            # check quantity of updated coils and ensure minimal pdu size
-            bytes_need = quantity_bits // 8 + (1 if quantity_bits % 8 else 0)
-            if 0x0001 <= quantity_bits <= 0x07B0 and \
-               bytes_need <= byte_count <= len(rx_pdu.raw[6:]):
+            # ok flags: some tests on pdu fields
+            qty_bits_ok = 0x0001 <= quantity_bits <= 0x07B0
+            b_count_ok = byte_count >= quantity_bits // 8 + (1 if quantity_bits % 8 else 0)
+            pdu_len_ok = len(rx_pdu.raw[6:]) >= byte_count
+            # test ok flags
+            if qty_bits_ok and b_count_ok and pdu_len_ok:
                 # allocate bits list
                 bits_l = [False] * quantity_bits
                 # populate bits list with bits from rx frame
@@ -658,9 +656,12 @@ class ModbusServer:
             ret_pdu = ModbusServer.PDU()
             # decode pdu
             (start_addr, quantity_regs, byte_count) = rx_pdu.unpack('>HHB', from_byte=1, to_byte=6)
-            # check quantity of updated registers and ensure minimal pdu size
-            if 0x0001 <= quantity_regs <= 0x007B and byte_count == quantity_regs * 2 and \
-               len(rx_pdu.raw[6:]) >= byte_count:
+            # ok flags: some tests on pdu fields
+            qty_regs_ok = 0x0001 <= quantity_regs <= 0x007B
+            b_count_ok = byte_count == quantity_regs * 2
+            pdu_len_ok = len(rx_pdu.raw[6:]) >= byte_count
+            # test ok flags
+            if qty_regs_ok and b_count_ok and pdu_len_ok:
                 # allocate words list
                 regs_l = [0] * quantity_regs
                 # populate words list with words from rx frame
@@ -695,14 +696,12 @@ class ModbusServer:
                 # main processing loop
                 while True:
                     # receive mbap from client
-                    raw_mbap = self._recv_all(7)
-                    rx_mbap = ModbusServer.MBAP(raw=raw_mbap)
+                    rx_mbap = ModbusServer.MBAP(raw=self._recv_all(7))
                     # receive pdu from client
-                    raw_pdu = self._recv_all(rx_mbap.length - 1)
-                    rx_pdu = ModbusServer.PDU(raw=raw_pdu)
+                    rx_pdu = ModbusServer.PDU(raw=self._recv_all(rx_mbap.length - 1))
                     # set modbus server infos
-                    self.srv_infos.client_raw_mbap = raw_mbap
-                    self.srv_infos.client_raw_pdu = raw_pdu
+                    self.srv_infos.rx_mbap = rx_mbap
+                    self.srv_infos.rx_pdu = rx_pdu
                     # modbus functions maps
                     f_maps = {READ_COILS: self._read_bits,
                               READ_DISCRETE_INPUTS: self._read_bits,
