@@ -689,7 +689,8 @@ class ModbusServer:
             self.srv_infos.client_port = port
 
         def handle(self):
-            # close current socket on error or ThreadExit custom except
+            # try/except end current thread on ModbusServer.InternalError or socket.error
+            # this also close the current TCP session associed with it
             try:
                 # main processing loop
                 while True:
@@ -711,15 +712,15 @@ class ModbusServer:
                               WRITE_SINGLE_REGISTER: self._write_single_register,
                               WRITE_MULTIPLE_COILS: self._write_multiple_coils,
                               WRITE_MULTIPLE_REGISTERS: self._write_multiple_registers}
-                    # call ad-hoc function (if unavailable send EXP_ILLEGAL_FUNCTION)
+                    # call the ad-hoc function, if none exists, send an "illegal function" exception
                     try:
                         tx_pdu = f_maps[rx_pdu.func_code](rx_pdu)
                     except KeyError:
                         tx_pdu = ModbusServer.PDU().build_except(rx_pdu.func_code, EXP_ILLEGAL_FUNCTION)
-                    # send frame
+                    # send the tx pdu with the last rx mbap (only length field change)
                     self._send_all(rx_mbap.raw_with_pdu(tx_pdu))
             except (ModbusServer.InternalError, socket.error):
-                # on main loop except: exit from it and close the current socket
+                # on main loop except: exit from it and cleany close the current socket
                 self.request.close()
 
     def __init__(self, host='localhost', port=MODBUS_PORT, no_block=False, ipv6=False,
