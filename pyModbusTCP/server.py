@@ -522,22 +522,22 @@ class ModbusServer:
             except socket.timeout:
                 return False
 
-        def _recv_all(self, bufsize, flags=0):
-            # use MSG_WAITALL flag when available
-            if hasattr(socket, 'MSG_WAITALL'):
-                flags |= socket.MSG_WAITALL
-            # on platform (like Windows) without MSG_WAITALL: we emulate it here
+        def _recv_all(self, size):
             data = b''
-            while len(data) < bufsize:
+            while len(data) < size:
                 try:
                     # avoid pending thread after stop() of main server
                     # exit from this thread and close socket with ThreadExit
                     if not self.server_running:
                         raise ModbusServer.InternalError('main server is not running')
-                    # read data from current socket (block but can raise a timeout)
-                    data += self.request.recv(bufsize - len(data), flags)
+                    # use MSG_WAITALL flag when available
+                    if hasattr(socket, 'MSG_WAITALL'):
+                        data += self.request.recv(size - len(data), socket.MSG_WAITALL)
+                    # on platform (like Windows) without MSG_WAITALL: we emulate it with while loop
+                    else:
+                        data += self.request.recv(size - len(data))
                 except socket.timeout:
-                    # just redo srv run test and recv on timeout
+                    # just redo main server run test and recv operations on timeout
                     pass
             return bytearray(data)
 
