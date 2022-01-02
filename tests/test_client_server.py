@@ -13,48 +13,48 @@ MAX_WRITABLE_BITS = 1968
 
 
 class TestModbusClient(unittest.TestCase):
-    def test_except_init_host(self):
-        # should raise an exception for bad hostname
-        self.assertRaises(ValueError, ModbusClient, host='wrong@host')
-
-    def test_except_init_port(self):
-        # should raise an exception for bad port
-        self.assertRaises(ValueError, ModbusClient, port=-1)
-
-    def test_except_unit_id(self):
-        # should raise an exception for bad unit_id
-        self.assertRaises(ValueError, ModbusClient, unit_id=420)
-
     def test_host(self):
-        # test valid/invalid cases for host()
-        c = ModbusClient()
-        self.assertEqual(c.host(), 'localhost', 'default host is localhost')
-        self.assertEqual(c.host('wrong@host'), None)
-        self.assertEqual(c.host('my.good.host'), 'my.good.host')
-        self.assertEqual(c.host('127.0.0.1'), '127.0.0.1')
-        self.assertEqual(c.host('::1'), '::1')
+        # default value
+        self.assertEqual(ModbusClient().host, 'localhost')
+        # should raise ValueError for bad value
+        self.assertRaises(ValueError, ModbusClient, host='wrong@host')
+        self.assertRaises(ValueError, ModbusClient, host='192.168.2.bad')
+        self.assertRaises(ValueError, ModbusClient, host='::notip:1')
+        # shouldn't raise ValueError for valid value
+        try:
+            [ModbusClient(host=h) for h in ['my.good.host', '127.0.0.1', '::1']]
+        except ValueError:
+            self.fail('ModbusClient.host property raised ValueError unexpectedly')
 
     def test_port(self):
-        # test valid/invalid cases for port()
-        c = ModbusClient()
-        self.assertEqual(c.port(), 502, 'default modbus/TCP port is 502')
-        self.assertEqual(c.port(-1), None)
-        self.assertEqual(c.port(42), 42)
-
-    def test_debug(self):
-        # test valid/invalid cases for debug()
-        c = ModbusClient()
-        self.assertEqual(c.debug(), False, 'debug default is off')
-        self.assertEqual(c.debug(False), False)
-        self.assertEqual(c.debug(True), True)
+        # default value
+        self.assertEqual(ModbusClient().port, 502)
+        # should raise an exception for bad value
+        self.assertRaises(TypeError, ModbusClient, port='amsterdam')
+        self.assertRaises(ValueError, ModbusClient, port=-1)
+        # shouldn't raise ValueError for valid value
+        try:
+            ModbusClient(port=5020)
+        except ValueError:
+            self.fail('ModbusClient.port property raised ValueError unexpectedly')
 
     def test_unit_id(self):
-        # test valid/invalid cases for debug()
-        c = ModbusClient()
-        self.assertEqual(c.unit_id(), 1, 'default unit_id is 1')
-        self.assertEqual(c.unit_id(42), 42)
-        self.assertEqual(c.unit_id(0), 0)
-        self.assertEqual(c.unit_id(420), None)
+        # default value
+        self.assertEqual(ModbusClient().unit_id, 1)
+        # should raise an exception for bad unit_id
+        self.assertRaises(TypeError, ModbusClient, unit_id='@')
+        self.assertRaises(ValueError, ModbusClient, unit_id=420)
+        # shouldn't raise ValueError for valid value
+        try:
+            ModbusClient(port=5020)
+        except ValueError:
+            self.fail('ModbusClient.port property raised ValueError unexpectedly')
+
+    def test_misc(self):
+        # misc default values
+        self.assertEqual(ModbusClient().debug, False)
+        self.assertEqual(ModbusClient().auto_open, True)
+        self.assertEqual(ModbusClient().auto_close, False)
 
 
 class TestClientServer(unittest.TestCase):
@@ -74,10 +74,10 @@ class TestClientServer(unittest.TestCase):
     def test_default_startup_values(self):
         # some read at random address to test startup values
         for addr in [randint(0, 0xffff) for _ in range(100)]:
-            self.assertEqual(self.client.read_coils(addr), [False], 'Default value is False when server start')
-            self.assertEqual(self.client.read_discrete_inputs(addr), [False], 'Default value is False when server start')
-            self.assertEqual(self.client.read_holding_registers(addr), [0], 'Default value is 0 when server start')
-            self.assertEqual(self.client.read_input_registers(addr), [0], 'Default value is 0 when server start')
+            self.assertEqual(self.client.read_coils(addr), [False])
+            self.assertEqual(self.client.read_discrete_inputs(addr), [False])
+            self.assertEqual(self.client.read_holding_registers(addr), [0])
+            self.assertEqual(self.client.read_input_registers(addr), [0])
 
     def test_read_write_requests(self):
         # coils
@@ -165,8 +165,8 @@ class TestClientServer(unittest.TestCase):
             if func_code not in SUPPORTED_FUNCTION_CODES:
                 # test with a min PDU length of 2 bytes (avoid short frame error)
                 self.assertEqual(self.client.custom_request(bytearray([func_code, 0x00])), None)
-                self.assertEqual(self.client.last_error(), MB_EXCEPT_ERR)
-                self.assertEqual(self.client.last_except(), EXP_ILLEGAL_FUNCTION)
+                self.assertEqual(self.client.last_error, MB_EXCEPT_ERR)
+                self.assertEqual(self.client.last_except, EXP_ILLEGAL_FUNCTION)
 
 
 if __name__ == '__main__':

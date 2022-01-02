@@ -414,7 +414,8 @@ class ModbusServerDataHandler:
             return DataHandlerReturn(exp_code=EXP_DATA_ADDRESS)
 
 
-class ModbusServer:
+class ModbusServer(object):
+
     """ Modbus TCP server """
 
     class InternalError(Exception):
@@ -719,7 +720,7 @@ class ModbusServer:
                     # send the tx pdu with the last rx mbap (only length field change)
                     self._send_all(rx_mbap.raw_with_pdu(tx_pdu))
             except (ModbusServer.InternalError, socket.error):
-                # on main loop except: exit from it and cleany close the current socket
+                # on main loop except: exit from it and cleanly close the current socket
                 self.request.close()
 
     def __init__(self, host='localhost', port=MODBUS_PORT, no_block=False, ipv6=False,

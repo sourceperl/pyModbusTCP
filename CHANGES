@@ -1,13 +1,19 @@
 
 Revision history for pyModbusTCP
 
-0.2.0 202x-xx-xx
+0.2.0-dev 202x-xx-xx
 
-    - modbus server: add ModbusServerDataHandler and DefaultDataBank class.
-    - add or update server examples for new modbus server add.
-    - fix random arrays generation on client test script.
-    - clarify usage of root privilege for open tcp/502 (Errno 13) in server example.
-    - end of support for python 2.7.
+    - ModbusClient: parameters are now properties instead of methods (more intuitive).
+    - ModbusClient: now TCP auto open mode is active by default (auto_open=True, auto_close=False).
+    - ModbusClient: add custom_request method for send user define PDU to modbus server.
+    - ModbusClient: remove RTU mode.
+    - ModbusClient: clarify some things (methods and vars rename).
+    - ModbusServer: big redesign to improve readability and maintainability.
+    - ModbusServer: add of ModbusServerDataHandler and DefaultDataBank class for easy customize.
+    - add or update server examples for new modbus server.
+    - some updates on tests, fix random arrays generation on client test part.
+    - clarify usage of root privilege for open tcp/502 (avoid Errno 13) in server example.
+    - end of official support of python 2.
 
 0.1.10 2021-03-02
 

@@ -1,9 +1,6 @@
-VERSION = '0.1.10'
+VERSION = '0.2.0-dev'
 # ModBus/TCP
 MODBUS_PORT = 502
-# Modbus mode
-MODBUS_TCP = 1
-MODBUS_RTU = 2
 # Modbus function code
 # standard
 READ_COILS = 0x01

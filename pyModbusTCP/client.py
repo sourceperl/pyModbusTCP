@@ -1,7 +1,7 @@
 # Python module: ModbusClient class (Client ModBus/TCP)
 
 from . import constants as const
-from .utils import crc16, set_bit
+from .utils import set_bit
 import re
 import socket
 import select
@@ -9,12 +9,12 @@ import struct
 import random
 
 
-class ModbusClient:
+class ModbusClient(object):
 
     """Modbus TCP client"""
 
-    def __init__(self, host=None, port=None, unit_id=None, timeout=None,
-                 debug=None, auto_open=None, auto_close=None):
+    def __init__(self, host='localhost', port=502, unit_id=1, timeout=30.0,
+                 debug=False, auto_open=True, auto_close=False):
         """Constructor
 
         Modbus server params (host, port) can be set here or with host(), port()
@@ -22,251 +22,234 @@ class ModbusClient:
 
         Use functions avoid to launch ValueError except if params is incorrect.
 
-        :param host: hostname or IPv4/IPv6 address server address (optional)
+        :param host: hostname or IPv4/IPv6 address server address
         :type host: str
-        :param port: TCP port number (optional)
+        :param port: TCP port number
         :type port: int
-        :param unit_id: unit ID (optional)
+        :param unit_id: unit ID
         :type unit_id: int
-        :param timeout: socket timeout in seconds (optional)
+        :param timeout: socket timeout in seconds
         :type timeout: float
-        :param debug: debug state (optional)
+        :param debug: debug state
         :type debug: bool
-        :param auto_open: auto TCP connect (optional)
+        :param auto_open: auto TCP connect
         :type auto_open: bool
-        :param auto_close: auto TCP close (optional)
+        :param auto_close: auto TCP close)
         :type auto_close: bool
         :return: Object ModbusClient
         :rtype: ModbusClient
         :raises ValueError: if a set parameter value is incorrect
         """
-        # object vars
-        self.__hostname = 'localhost'
-        self.__port = const.MODBUS_PORT
-        self.__unit_id = 1
-        self.__timeout = 30.0                # socket timeout
-        self.__debug = False                 # debug trace on/off
-        self.__auto_open = False             # auto TCP connect
-        self.__auto_close = False            # auto TCP close
-        self.__mode = const.MODBUS_TCP       # default is Modbus/TCP
-        self.__sock = None                   # socket handle
-        self.__hd_tr_id = 0                  # store transaction ID
-        self.__version = const.VERSION       # version number
-        self.__last_error = const.MB_NO_ERR  # last error code
-        self.__last_except = const.EXP_NONE  # last expect code
-        # set host
-        if host:
-            if not self.host(host):
-                raise ValueError('host value error')
-        # set port
-        if port:
-            if not self.port(port):
-                raise ValueError('port value error')
-        # set unit_id
-        if unit_id is not None:
-            if self.unit_id(unit_id) is None:
-                raise ValueError('unit_id value error')
-        # set timeout
-        if timeout:
-            if not self.timeout(timeout):
-                raise ValueError('timeout value error')
-        # set debug
-        if debug:
-            if not self.debug(debug):
-                raise ValueError('debug value error')
-        # set auto_open
-        if auto_open:
-            if not self.auto_open(auto_open):
-                raise ValueError('auto_open value error')
-        # set auto_close
-        if auto_close:
-            if not self.auto_close(auto_close):
-                raise ValueError('auto_close value error')
+        # public property (update with constructor args)
+        self.host = host
+        self.port = port
+        self.unit_id = unit_id
+        self.timeout = timeout
+        self.debug = debug
+        self.auto_open = auto_open
+        self.auto_close = auto_close
+        # private
+        self._sock = None                   # socket
+        self._hd_tr_id = 0                  # MBAP transaction ID
+        self._version = const.VERSION       # this package version number
+        self._last_error = const.MB_NO_ERR  # last error code
+        self._last_except = const.EXP_NONE  # last expect code
 
+    @property
     def version(self):
         """Get package version
 
         :return: current version of the package (like "0.0.1")
         :rtype: str
         """
-        return self.__version
+        return self._version
 
+    @property
     def last_error(self):
         """Get last error code
 
         :return: last error code
         :rtype: int
         """
-        return self.__last_error
+        return self._last_error
 
-    def last_error_txt(self):
+    @property
+    def last_error_as_txt(self):
         """Get last error as human readable text
 
         :return: last error as string
         :rtype: str
         """
-        return const.MB_ERR_TXT.get(self.__last_error, 'unknown error')
+        return const.MB_ERR_TXT.get(self._last_error, 'unknown error')
 
+    @property
     def last_except(self):
         """Get last exception code
 
         :return: last exception code
         :rtype: int
         """
-        return self.__last_except
+        return self._last_except
 
-    def last_except_txt(self, verbose=False):
-        """Get last exception code as human readable text
+    @property
+    def last_except_as_txt(self):
+        """Get last exception code as short human readable text
 
-        :param verbose: set to True for detailed information about exception
-        :type verbose: bool
-        :return: last exception as string
+        :return: short human readable text to describe last exception
         :rtype: str
         """
-        default_str = 'unreferenced exception 0x%X' % self.__last_except
-        if verbose:
-            return const.EXP_DETAILS.get(self.__last_except, default_str)
-        else:
-            return const.EXP_TXT.get(self.__last_except, default_str)
+        default_str = 'unreferenced exception 0x%X' % self._last_except
+        return const.EXP_TXT.get(self._last_except, default_str)
 
-    def host(self, hostname=None):
+    @property
+    def last_except_as_full_txt(self):
+        """Get last exception code as human readable text (verbose version)
+
+        :return: verbose human readable text to describe last exception
+        :rtype: str
+        """
+        default_str = 'unreferenced exception 0x%X' % self._last_except
+        return const.EXP_DETAILS.get(self._last_except, default_str)
+
+    @property
+    def host(self):
+        return self._host
+
+    @host.setter
+    def host(self, value):
         """Get or set host (IPv4/IPv6 or hostname like 'plc.domain.net')
 
-        :param hostname: hostname or IPv4/IPv6 address or None for get value
-        :type hostname: str or None
-        :returns: hostname or None if set fail
-        :rtype: str or None
+        :param hostname: hostname or IPv4/IPv6 address
+        :type hostname: str
         """
-        if (hostname is None) or (hostname == self.__hostname):
-            return self.__hostname
-        # when hostname change ensure old socket is close
-        self.close()
-        # IPv4 ?
+        # check type
+        if type(value) is not str:
+            raise TypeError('host must be a str')
+        # IPv4 valid address ?
         try:
-            socket.inet_pton(socket.AF_INET, hostname)
-            self.__hostname = hostname
-            return self.__hostname
+            socket.inet_pton(socket.AF_INET, value)
+            self._host = value
+            return
         except socket.error:
             pass
-        # IPv6 ?
+        # IPv6 valid address ?
         try:
-            socket.inet_pton(socket.AF_INET6, hostname)
-            self.__hostname = hostname
-            return self.__hostname
+            socket.inet_pton(socket.AF_INET6, value)
+            self._host = value
+            return
         except socket.error:
             pass
-        # DNS name ?
-        if re.match(r'^[a-z][a-z0-9.\-]+$', hostname):
-            self.__hostname = hostname
-            return self.__hostname
-        else:
-            return None
+        # valid hostname ?
+        if re.match(r'^[a-z][a-z0-9.\-]+$', value):
+            self._host = value
+            return
+        # if can't be set
+        raise ValueError('host can\'t be set (not a valid IP address or hostname)')
 
-    def port(self, port=None):
+    @property
+    def port(self):
+        return self._port
+
+    @port.setter
+    def port(self, value):
         """Get or set TCP port
 
-        :param port: TCP port number or None for get value
-        :type port: int or None
-        :returns: TCP port or None if set fail
-        :rtype: int or None
+        :param value: TCP port number or None for get value
+        :type value: int
         """
-        if (port is None) or (port == self.__port):
-            return self.__port
-        # when port change ensure old socket is close
-        self.close()
-        # valid port ?
-        if 0 < int(port) < 65536:
-            self.__port = int(port)
-            return self.__port
-        else:
-            return None
+        # check type
+        if type(value) is not int:
+            raise TypeError('port must be an int')
+        # check validity
+        if 0 < value < 65536:
+            self._port = value
+            return
+        # if can't be set
+        raise ValueError('port can\'t be set (valid if 0 < port < 65536)')
 
-    def unit_id(self, unit_id=None):
+
+    @property
+    def unit_id(self):
+        return self._unit_id
+
+    @unit_id.setter
+    def unit_id(self, value):
         """Get or set unit ID field
 
-        :param unit_id: unit ID (0 to 255) or None for get value
-        :type unit_id: int or None
-        :returns: unit ID or None if set fail
-        :rtype: int or None
+        :param unit_id: unit ID (0 to 255)
+        :type unit_id: int
         """
-        if unit_id is None:
-            return self.__unit_id
-        if 0 <= int(unit_id) < 256:
-            self.__unit_id = int(unit_id)
-            return self.__unit_id
-        else:
-            return None
+        # check type
+        if type(value) is not int:
+            raise TypeError('unit_id must be an int')
+        # check validity
+        if 0 <= int(value) < 256:
+            self._unit_id = int(value)
+            return
+        # if can't be set
+        raise ValueError('unit_id can\'t be set (valid if 0 <= unit_id < 256)')
 
-    def timeout(self, timeout=None):
+    @property
+    def timeout(self):
+        return self._timeout
+
+    @timeout.setter
+    def timeout(self, value):
         """Get or set timeout field
 
-        :param timeout: socket timeout in seconds or None for get value
-        :type timeout: float or None
-        :returns: timeout or None if set fail
-        :rtype: float or None
+        :param value: socket timeout in seconds
+        :type value: float
         """
-        if timeout is None:
-            return self.__timeout
-        if 0 < float(timeout) < 3600:
-            self.__timeout = float(timeout)
-            return self.__timeout
-        else:
-            return None
+        # enforce type
+        value = float(value)
+        # check validity
+        if 0 < value < 3600:
+            self._timeout = value
+            return
+        # if can't be set
+        raise ValueError('timeout can\'t be set (valid if 0 < timeout < 3600)')
 
-    def debug(self, state=None):
+    @property
+    def debug(self):
+        return self._debug
+
+    @debug.setter
+    def debug(self, value):
         """Get or set debug mode
 
-        :param state: debug state or None for get value
-        :type state: bool or None
-        :returns: debug state or None if set fail
-        :rtype: bool or None
+        :param value: debug state
+        :type value: bool
         """
-        if state is None:
-            return self.__debug
-        self.__debug = bool(state)
-        return self.__debug
+        # enforce type
+        self._debug = bool(value)
 
-    def auto_open(self, state=None):
+    @property
+    def auto_open(self):
+        return self._auto_open
+
+    @auto_open.setter
+    def auto_open(self, value):
         """Get or set automatic TCP connect mode
 
         :param state: auto_open state or None for get value
         :type state: bool or None
-        :returns: auto_open state or None if set fail
-        :rtype: bool or None
         """
-        if state is None:
-            return self.__auto_open
-        self.__auto_open = bool(state)
-        return self.__auto_open
+        # enforce type
+        self._auto_open = bool(value)
 
-    def auto_close(self, state=None):
+    @property
+    def auto_close(self):
+        return self._auto_close
+
+    @auto_close.setter
+    def auto_close(self, value):
         """Get or set automatic TCP close mode (after each request)
 
         :param state: auto_close state or None for get value
         :type state: bool or None
-        :returns: auto_close state or None if set fail
-        :rtype: bool or None
         """
-        if state is None:
-            return self.__auto_close
-        self.__auto_close = bool(state)
-        return self.__auto_close
-
-    def mode(self, mode=None):
-        """Get or set modbus mode (TCP or RTU)
-
-        :param mode: mode (MODBUS_TCP/MODBUS_RTU) to set or None for get value
-        :type mode: int
-        :returns: mode or None if set fail
-        :rtype: int or None
-        """
-        if mode is None:
-            return self.__mode
-        if mode == const.MODBUS_TCP or mode == const.MODBUS_RTU:
-            self.__mode = mode
-            return self.__mode
-        else:
-            return None
+        # enforce type
+        self._auto_close = bool(value)
 
     def open(self):
         """Connect to modbus server (open TCP connection)
@@ -282,26 +265,26 @@ class ModbusClient:
         # AF_xxx : AF_INET -> IPv4, AF_INET6 -> IPv6,
         #          AF_UNSPEC -> IPv6 (priority on some system) or 4
         # list available socket on target host
-        for res in socket.getaddrinfo(self.__hostname, self.__port,
+        for res in socket.getaddrinfo(self._host, self._port,
                                       socket.AF_UNSPEC, socket.SOCK_STREAM):
             af, sock_type, proto, canon_name, sa = res
             try:
-                self.__sock = socket.socket(af, sock_type, proto)
+                self._sock = socket.socket(af, sock_type, proto)
             except socket.error:
-                self.__sock = None
+                self._sock = None
                 continue
             try:
-                self.__sock.settimeout(self.__timeout)
-                self.__sock.connect(sa)
+                self._sock.settimeout(self._timeout)
+                self._sock.connect(sa)
             except socket.error:
-                self.__sock.close()
-                self.__sock = None
+                self._sock.close()
+                self._sock = None
                 continue
             break
         # check connect status
-        if self.__sock is None:
-            self.__last_error = const.MB_CONNECT_ERR
-            self.__debug_msg('connect error')
+        if self._sock is None:
+            self._last_error = const.MB_CONNECT_ERR
+            self._debug_msg('connect error')
             return False
         else:
             return True
@@ -312,7 +295,7 @@ class ModbusClient:
         :returns: status (True for open)
         :rtype: bool
         """
-        return self.__sock is not None
+        return self._sock is not None
 
     def close(self):
         """Close TCP connection
@@ -320,9 +303,9 @@ class ModbusClient:
         :returns: close status (True for close/None if already close)
         :rtype: bool or None
         """
-        if self.__sock:
-            self.__sock.close()
-            self.__sock = None
+        if self._sock:
+            self._sock.close()
+            self._sock = None
             return True
         else:
             return None
@@ -345,8 +328,8 @@ class ModbusClient:
             return None
         # check min frame body size
         if len(rx_pdu) < 2:
-            self.__last_error = const.MB_RECV_ERR
-            self.__debug_msg('send_custom_pdu(): rx frame under min size')
+            self._last_error = const.MB_RECV_ERR
+            self._debug_msg('custom_request(): rx frame under min size')
             self.close()
             return None
         # return bits list
@@ -364,13 +347,13 @@ class ModbusClient:
         """
         # check params
         if not (0 <= int(bit_addr) <= 0xffff):
-            self.__debug_msg('read_coils(): bit_addr out of range')
+            self._debug_msg('read_coils(): bit_addr out of range')
             return None
         if not (1 <= int(bit_nb) <= 2000):
-            self.__debug_msg('read_coils(): bit_nb out of range')
+            self._debug_msg('read_coils(): bit_nb out of range')
             return None
         if (int(bit_addr) + int(bit_nb)) > 0x10000:
-            self.__debug_msg('read_coils(): read after ad 65535')
+            self._debug_msg('read_coils(): read after ad 65535')
             return None
         # build pdu and send request
         if not self._send_pdu(struct.pack('>BHH', const.READ_COILS, bit_addr, bit_nb)):
@@ -384,8 +367,8 @@ class ModbusClient:
         rx_pdu = bytearray(rx_pdu)
         # check min frame body size
         if len(rx_pdu) < 3:
-            self.__last_error = const.MB_RECV_ERR
-            self.__debug_msg('read_coils(): rx frame under min size')
+            self._last_error = const.MB_RECV_ERR
+            self._debug_msg('read_coils(): rx frame under min size')
             self.close()
             return None
         # extract field "byte count"
@@ -395,8 +378,8 @@ class ModbusClient:
         # check rx_byte_count: match nb of bits request and check buffer size
         if not ((byte_count >= int((bit_nb + 7) / 8)) and
                 (byte_count == len(f_bits))):
-            self.__last_error = const.MB_RECV_ERR
-            self.__debug_msg('read_coils(): rx byte count mismatch')
+            self._last_error = const.MB_RECV_ERR
+            self._debug_msg('read_coils(): rx byte count mismatch')
             self.close()
             return None
         # allocate a bit_nb size list
@@ -419,13 +402,13 @@ class ModbusClient:
         """
         # check params
         if not (0 <= int(bit_addr) <= 0xffff):
-            self.__debug_msg('read_discrete_inputs(): bit_addr out of range')
+            self._debug_msg('read_discrete_inputs(): bit_addr out of range')
             return None
         if not (1 <= int(bit_nb) <= 2000):
-            self.__debug_msg('read_discrete_inputs(): bit_nb out of range')
+            self._debug_msg('read_discrete_inputs(): bit_nb out of range')
             return None
         if (int(bit_addr) + int(bit_nb)) > 0x10000:
-            self.__debug_msg('read_discrete_inputs(): read after ad 65535')
+            self._debug_msg('read_discrete_inputs(): read after ad 65535')
             return None
         # build pdu and send request
         if not self._send_pdu(struct.pack('>BHH', const.READ_DISCRETE_INPUTS, bit_addr, bit_nb)):
@@ -439,8 +422,8 @@ class ModbusClient:
         rx_pdu = bytearray(rx_pdu)
         # check min frame body size
         if len(rx_pdu) < 3:
-            self.__last_error = const.MB_RECV_ERR
-            self.__debug_msg('read_discrete_inputs(): rx frame under min size')
+            self._last_error = const.MB_RECV_ERR
+            self._debug_msg('read_discrete_inputs(): rx frame under min size')
             self.close()
             return None
         # extract field "byte count"
@@ -450,8 +433,8 @@ class ModbusClient:
         # check rx_byte_count: match nb of bits request and check buffer size
         if not ((byte_count >= int((bit_nb + 7) / 8)) and
                 (byte_count == len(f_bits))):
-            self.__last_error = const.MB_RECV_ERR
-            self.__debug_msg('read_discrete_inputs(): rx byte count mismatch')
+            self._last_error = const.MB_RECV_ERR
+            self._debug_msg('read_discrete_inputs(): rx byte count mismatch')
             self.close()
             return None
         # allocate a bit_nb size list
@@ -474,13 +457,13 @@ class ModbusClient:
         """
         # check params
         if not (0 <= int(reg_addr) <= 0xffff):
-            self.__debug_msg('read_holding_registers(): reg_addr out of range')
+            self._debug_msg('read_holding_registers(): reg_addr out of range')
             return None
         if not (1 <= int(reg_nb) <= 125):
-            self.__debug_msg('read_holding_registers(): reg_nb out of range')
+            self._debug_msg('read_holding_registers(): reg_nb out of range')
             return None
         if (int(reg_addr) + int(reg_nb)) > 0x10000:
-            self.__debug_msg('read_holding_registers(): read after ad 65535')
+            self._debug_msg('read_holding_registers(): read after ad 65535')
             return None
         # build pdu and send request
         if not self._send_pdu(struct.pack('>BHH', const.READ_HOLDING_REGISTERS, reg_addr, reg_nb)):
@@ -494,8 +477,8 @@ class ModbusClient:
         rx_pdu = bytearray(rx_pdu)
         # check min frame body size
         if len(rx_pdu) < 3:
-            self.__last_error = const.MB_RECV_ERR
-            self.__debug_msg('read_holding_registers(): rx frame under min size')
+            self._last_error = const.MB_RECV_ERR
+            self._debug_msg('read_holding_registers(): rx frame under min size')
             self.close()
             return None
         # extract field "byte count"
@@ -505,8 +488,8 @@ class ModbusClient:
         # check rx_byte_count: buffer size must be consistent and have at least the requested number of registers
         if not ((byte_count >= 2 * reg_nb) and
                 (byte_count == len(f_regs))):
-            self.__last_error = const.MB_RECV_ERR
-            self.__debug_msg('read_holding_registers(): rx byte count mismatch')
+            self._last_error = const.MB_RECV_ERR
+            self._debug_msg('read_holding_registers(): rx byte count mismatch')
             self.close()
             return None
         # allocate a reg_nb size list
@@ -529,13 +512,13 @@ class ModbusClient:
         """
         # check params
         if not (0x0000 <= int(reg_addr) <= 0xffff):
-            self.__debug_msg('read_input_registers(): reg_addr out of range')
+            self._debug_msg('read_input_registers(): reg_addr out of range')
             return None
         if not (0x0001 <= int(reg_nb) <= 125):
-            self.__debug_msg('read_input_registers(): reg_nb out of range')
+            self._debug_msg('read_input_registers(): reg_nb out of range')
             return None
         if (int(reg_addr) + int(reg_nb)) > 0x10000:
-            self.__debug_msg('read_input_registers(): read after ad 65535')
+            self._debug_msg('read_input_registers(): read after ad 65535')
             return None
         # build pdu and send request
         if not self._send_pdu(struct.pack('>BHH', const.READ_INPUT_REGISTERS, reg_addr, reg_nb)):
@@ -549,8 +532,8 @@ class ModbusClient:
         rx_pdu = bytearray(rx_pdu)
         # check min frame body size
         if len(rx_pdu) < 3:
-            self.__last_error = const.MB_RECV_ERR
-            self.__debug_msg('read_input_registers(): rx frame under min size')
+            self._last_error = const.MB_RECV_ERR
+            self._debug_msg('read_input_registers(): rx frame under min size')
             self.close()
             return None
         # extract field "byte count"
@@ -560,8 +543,8 @@ class ModbusClient:
         # check rx_byte_count: buffer size must be consistent and have at least the requested number of registers
         if not ((byte_count >= 2 * reg_nb) and
                 (byte_count == len(f_regs))):
-            self.__last_error = const.MB_RECV_ERR
-            self.__debug_msg('read_input_registers(): rx byte count mismatch')
+            self._last_error = const.MB_RECV_ERR
+            self._debug_msg('read_input_registers(): rx byte count mismatch')
             self.close()
             return None
         # allocate a reg_nb size list
@@ -584,7 +567,7 @@ class ModbusClient:
         """
         # check params
         if not (0 <= int(bit_addr) <= 0xffff):
-            self.__debug_msg('write_single_coil(): bit_addr out of range')
+            self._debug_msg('write_single_coil(): bit_addr out of range')
             return None
         # format "bit value" field
         bit_value = 0xff if bit_value else 0x00
@@ -600,8 +583,8 @@ class ModbusClient:
         rx_pdu = bytearray(rx_pdu)
         # check fix frame size
         if len(rx_pdu) != 5:
-            self.__last_error = const.MB_RECV_ERR
-            self.__debug_msg('write_single_coil(): rx frame size error')
+            self._last_error = const.MB_RECV_ERR
+            self._debug_msg('write_single_coil(): rx frame size error')
             self.close()
             return None
         # register extract
@@ -622,10 +605,10 @@ class ModbusClient:
         """
         # check params
         if not (0 <= int(reg_addr) <= 0xffff):
-            self.__debug_msg('write_single_register(): reg_addr out of range')
+            self._debug_msg('write_single_register(): reg_addr out of range')
             return None
         if not (0 <= int(reg_value) <= 0xffff):
-            self.__debug_msg('write_single_register(): reg_value out of range')
+            self._debug_msg('write_single_register(): reg_value out of range')
             return None
         # build pdu and send request
         if not self._send_pdu(struct.pack('>BHH', const.WRITE_SINGLE_REGISTER, reg_addr, reg_value)):
@@ -639,8 +622,8 @@ class ModbusClient:
         rx_pdu = bytearray(rx_pdu)
         # check fix frame size
         if len(rx_pdu) != 5:
-            self.__last_error = const.MB_RECV_ERR
-            self.__debug_msg('write_single_register(): rx frame size error')
+            self._last_error = const.MB_RECV_ERR
+            self._debug_msg('write_single_register(): rx frame size error')
             self.close()
             return None
         # register extract
@@ -663,13 +646,13 @@ class ModbusClient:
         bits_nb = len(bits_value)
         # check params
         if not (0x0000 <= int(bits_addr) <= 0xffff):
-            self.__debug_msg('write_multiple_coils(): bits_addr out of range')
+            self._debug_msg('write_multiple_coils(): bits_addr out of range')
             return None
         if not (0x0001 <= int(bits_nb) <= 1968):
-            self.__debug_msg('write_multiple_coils(): number of bits out of range')
+            self._debug_msg('write_multiple_coils(): number of bits out of range')
             return None
         if (int(bits_addr) + int(bits_nb)) > 0x10000:
-            self.__debug_msg('write_multiple_coils(): write after ad 65535')
+            self._debug_msg('write_multiple_coils(): write after ad 65535')
             return None
         # build frame
         # format bits value string
@@ -700,8 +683,8 @@ class ModbusClient:
         rx_pdu = bytearray(rx_pdu)
         # check fix frame size
         if len(rx_pdu) != 5:
-            self.__last_error = const.MB_RECV_ERR
-            self.__debug_msg('write_multiple_coils(): rx frame size error')
+            self._last_error = const.MB_RECV_ERR
+            self._debug_msg('write_multiple_coils(): rx frame size error')
             self.close()
             return None
         # register extract
@@ -724,13 +707,13 @@ class ModbusClient:
         regs_nb = len(regs_value)
         # check params
         if not (0x0000 <= int(regs_addr) <= 0xffff):
-            self.__debug_msg('write_multiple_registers(): regs_addr out of range')
+            self._debug_msg('write_multiple_registers(): regs_addr out of range')
             return None
         if not (0x0001 <= int(regs_nb) <= 123):
-            self.__debug_msg('write_multiple_registers(): number of registers out of range')
+            self._debug_msg('write_multiple_registers(): number of registers out of range')
             return None
         if (int(regs_addr) + int(regs_nb)) > 0x10000:
-            self.__debug_msg('write_multiple_registers(): write after ad 65535')
+            self._debug_msg('write_multiple_registers(): write after ad 65535')
             return None
         # build frame
         # format reg value string
@@ -738,7 +721,7 @@ class ModbusClient:
         for reg in regs_value:
             # check current register value
             if not (0 <= int(reg) <= 0xffff):
-                self.__debug_msg('write_multiple_registers(): regs_value out of range')
+                self._debug_msg('write_multiple_registers(): regs_value out of range')
                 return None
             # pack register for build frame
             regs_val_str += struct.pack('>H', reg)
@@ -756,8 +739,8 @@ class ModbusClient:
         rx_pdu = bytearray(rx_pdu)
         # check fix frame size
         if len(rx_pdu) != 5:
-            self.__last_error = const.MB_RECV_ERR
-            self.__debug_msg('write_multiple_registers(): rx frame size error')
+            self._last_error = const.MB_RECV_ERR
+            self._debug_msg('write_multiple_registers(): rx frame size error')
             self.close()
             return None
         # register extract
@@ -772,35 +755,35 @@ class ModbusClient:
         :returns: True if data available or None if timeout or socket error
         :rtype: bool or None
         """
-        if self.__sock is None:
+        if self._sock is None:
             return None
-        if select.select([self.__sock], [], [], self.__timeout)[0]:
+        if select.select([self._sock], [], [], self._timeout)[0]:
             return True
         else:
-            self.__last_error = const.MB_TIMEOUT_ERR
-            self.__debug_msg('timeout error')
+            self._last_error = const.MB_TIMEOUT_ERR
+            self._debug_msg('timeout error')
             self.close()
             return None
 
     def _send(self, frame):
         """Send frame over current socket
 
-        :param frame: modbus frame to send (with MBAP for TCP/CRC for RTU)
+        :param frame: modbus frame to send (MBAP + PDU)
         :type frame: str (Python2) or class bytes (Python3)
         :returns: True on success
         :rtype: bool
         """
         # check link
-        if self.__sock is None:
-            self.__last_error = const.MB_SOCK_CLOSE_ERR
-            self.__debug_msg('call _send on close socket')
+        if self._sock is None:
+            self._last_error = const.MB_SOCK_CLOSE_ERR
+            self._debug_msg('call _send on close socket')
             return False
         # send
         try:
-            self.__sock.send(frame)
+            self._sock.send(frame)
         except socket.error:
-            self.__last_error = const.MB_SEND_ERR
-            self.__debug_msg('_send error')
+            self._last_error = const.MB_SEND_ERR
+            self._debug_msg('_send error')
             self.close()
             return False
         return True
@@ -814,18 +797,18 @@ class ModbusClient:
         :rtype: bool
         """
         # for auto_open mode, check TCP and open if need
-        if self.__auto_open and not self.is_open():
+        if self._auto_open and not self.is_open():
             self.open()
         # add headers to pdu and send frame
-        tx_frame = self._add_headers(pdu)
+        tx_frame = self._add_mbap(pdu)
         if not self._send(tx_frame):
             return False
         # debug
-        if self.__debug:
+        if self._debug:
             self._pretty_dump('Tx', tx_frame)
         return True
 
-    def _recv(self, max_size):
+    def _recv(self, size):
         """Receive data over current socket
 
         :param max_size: number of bytes to receive
@@ -839,13 +822,13 @@ class ModbusClient:
             return None
         # recv
         try:
-            r_buffer = self.__sock.recv(max_size)
+            r_buffer = self._sock.recv(size)
         except socket.error:
             r_buffer = None
         # handle recv error
         if not r_buffer:
-            self.__last_error = const.MB_RECV_ERR
-            self.__debug_msg('_recv error')
+            self._last_error = const.MB_RECV_ERR
+            self._debug_msg('_recv error')
             self.close()
             return None
         return r_buffer
@@ -875,121 +858,85 @@ class ModbusClient:
         :rtype: str (Python2) or class bytes (Python3) or None
         """
         # receive
-        # modbus TCP receive
-        if self.__mode == const.MODBUS_TCP:
-            # 7 bytes header (mbap)
-            rx_mbap = self._recv_all(7)
-            # check recv
-            if not (rx_mbap and len(rx_mbap) == 7):
-                self.__last_error = const.MB_RECV_ERR
-                self.__debug_msg('_recv MBAP error')
-                self.close()
-                return None
-            # decode header
-            (rx_hd_tr_id, rx_hd_pr_id,
-             rx_hd_length, rx_hd_unit_id) = struct.unpack('>HHHB', rx_mbap)
-            # check header
-            if not ((rx_hd_tr_id == self.__hd_tr_id) and
-                    (rx_hd_pr_id == 0) and
-                    (rx_hd_length < 256) and
-                    (rx_hd_unit_id == self.__unit_id)):
-                self.__last_error = const.MB_RECV_ERR
-                self.__debug_msg('MBAP format error')
-                if self.__debug:
-                    self._pretty_dump('Rx', rx_mbap)
-                self.close()
-                return None
-            # end of frame
-            rx_pdu = self._recv_all(rx_hd_length - 1)
-            if not (rx_pdu and
-                    (len(rx_pdu) == rx_hd_length - 1) and
-                    (len(rx_pdu) >= 2)):
-                self.__last_error = const.MB_RECV_ERR
-                self.__debug_msg('_recv frame body error')
-                self.close()
-                return None
-            # dump frame
-            if self.__debug:
-                self._pretty_dump('Rx', rx_mbap + rx_pdu)
-            # body decode
-            rx_fc = struct.unpack('B', rx_pdu[0:1])[0]
-        # modbus RTU receive
-        elif self.__mode == const.MODBUS_RTU:
-            # receive modbus RTU frame (max size is 256 bytes)
-            rx_rtu = self._recv(256)
-            # on _recv error
-            if not rx_rtu:
-                return None
-            # dump frame
-            if self.__debug:
-                self._pretty_dump('Rx', rx_rtu)
-            # RTU frame min size is 5 bytes
-            if len(rx_rtu) < 5:
-                self.__last_error = const.MB_RECV_ERR
-                self.__debug_msg('short frame error')
-                self.close()
-                return None
-            # check CRC
-            if not self._crc_is_ok(rx_rtu):
-                self.__last_error = const.MB_CRC_ERR
-                self.__debug_msg('CRC error')
-                self.close()
-                return None
-            # body decode
-            (rx_unit_id, rx_fc) = struct.unpack('BB', rx_rtu[:2])
-            # check
-            if not (rx_unit_id == self.__unit_id):
-                self.__last_error = const.MB_RECV_ERR
-                self.__debug_msg('unit ID mismatch error')
-                self.close()
-                return None
-            # rx_pdu: remove unit ID (first byte) and CRC (2 last bytes) of RTU frame
-            rx_pdu = rx_rtu[1:-2]
+        # 7 bytes header (mbap)
+        rx_mbap = self._recv_all(7)
+        # check recv
+        if not (rx_mbap and len(rx_mbap) == 7):
+            self._last_error = const.MB_RECV_ERR
+            self._debug_msg('_recv MBAP error')
+            self.close()
+            return None
+        # decode header
+        (rx_hd_tr_id, rx_hd_pr_id,
+         rx_hd_length, rx_hd_unit_id) = struct.unpack('>HHHB', rx_mbap)
+        # check header
+        if not ((rx_hd_tr_id == self._hd_tr_id) and
+                (rx_hd_pr_id == 0) and
+                (rx_hd_length < 256) and
+                (rx_hd_unit_id == self._unit_id)):
+            self._last_error = const.MB_RECV_ERR
+            self._debug_msg('MBAP format error')
+            if self._debug:
+                self._pretty_dump('Rx', rx_mbap)
+            self.close()
+            return None
+        # end of frame
+        rx_pdu = self._recv_all(rx_hd_length - 1)
+        if not (rx_pdu and
+                (len(rx_pdu) == rx_hd_length - 1) and
+                (len(rx_pdu) >= 2)):
+            self._last_error = const.MB_RECV_ERR
+            self._debug_msg('_recv frame body error')
+            self.close()
+            return None
+        # dump frame
+        if self._debug:
+            self._pretty_dump('Rx', rx_mbap + rx_pdu)
+        # body decode
+        rx_fc = struct.unpack('B', rx_pdu[0:1])[0]
         # for auto_close mode, close socket after each request
-        if self.__auto_close:
+        if self._auto_close:
             self.close()
         # check except status
         if rx_fc >= 0x80:
             exp_code = struct.unpack('B', rx_pdu[1:2])[0]
-            self.__last_error = const.MB_EXCEPT_ERR
-            self.__last_except = exp_code
-            self.__debug_msg('except (code ' + str(exp_code) + ')')
+            self._last_error = const.MB_EXCEPT_ERR
+            self._last_except = exp_code
+            self._debug_msg('except (code ' + str(exp_code) + ')')
             return None
         else:
             return rx_pdu
 
-    def _add_headers(self, pdu):
-        """Return full modbus frame with headers
-
-        Modbus/TCP: add MBAP (modbus application protocol header)
-        Modbus RTU: add slave address and CRC
+    def _add_mbap(self, pdu):
+        """Return full modbus frame with MBAP (modbus application protocol header)
 
         :param pdu: modbus PDU (protocol data unit)
         :type pdu: str (Python2) or class bytes (Python3)
         :returns: full modbus frame
         :rtype: str (Python2) or class bytes (Python3)
         """
-        # modbus/TCP
-        if self.__mode == const.MODBUS_TCP:
-            # build MBAP
-            self.__hd_tr_id = random.randint(0, 65535)
-            tx_hd_pr_id = 0
-            tx_hd_length = len(pdu) + 1
-            mbap = struct.pack('>HHHB', self.__hd_tr_id, tx_hd_pr_id,
-                               tx_hd_length, self.__unit_id)
-            # full modbus/TCP frame = [MBAP]PDU
-            return mbap + pdu
-        # modbus RTU
-        elif self.__mode == const.MODBUS_RTU:
-            # full modbus RTU frame = [slave addr]PDU[CRC16]
-            slave_addr = struct.pack('B', self.__unit_id)
-            return self._add_crc(slave_addr + pdu)
+        # build MBAP
+        self._hd_tr_id = random.randint(0, 65535)
+        tx_hd_pr_id = 0
+        tx_hd_length = len(pdu) + 1
+        mbap = struct.pack('>HHHB', self._hd_tr_id, tx_hd_pr_id,
+                            tx_hd_length, self._unit_id)
+        # full modbus/TCP frame = [MBAP]PDU
+        return mbap + pdu
+
+    def _debug_msg(self, msg):
+        """Print debug message if debug mode is on
+
+        :param msg: debug message
+        :type msg: str
+        """
+        if self._debug:
+            print(msg)
 
     def _pretty_dump(self, label, frame):
         """Dump a modbus frame
 
-        modbus/TCP format: [MBAP]PDU
-        modbus RTU format: body[CRC]
+        modbus/TCP format: [MBAP] PDU
 
         :param label: head label
         :type label: str
@@ -998,47 +945,10 @@ class ModbusClient:
         """
         # split data string items to a list of hex value
         dump = ['%02X' % c for c in bytearray(frame)]
-        # format for TCP or RTU
-        if self.__mode == const.MODBUS_TCP:
-            dump_mbap = ' '.join(dump[0:7])
-            dump_pdu = ' '.join(dump[7:])
-            msg = '[%s] %s' % (dump_mbap, dump_pdu)
-        elif self.__mode == const.MODBUS_RTU:
-            dump_body = ' '.join(dump[:-2])
-            dump_crc = ' '.join(dump[-2:])
-            msg = '%s [%s]' % (dump_body, dump_crc)
+        # format message
+        dump_mbap = ' '.join(dump[0:7])
+        dump_pdu = ' '.join(dump[7:])
+        msg = '[%s] %s' % (dump_mbap, dump_pdu)
         # print result
         print(label)
         print(msg)
-
-    @staticmethod
-    def _add_crc(frame):
-        """Add CRC to modbus frame (for RTU mode)
-
-        :param frame: modbus RTU frame
-        :type frame: str (Python2) or class bytes (Python3)
-        :returns: modbus RTU frame with CRC
-        :rtype: str (Python2) or class bytes (Python3)
-        """
-        crc = struct.pack('<H', crc16(frame))
-        return frame + crc
-
-    @staticmethod
-    def _crc_is_ok(frame):
-        """Check the CRC of modbus RTU frame
-
-        :param frame: modbus RTU frame with CRC
-        :type frame: str (Python2) or class bytes (Python3)
-        :returns: status CRC (True for valid)
-        :rtype: bool
-        """
-        return crc16(frame) == 0
-
-    def __debug_msg(self, msg):
-        """Print debug message if debug mode is on
-
-        :param msg: debug message
-        :type msg: str
-        """
-        if self.__debug:
-            print(msg)
