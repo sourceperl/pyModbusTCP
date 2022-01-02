@@ -73,18 +73,6 @@ module init (TCP open/close for each request)
     # TCP auto connect on modbus request, close after it
     c = ModbusClient(host="127.0.0.1", auto_open=True, auto_close=True)
 
-module init (with accessor functions)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-    c = ModbusClient()
-    c.host("localhost")
-    c.port(502)
-    c.unit_id(1)
-    # managing TCP sessions with call to c.open()/c.close()
-    c.open()
-
 Read 2x 16 bits registers at modbus address 0 :
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
