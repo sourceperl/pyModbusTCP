@@ -17,11 +17,6 @@ class ModbusClient(object):
                  debug=False, auto_open=True, auto_close=False):
         """Constructor
 
-        Modbus server params (host, port) can be set here or with host(), port()
-        functions. Same for debug option.
-
-        Use functions avoid to launch ValueError except if params is incorrect.
-
         :param host: hostname or IPv4/IPv6 address server address
         :type host: str
         :param port: TCP port number
