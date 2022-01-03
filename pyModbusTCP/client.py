@@ -162,7 +162,6 @@ class ModbusClient(object):
         # if can't be set
         raise ValueError('port can\'t be set (valid if 0 < port < 65536)')
 
-
     @property
     def unit_id(self):
         return self._unit_id
@@ -914,8 +913,7 @@ class ModbusClient(object):
         self._hd_tr_id = random.randint(0, 65535)
         tx_hd_pr_id = 0
         tx_hd_length = len(pdu) + 1
-        mbap = struct.pack('>HHHB', self._hd_tr_id, tx_hd_pr_id,
-                            tx_hd_length, self._unit_id)
+        mbap = struct.pack('>HHHB', self._hd_tr_id, tx_hd_pr_id, tx_hd_length, self._unit_id)
         # full modbus/TCP frame = [MBAP]PDU
         return mbap + pdu
 
