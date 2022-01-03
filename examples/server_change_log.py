@@ -24,8 +24,8 @@ class MyDataBank(ModbusServerDataBank):
 if __name__ == '__main__':
     # parse args
     parser = argparse.ArgumentParser()
-    parser.add_argument('-H', '--host', type=str, default='localhost', help='Host')
-    parser.add_argument('-p', '--port', type=int, default=502, help='TCP port')
+    parser.add_argument('-H', '--host', type=str, default='localhost', help='Host (default: localhost)')
+    parser.add_argument('-p', '--port', type=int, default=502, help='TCP port (default: 502)')
     args = parser.parse_args()
     # logging setup
     logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)

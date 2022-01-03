@@ -1,31 +1,21 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 
 # write_bit
 # write 4 bits to True, wait 2s, write False, restart...
 
-from pyModbusTCP.client import ModbusClient
 import time
+from pyModbusTCP.client import ModbusClient
 
-SERVER_HOST = "localhost"
-SERVER_PORT = 502
-
-c = ModbusClient()
-
-# uncomment this line to see debug message
-# c.debug(True)
-
-# define modbus server host, port
-c.host(SERVER_HOST)
-c.port(SERVER_PORT)
-
+# init
+c = ModbusClient(host='localhost', port=502, auto_open=True, debug=False)
 toggle = True
 
+# main loop
 while True:
     # open or reconnect TCP to server
     if not c.is_open():
         if not c.open():
-            print("unable to connect to "+SERVER_HOST+":"+str(SERVER_PORT))
+            print('unable to connect')
 
     # if open() is ok, write coils (modbus function 0x01)
     if c.is_open():

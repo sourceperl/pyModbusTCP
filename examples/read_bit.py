@@ -1,39 +1,24 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 
 # read_bit
 # read 10 bits and print result on stdout
 
-from pyModbusTCP.client import ModbusClient
 import time
+from pyModbusTCP.client import ModbusClient
 
-SERVER_HOST = "localhost"
-SERVER_PORT = 502
-SERVER_U_ID = 1
+# init modbus client
+c = ModbusClient(host='localhost', port=502, unit_id=1, auto_open=True, debug=False)
 
-c = ModbusClient()
-
-# uncomment this line to see debug message
-# c.debug(True)
-
-# define modbus server host, port and unit_id
-c.host(SERVER_HOST)
-c.port(SERVER_PORT)
-c.unit_id(SERVER_U_ID)
-
+# main read loop
 while True:
-    # open or reconnect TCP to server
-    if not c.is_open():
-        if not c.open():
-            print("unable to connect to "+SERVER_HOST+":"+str(SERVER_PORT))
+    # read 10 bits (= coils) at address 0, store result in coils list
+    coils_l = c.read_coils(0, 10)
 
-    # if open() is ok, read coils (modbus function 0x01)
-    if c.is_open():
-        # read 10 bits at address 0, store result in regs list
-        bits = c.read_coils(0, 10)
-        # if success display registers
-        if bits:
-            print("bit ad #0 to 9: "+str(bits))
+    # if success display registers
+    if coils_l:
+        print('bit ad #0 to 9: %s' % coils_l)
+    else:
+        print('unable to read coils')
 
     # sleep 2s before next polling
     time.sleep(2)
