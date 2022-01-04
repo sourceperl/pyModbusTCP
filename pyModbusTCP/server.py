@@ -739,9 +739,9 @@ class ModbusServer(object):
         :type no_block: bool
         :param ipv6: use ipv6 stack
         :type ipv6: bool
-        :param data_bank: an instance of custom data bank, default is the standard ModbusServerDataBank()
+        :param data_bank: instance of custom data bank, if you don't want the default one
         :type data_bank: ModbusServerDataBank
-        :param data_hdl: an instance of custom server data handler, default is ModbusServerDataHandler()
+        :param data_hdl: instance of custom data handler, if you don't want the default one
         :type data_hdl: ModbusServerDataHandler
         """
         # public
