@@ -194,7 +194,7 @@ class ModbusClient(object):
 
     @property
     def auto_close(self):
-        """Get or set automatic TCP close after each request mode(True = turn on)."""
+        """Get or set automatic TCP close after each request mode (True = turn on)."""
         return self._auto_close
 
     @auto_close.setter
