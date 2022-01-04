@@ -5,8 +5,8 @@ Module pyModbusTCP.client
 
 *This module provide the ModbusClient class used to deal with modbus server.*
 
-class pyModbusTCP.client.ModbusClient
--------------------------------------
+class ModbusClient
+------------------
 
 .. autoclass:: ModbusClient
    :members:

@@ -5,20 +5,20 @@ Module pyModbusTCP.server
 
 *This module provide the class for the modbus server, it's data handler interface and finally the data bank.*
 
-class pyModbusTCP.server.ModbusServer
--------------------------------------
+class ModbusServer
+------------------
 
 .. autoclass:: ModbusServer
    :members:
 
-class pyModbusTCP.server.ModbusServerDataHandler
-------------------------------------------------
+class ModbusServerDataHandler
+-----------------------------
 
 .. autoclass:: ModbusServerDataHandler
    :members:
 
-class pyModbusTCP.server.ModbusServerDataBank
----------------------------------------------
+class ModbusServerDataBank
+--------------------------
 
 .. autoclass:: ModbusServerDataBank
    :members:
