@@ -10,4 +10,4 @@ class pyModbusTCP.client.ModbusClient
 
 .. autoclass:: ModbusClient
    :members:
-   :special-members:
+   :special-members: __init__

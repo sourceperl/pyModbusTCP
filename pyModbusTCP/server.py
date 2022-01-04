@@ -51,6 +51,8 @@ class DataHandlerReturn:
 
 
 class ModbusServerInfos:
+    """ Container class for server informations """
+
     def __init__(self):
         self.client_addr = None
         self.client_port = None
@@ -65,7 +67,7 @@ class ModbusServerInfos:
 
 
 class ModbusServerDataBank:
-    """ Class for thread safe access to data space """
+    """ Data space class with thread safe access functions """
 
     class Conf:
         def __init__(self, coils_size=0x10000, coils_default_value=False,

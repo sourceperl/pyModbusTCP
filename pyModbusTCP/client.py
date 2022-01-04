@@ -52,71 +52,46 @@ class ModbusClient(object):
 
     @property
     def version(self):
-        """Get package version
-
-        :return: current version of the package (like "0.0.1")
-        :rtype: str
-        """
+        """Return the current package version as a str."""
         return self._version
 
     @property
     def last_error(self):
-        """Get last error code
-
-        :return: last error code
-        :rtype: int
-        """
+        """Last error code."""
         return self._last_error
 
     @property
     def last_error_as_txt(self):
-        """Get last error as human readable text
-
-        :return: last error as string
-        :rtype: str
-        """
+        """Human readable text that describe last error."""
         return const.MB_ERR_TXT.get(self._last_error, 'unknown error')
 
     @property
     def last_except(self):
-        """Get last exception code
-
-        :return: last exception code
-        :rtype: int
-        """
+        """Return the last modbus exception code."""
         return self._last_except
 
     @property
     def last_except_as_txt(self):
-        """Get last exception code as short human readable text
-
-        :return: short human readable text to describe last exception
-        :rtype: str
-        """
+        """Short human readable text that describe last modbus exception."""
         default_str = 'unreferenced exception 0x%X' % self._last_except
         return const.EXP_TXT.get(self._last_except, default_str)
 
     @property
     def last_except_as_full_txt(self):
-        """Get last exception code as human readable text (verbose version)
-
-        :return: verbose human readable text to describe last exception
-        :rtype: str
-        """
+        """Verbose human readable text that describe last modbus exception."""
         default_str = 'unreferenced exception 0x%X' % self._last_except
         return const.EXP_DETAILS.get(self._last_except, default_str)
 
     @property
     def host(self):
+        """Get or set the server to connect to.
+
+        This can be any string with a valid IPv4 / IPv6 address or hostname.
+        """
         return self._host
 
     @host.setter
     def host(self, value):
-        """Get or set host (IPv4/IPv6 or hostname like 'plc.domain.net')
-
-        :param hostname: hostname or IPv4/IPv6 address
-        :type hostname: str
-        """
         # check type
         if type(value) is not str:
             raise TypeError('host must be a str')
@@ -143,15 +118,11 @@ class ModbusClient(object):
 
     @property
     def port(self):
+        """Get or set the current TCP port (default is 502 for Modbus/TCP)."""
         return self._port
 
     @port.setter
     def port(self, value):
-        """Get or set TCP port
-
-        :param value: TCP port number or None for get value
-        :type value: int
-        """
         # check type
         if type(value) is not int:
             raise TypeError('port must be an int')
@@ -164,36 +135,34 @@ class ModbusClient(object):
 
     @property
     def unit_id(self):
+        """Get or set the modbus unit identifier (default is 1).
+
+        Any int from 0 to 255 is valid.
+        """
         return self._unit_id
 
     @unit_id.setter
     def unit_id(self, value):
-        """Get or set unit ID field
-
-        :param unit_id: unit ID (0 to 255)
-        :type unit_id: int
-        """
         # check type
         if type(value) is not int:
             raise TypeError('unit_id must be an int')
         # check validity
-        if 0 <= int(value) < 256:
-            self._unit_id = int(value)
+        if 0 <= value <= 255:
+            self._unit_id = value
             return
         # if can't be set
-        raise ValueError('unit_id can\'t be set (valid if 0 <= unit_id < 256)')
+        raise ValueError('unit_id can\'t be set (valid if 0 <= unit_id <= 255)')
 
     @property
     def timeout(self):
+        """Get or set requests timeout (default is 30 seconds).
+
+        The argument may be a floating point number for subsecond precision.
+        """
         return self._timeout
 
     @timeout.setter
     def timeout(self, value):
-        """Get or set timeout field
-
-        :param value: socket timeout in seconds
-        :type value: float
-        """
         # enforce type
         value = float(value)
         # check validity
@@ -205,61 +174,54 @@ class ModbusClient(object):
 
     @property
     def debug(self):
+        """Get or set the debug flag (True = turn on)."""
         return self._debug
 
     @debug.setter
     def debug(self, value):
-        """Get or set debug mode
-
-        :param value: debug state
-        :type value: bool
-        """
         # enforce type
         self._debug = bool(value)
 
     @property
     def auto_open(self):
+        """Get or set automatic TCP connect mode (True = turn on)."""
         return self._auto_open
 
     @auto_open.setter
     def auto_open(self, value):
-        """Get or set automatic TCP connect mode
-
-        :param state: auto_open state or None for get value
-        :type state: bool or None
-        """
         # enforce type
         self._auto_open = bool(value)
 
     @property
     def auto_close(self):
+        """Get or set automatic TCP close after each request mode(True = turn on)."""
         return self._auto_close
 
     @auto_close.setter
     def auto_close(self, value):
-        """Get or set automatic TCP close mode (after each request)
-
-        :param state: auto_close state or None for get value
-        :type state: bool or None
-        """
         # enforce type
         self._auto_close = bool(value)
 
-    def open(self):
-        """Connect to modbus server (open TCP connection)
+    @property
+    def is_open(self):
+        """Get current status of the TCP connection (True = open)."""
+        return self._sock is not None
 
-        :returns: connect status (True if open)
+    def open(self):
+        """Connect to modbus server (open TCP connection).
+
+        :returns: connect status (True on success)
         :rtype: bool
         """
-        # restart TCP if already open
-        if self.is_open():
+        # call open() on an already open socket reset it
+        if self.is_open:
             self.close()
         # init socket and connect
         # list available sockets on the target host/port
         # AF_xxx : AF_INET -> IPv4, AF_INET6 -> IPv6,
         #          AF_UNSPEC -> IPv6 (priority on some system) or 4
         # list available socket on target host
-        for res in socket.getaddrinfo(self._host, self._port,
+        for res in socket.getaddrinfo(self.host, self.port,
                                       socket.AF_UNSPEC, socket.SOCK_STREAM):
             af, sock_type, proto, canon_name, sa = res
             try:
@@ -268,7 +230,7 @@ class ModbusClient(object):
                 self._sock = None
                 continue
             try:
-                self._sock.settimeout(self._timeout)
+                self._sock.settimeout(self.timeout)
                 self._sock.connect(sa)
             except socket.error:
                 self._sock.close()
@@ -283,26 +245,11 @@ class ModbusClient(object):
         else:
             return True
 
-    def is_open(self):
-        """Get status of TCP connection
-
-        :returns: status (True for open)
-        :rtype: bool
-        """
-        return self._sock is not None
-
     def close(self):
-        """Close TCP connection
-
-        :returns: close status (True for close/None if already close)
-        :rtype: bool or None
-        """
+        """Close current TCP connection."""
         if self._sock:
             self._sock.close()
             self._sock = None
-            return True
-        else:
-            return None
 
     def custom_request(self, pdu):
         """Send a custom modbus request
@@ -751,7 +698,7 @@ class ModbusClient(object):
         """
         if self._sock is None:
             return None
-        if select.select([self._sock], [], [], self._timeout)[0]:
+        if select.select([self._sock], [], [], self.timeout)[0]:
             return True
         else:
             self._last_error = const.MB_TIMEOUT_ERR
@@ -791,14 +738,14 @@ class ModbusClient(object):
         :rtype: bool
         """
         # for auto_open mode, check TCP and open if need
-        if self._auto_open and not self.is_open():
+        if self.auto_open and not self.is_open:
             self.open()
         # add headers to pdu and send frame
         tx_frame = self._add_mbap(pdu)
         if not self._send(tx_frame):
             return False
         # debug
-        if self._debug:
+        if self.debug:
             self._pretty_dump('Tx', tx_frame)
         return True
 
@@ -867,10 +814,10 @@ class ModbusClient(object):
         if not ((rx_hd_tr_id == self._hd_tr_id) and
                 (rx_hd_pr_id == 0) and
                 (rx_hd_length < 256) and
-                (rx_hd_unit_id == self._unit_id)):
+                (rx_hd_unit_id == self.unit_id)):
             self._last_error = const.MB_RECV_ERR
             self._debug_msg('MBAP format error')
-            if self._debug:
+            if self.debug:
                 self._pretty_dump('Rx', rx_mbap)
             self.close()
             return None
@@ -884,12 +831,12 @@ class ModbusClient(object):
             self.close()
             return None
         # dump frame
-        if self._debug:
+        if self.debug:
             self._pretty_dump('Rx', rx_mbap + rx_pdu)
         # body decode
         rx_fc = struct.unpack('B', rx_pdu[0:1])[0]
         # for auto_close mode, close socket after each request
-        if self._auto_close:
+        if self.auto_close:
             self.close()
         # check except status
         if rx_fc >= 0x80:
@@ -913,7 +860,7 @@ class ModbusClient(object):
         self._hd_tr_id = random.randint(0, 65535)
         tx_hd_pr_id = 0
         tx_hd_length = len(pdu) + 1
-        mbap = struct.pack('>HHHB', self._hd_tr_id, tx_hd_pr_id, tx_hd_length, self._unit_id)
+        mbap = struct.pack('>HHHB', self._hd_tr_id, tx_hd_pr_id, tx_hd_length, self.unit_id)
         # full modbus/TCP frame = [MBAP]PDU
         return mbap + pdu
 
@@ -923,7 +870,7 @@ class ModbusClient(object):
         :param msg: debug message
         :type msg: str
         """
-        if self._debug:
+        if self.debug:
             print(msg)
 
     def _pretty_dump(self, label, frame):
