@@ -10,15 +10,18 @@ class ModbusServer
 
 .. autoclass:: ModbusServer
    :members:
+   :special-members: __init__
 
 class ModbusServerDataHandler
 -----------------------------
 
 .. autoclass:: ModbusServerDataHandler
    :members:
+   :special-members: __init__
 
 class ModbusServerDataBank
 --------------------------
 
 .. autoclass:: ModbusServerDataBank
    :members:
+   :special-members: __init__
