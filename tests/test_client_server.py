@@ -95,12 +95,12 @@ class TestClientServer(unittest.TestCase):
             self.assertEqual(self.client.write_multiple_coils(addr, bits_l), True)
             self.assertEqual(self.client.read_coils(addr, len(bits_l)), bits_l)
             # coils space: multi-write over sized
-            bits_l = [bool(getrandbits(1)) for _ in range(MAX_WRITABLE_BITS + 1)]
-            self.assertEqual(self.client.write_multiple_coils(addr, bits_l), None)
+            bits_l.append(bool(getrandbits(1)))
+            self.assertRaises(ValueError, self.client.write_multiple_coils, addr, bits_l)
         # coils space: read/write over limit
-        self.assertEqual(self.client.read_coils(0xfffe, 3), None)
-        self.assertEqual(self.client.write_single_coil(0x10000, 0), None)
-        self.assertEqual(self.client.write_multiple_coils(0xfff0, [0] * 17), None)
+        self.assertRaises(ValueError, self.client.read_coils, 0xfffe, 3)
+        self.assertRaises(ValueError, self.client.write_single_coil, 0x10000, False)
+        self.assertRaises(ValueError, self.client.write_multiple_coils, 0xfff0, [False] * 17)
 
         # discrete inputs
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_READABLE_BITS]:
@@ -117,11 +117,11 @@ class TestClientServer(unittest.TestCase):
             self.server.data_bank.set_discrete_inputs(addr, bits_l)
             self.assertEqual(self.client.read_discrete_inputs(addr, len(bits_l)), bits_l)
             # discrete inputs space: multiple read/write at max size
-            bits_l = [bool(getrandbits(1)) for _ in range(MAX_READABLE_BITS + 1)]
+            bits_l.append(bool(getrandbits(1)))
             self.server.data_bank.set_discrete_inputs(addr, bits_l)
-            self.assertEqual(self.client.read_discrete_inputs(addr, len(bits_l)), None)
+            self.assertRaises(ValueError, self.client.read_discrete_inputs, addr, len(bits_l))
         # discrete inputs space: read/write over limit
-        self.assertEqual(self.client.read_discrete_inputs(0xffff, 2), None)
+        self.assertRaises(ValueError, self.client.read_discrete_inputs, 0xffff, 2)
 
         # holding registers
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_WRITABLE_REGS]:
@@ -133,13 +133,12 @@ class TestClientServer(unittest.TestCase):
             words_l = [randint(0, 0xffff) for _ in range(MAX_WRITABLE_REGS)]
             self.assertEqual(self.client.write_multiple_registers(addr, words_l), True)
             self.assertEqual(self.client.read_holding_registers(addr, len(words_l)), words_l)
-            # holding registers space: write over sized
-            words_l = [randint(0, 0xffff) for _ in range(MAX_WRITABLE_REGS + 1)]
-            self.assertEqual(self.client.write_multiple_registers(addr, words_l), None)
         # holding registers space: read/write over limit
-        self.assertEqual(self.client.read_holding_registers(0xfff0, 17), None)
-        self.assertEqual(self.client.write_single_register(0x10000, 0), None)
-        self.assertEqual(self.client.write_multiple_registers(0xfff0, [0] * 17), None)
+        self.assertRaises(ValueError, self.client.read_holding_registers, 0xfff0, 17)
+        self.assertRaises(ValueError, self.client.write_single_register, 0, 0x10000)
+        self.assertRaises(ValueError, self.client.write_single_register, 0x10000, 0)
+        self.assertRaises(ValueError, self.client.write_multiple_registers, 0x1000, [0x10000])
+        self.assertRaises(ValueError, self.client.write_multiple_registers, 0xfff0, [0] * 17)
 
         # input registers
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_READABLE_REGS]:
@@ -152,11 +151,11 @@ class TestClientServer(unittest.TestCase):
             self.server.data_bank.set_input_registers(addr, words_l)
             self.assertEqual(self.client.read_input_registers(addr, len(words_l)), words_l)
             # input registers space: multiple read/write over sized
-            words_l = [randint(0, 0xffff) for _ in range(MAX_READABLE_REGS + 1)]
+            words_l.append(randint(0, 0xffff))
             self.server.data_bank.set_input_registers(addr, words_l)
-            self.assertEqual(self.client.read_input_registers(addr, len(words_l)), None)
+            self.assertRaises(ValueError, self.client.read_input_registers, addr, len(words_l))
         # input registers space: read/write over limit
-        self.assertEqual(self.client.read_input_registers(0xfff0, 17), None)
+        self.assertRaises(ValueError, self.client.read_input_registers, 0xfff0, 17)
 
     def test_server_strength(self):
         # test server responses to abnormal events

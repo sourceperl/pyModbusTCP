@@ -51,7 +51,7 @@ class DataHandlerReturn:
 
 
 class ModbusServerInfos:
-    """ Container class for server informations """
+    """ Container class for server information """
 
     def __init__(self):
         self.client_addr = None
@@ -147,7 +147,7 @@ class ModbusServerDataBank:
         :type srv_infos: ModbusServerInfos
         :returns: True if success or None if error
         :rtype: bool or None
-        :raises ValueError: if bit_list members cannot be convert to bool
+        :raises ValueError: if bit_list members cannot be converted to bool
         """
         # ensure bit_list values are bool
         bit_list = [bool(b) for b in bit_list]
@@ -198,7 +198,7 @@ class ModbusServerDataBank:
         :type bit_list: list
         :returns: True if success or None if error
         :rtype: bool or None
-        :raises ValueError: if bit_list members cannot be convert to bool
+        :raises ValueError: if bit_list members cannot be converted to bool
         """
         # ensure bit_list values are bool
         bit_list = [bool(b) for b in bit_list]
@@ -241,7 +241,7 @@ class ModbusServerDataBank:
         :type srv_infos: ModbusServerInfos
         :returns: True if success or None if error
         :rtype: bool or None
-        :raises ValueError: if word_list members cannot be convert to int
+        :raises ValueError: if word_list members cannot be converted to int
         """
         # ensure word_list values are int with a max bit length of 16
         word_list = [int(w) & 0xffff for w in word_list]
@@ -292,7 +292,7 @@ class ModbusServerDataBank:
         :type word_list: list
         :returns: True if success or None if error
         :rtype: bool or None
-        :raises ValueError: if word_list members cannot be convert to int
+        :raises ValueError: if word_list members cannot be converted to int
         """
         # ensure word_list values are int with a max bit length of 16
         word_list = [int(w) & 0xffff for w in word_list]
@@ -310,7 +310,7 @@ class ModbusServerDataBank:
     def on_coils_change(self, address, from_value, to_value, srv_infos):
         """Call by server when a value change occur in coils space
 
-        This method is provide to be overridden with user code to catch changes
+        This method is provided to be overridden with user code to catch changes
 
         :param address: address of coil
         :type address: int
@@ -326,7 +326,7 @@ class ModbusServerDataBank:
     def on_holding_registers_change(self, address, from_value, to_value, srv_infos):
         """Call by server when a value change occur in holding registers space
 
-        This method is provide to be overridden with user code to catch changes
+        This method is provided to be overridden with user code to catch changes
 
         :param address: address of register
         :type address: int
@@ -430,7 +430,7 @@ class ModbusServer(object):
             self.protocol_id = 0
             self.length = 0
             self.unit_id = 1
-            # if raw arg is define, decode it now
+            # if raw arg is defined, decode it now
             if raw is not None:
                 self.raw_decode(raw)
 
@@ -525,7 +525,7 @@ class ModbusServer(object):
             data = b''
             while len(data) < size:
                 try:
-                    # avoid to keep this TCP thread run after server.stop() on main server
+                    # avoid keeping this TCP thread run after server.stop() on main server
                     if not self.server_running:
                         raise ModbusServer.InternalError('main server is not running')
                     # recv all data or a chunk of it
@@ -684,7 +684,7 @@ class ModbusServer(object):
 
         def setup(self):
             # set a socket timeout of 1s on blocking operations (like send/recv)
-            # this avoid hang thread deletion when main server exit (see _recv_all method)
+            # this avoids hang thread deletion when main server exit (see _recv_all method)
             self.request.settimeout(1)
             # init and update server infos structure
             self.srv_infos = ModbusServerInfos()
@@ -694,7 +694,7 @@ class ModbusServer(object):
 
         def handle(self):
             # try/except end current thread on ModbusServer.InternalError or socket.error
-            # this also close the current TCP session associed with it
+            # this also close the current TCP session associated with it
             try:
                 # main processing loop
                 while True:
