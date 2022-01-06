@@ -5,8 +5,7 @@ from .constants import READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS,
     EXP_TXT, EXP_DETAILS, EXP_NONE, \
     MB_ERR_TXT, MB_NO_ERR, MB_SEND_ERR, MB_RECV_ERR, MB_TIMEOUT_ERR, MB_EXCEPT_ERR, MB_CONNECT_ERR, \
     MB_SOCK_CLOSE_ERR, VERSION
-from .utils import set_bit
-import re
+from .utils import byte_length, set_bit, valid_host
 import socket
 import select
 import struct
@@ -18,7 +17,7 @@ class ModbusClient(object):
 
     def __init__(self, host='localhost', port=502, unit_id=1, timeout=30.0,
                  debug=False, auto_open=True, auto_close=False):
-        """Constructor
+        """Constructor.
 
         :param host: hostname or IPv4/IPv6 address server address
         :type host: str
@@ -38,7 +37,22 @@ class ModbusClient(object):
         :rtype: ModbusClient
         :raises ValueError: if a set parameter value is incorrect
         """
-        # public property (update with constructor args)
+        # private
+        # internal variables
+        self._host = None
+        self._port = None
+        self._unit_id = None
+        self._timeout = None
+        self._debug = None
+        self._auto_open = None
+        self._auto_close = None
+        self._sock = None  # socket
+        self._transaction_id = 0  # MBAP transaction ID
+        self._version = VERSION  # this package version number
+        self._last_error = MB_NO_ERR  # last error code
+        self._last_except = EXP_NONE  # last except code
+        # public
+        # constructor arguments: validate them with property setters
         self.host = host
         self.port = port
         self.unit_id = unit_id
@@ -46,12 +60,6 @@ class ModbusClient(object):
         self.debug = debug
         self.auto_open = auto_open
         self.auto_close = auto_close
-        # private
-        self._sock = None  # socket
-        self._transaction_id = 0  # MBAP transaction ID
-        self._version = VERSION  # this package version number
-        self._last_error = MB_NO_ERR  # last error code
-        self._last_except = EXP_NONE  # last expect code
 
     @property
     def version(self):
@@ -90,6 +98,7 @@ class ModbusClient(object):
         """Get or set the server to connect to.
 
         This can be any string with a valid IPv4 / IPv6 address or hostname.
+        Setting host to a new value will close the current socket.
         """
         return self._host
 
@@ -98,30 +107,21 @@ class ModbusClient(object):
         # check type
         if type(value) is not str:
             raise TypeError('host must be a str')
-        # IPv4 valid address ?
-        try:
-            socket.inet_pton(socket.AF_INET, value)
-            self._host = value
-            return
-        except socket.error:
-            pass
-        # IPv6 valid address ?
-        try:
-            socket.inet_pton(socket.AF_INET6, value)
-            self._host = value
-            return
-        except socket.error:
-            pass
-        # valid hostname ?
-        if re.match(r'^[a-z][a-z0-9.\-]+$', value):
-            self._host = value
+        # check value
+        if valid_host(value):
+            if self._host != value:
+                self.close()
+                self._host = value
             return
         # can't be set
         raise ValueError('host can\'t be set (not a valid IP address or hostname)')
 
     @property
     def port(self):
-        """Get or set the current TCP port (default is 502 for Modbus/TCP)."""
+        """Get or set the current TCP port (default is 502).
+
+        Setting port to a new value will close the current socket.
+        """
         return self._port
 
     @port.setter
@@ -131,7 +131,9 @@ class ModbusClient(object):
             raise TypeError('port must be an int')
         # check validity
         if 0 < value < 65536:
-            self._port = value
+            if self._port != value:
+                self.close()
+                self._port = value
             return
         # can't be set
         raise ValueError('port can\'t be set (valid if 0 < port < 65536)')
@@ -216,7 +218,7 @@ class ModbusClient(object):
         :returns: connect status (True on success)
         :rtype: bool
         """
-        # call open() on an already open socket reset it
+        # call open() on an already open socket, reset it
         if self.is_open:
             self.close()
         # init socket and connect
@@ -262,15 +264,15 @@ class ModbusClient(object):
         :returns: modbus frame PDU or None if error
         :rtype: bytearray or None
         """
-        # send custom request
+        # send custom pdu, return None on error
         if not self._send_pdu(pdu):
             return None
-        # receive
+        # receive pdu
         rx_pdu = self._recv_pdu()
         # check error
         if not rx_pdu:
             return None
-        # return bits list
+        # return the rx pdu
         return rx_pdu
 
     def read_coils(self, bit_addr, bit_nb=1):
@@ -303,7 +305,7 @@ class ModbusClient(object):
         # frame with bits value -> bits[] list
         pdu_coils_part = rx_pdu[2:]
         # check rx_byte_count: match nb of bits request and check buffer size
-        if not ((byte_count >= int((bit_nb + 7) / 8)) and
+        if not ((byte_count >= byte_length(bit_nb)) and
                 (byte_count == len(pdu_coils_part))):
             self._last_error = MB_RECV_ERR
             self._debug_msg('read_coils(): rx byte count mismatch')
@@ -318,7 +320,7 @@ class ModbusClient(object):
         return ret_coils
 
     def read_discrete_inputs(self, bit_addr, bit_nb=1):
-        """Modbus function READ_DISCRETE_INPUTS (0x02)
+        """Modbus function READ_DISCRETE_INPUTS (0x02).
 
         :param bit_addr: bit address (0 to 65535)
         :type bit_addr: int
@@ -347,7 +349,7 @@ class ModbusClient(object):
         # frame with bits value -> bits[] list
         f_bits = rx_pdu[2:]
         # check rx_byte_count: match nb of bits request and check buffer size
-        if not ((byte_count >= int((bit_nb + 7) / 8)) and
+        if not ((byte_count >= byte_length(bit_nb)) and
                 (byte_count == len(f_bits))):
             self._last_error = MB_RECV_ERR
             self._debug_msg('read_discrete_inputs(): rx byte count mismatch')
@@ -362,7 +364,7 @@ class ModbusClient(object):
         return bits
 
     def read_holding_registers(self, reg_addr, reg_nb=1):
-        """Modbus function READ_HOLDING_REGISTERS (0x03)
+        """Modbus function READ_HOLDING_REGISTERS (0x03).
 
         :param reg_addr: register address (0 to 65535)
         :type reg_addr: int
@@ -462,10 +464,10 @@ class ModbusClient(object):
         # check params
         if not 0 <= int(bit_addr) <= 0xffff:
             raise ValueError('bit_addr out of range (valid from 0 to 65535)')
-        # format "bit value" field
-        bit_value = 0xff if bit_value else 0x00
+        # format "bit value" field for pdu
+        bit_value_raw = (0x0000, 0xff00)[bool(bit_value)]
         # build pdu and send request
-        if not self._send_pdu(struct.pack('>BHBB', WRITE_SINGLE_COIL, bit_addr, bit_value, 0)):
+        if not self._send_pdu(struct.pack('>BHH', WRITE_SINGLE_COIL, bit_addr, bit_value_raw)):
             return None
         # receive pdu
         rx_pdu = self._recv_pdu(min_len=5)
@@ -473,9 +475,9 @@ class ModbusClient(object):
         if not rx_pdu:
             return None
         # response decode
-        resp_coil_addr, resp_coil_value, _ = struct.unpack('>HBB', rx_pdu[1:5])
+        resp_coil_addr, resp_coil_value = struct.unpack('>HH', rx_pdu[1:5])
         # check response fields
-        write_ok = (resp_coil_addr == bit_addr) and (resp_coil_value == bit_value)
+        write_ok = (resp_coil_addr == bit_addr) and (resp_coil_value == bit_value_raw)
         return write_ok
 
     def write_single_register(self, reg_addr, reg_value):
@@ -526,8 +528,7 @@ class ModbusClient(object):
             raise ValueError('write after end of modbus address space')
         # build pdu coils part
         # allocate a list of bytes
-        b_len = len(bits_value) // 8 + (1 if len(bits_value) % 8 else 0)
-        byte_l = [0] * b_len
+        byte_l = [0] * byte_length(len(bits_value))
         # populate byte list with coils values
         for i, item in enumerate(bits_value):
             if item:
@@ -552,7 +553,7 @@ class ModbusClient(object):
         return write_ok
 
     def write_multiple_registers(self, regs_addr, regs_value):
-        """Modbus function WRITE_MULTIPLE_REGISTERS (0x10)
+        """Modbus function WRITE_MULTIPLE_REGISTERS (0x10).
 
         :param regs_addr: registers address (0 to 65535)
         :type regs_addr: int
@@ -596,7 +597,7 @@ class ModbusClient(object):
         return write_ok
 
     def _can_read(self):
-        """Wait data available for socket read
+        """Wait data available for socket read.
 
         :returns: True if data available or None if timeout or socket error
         :rtype: bool or None
@@ -635,7 +636,7 @@ class ModbusClient(object):
         return True
 
     def _send_pdu(self, pdu):
-        """Convert modbus PDU to frame and send it
+        """Convert modbus PDU to frame and send it.
 
         :param pdu: modbus frame PDU
         :type pdu: str (Python2) or class bytes (Python3)
