@@ -37,7 +37,7 @@ PyPI, the easy way:
     # install a specific version (here release v0.1.10)
     sudo pip install pyModbusTCP==v0.1.10
 
-Over time, some things can change. So, I recommend that you always install a specific version, instead of just counting
+Over time, some things can change. So, I recommend that you always use a specific version, instead of just relying
 on the default behavior. Without precision, the installation tools will always install the latest version available,
 this may have some drawbacks. For example, the TCP automatic open mode will be active by default from 0.2.0. It is not
 the case with previous versions and it just doesn't exist before 0.0.12.
