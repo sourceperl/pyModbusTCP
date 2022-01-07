@@ -2,7 +2,7 @@ import unittest
 from random import randint, getrandbits
 from pyModbusTCP.server import ModbusServer
 from pyModbusTCP.client import ModbusClient
-from pyModbusTCP.constants import SUPPORTED_FUNCTION_CODES, EXP_ILLEGAL_FUNCTION, MB_EXCEPT_ERR
+from pyModbusTCP.constants import SUPPORTED_FUNCTION_CODES, EXP_NONE, EXP_ILLEGAL_FUNCTION, MB_NO_ERR, MB_EXCEPT_ERR
 
 
 # some const
@@ -166,6 +166,10 @@ class TestClientServer(unittest.TestCase):
                 self.assertEqual(self.client.custom_request(bytearray([func_code, 0x00])), None)
                 self.assertEqual(self.client.last_error, MB_EXCEPT_ERR)
                 self.assertEqual(self.client.last_except, EXP_ILLEGAL_FUNCTION)
+        # check a regulary request status: no error, no except
+        self.assertEqual(self.client.read_coils(0), [False])
+        self.assertEqual(self.client.last_error, MB_NO_ERR)
+        self.assertEqual(self.client.last_except, EXP_NONE)
 
 
 if __name__ == '__main__':
