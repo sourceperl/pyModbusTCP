@@ -1,4 +1,4 @@
-""" Python module: ModbusClient class (Client ModBus/TCP) """
+""" pyModbusTCP Client """
 
 from .constants import READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS, \
     WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS, WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER, \
@@ -288,7 +288,8 @@ class ModbusClient(object):
         if int(bit_addr) + int(bit_nb) > 0x10000:
             raise ValueError('read after end of modbus address space')
         # make a request
-        rx_pdu = self._req_pdu(tx_pdu=struct.pack('>BHH', READ_COILS, bit_addr, bit_nb), rx_min_len=3)
+        tx_pdu = struct.pack('>BHH', READ_COILS, bit_addr, bit_nb)
+        rx_pdu = self._req_pdu(tx_pdu=bytearray(tx_pdu), rx_min_len=3)
         # check error
         if not rx_pdu:
             return None
@@ -326,7 +327,8 @@ class ModbusClient(object):
         if int(bit_addr) + int(bit_nb) > 0x10000:
             raise ValueError('read after end of modbus address space')
         # make a request
-        rx_pdu = self._req_pdu(tx_pdu=struct.pack('>BHH', READ_DISCRETE_INPUTS, bit_addr, bit_nb), rx_min_len=3)
+        tx_pdu = struct.pack('>BHH', READ_DISCRETE_INPUTS, bit_addr, bit_nb)
+        rx_pdu = self._req_pdu(tx_pdu=bytearray(tx_pdu), rx_min_len=3)
         # check error
         if not rx_pdu:
             return None
@@ -364,7 +366,8 @@ class ModbusClient(object):
         if int(reg_addr) + int(reg_nb) > 0x10000:
             raise ValueError('read after end of modbus address space')
         # make a request
-        rx_pdu = self._req_pdu(tx_pdu=struct.pack('>BHH', READ_HOLDING_REGISTERS, reg_addr, reg_nb), rx_min_len=3)
+        tx_pdu = struct.pack('>BHH', READ_HOLDING_REGISTERS, reg_addr, reg_nb)
+        rx_pdu = self._req_pdu(tx_pdu=bytearray(tx_pdu), rx_min_len=3)
         # check error
         if not rx_pdu:
             return None
@@ -402,7 +405,8 @@ class ModbusClient(object):
         if int(reg_addr) + int(reg_nb) > 0x10000:
             raise ValueError('read after end of modbus address space')
         # make a request
-        rx_pdu = self._req_pdu(tx_pdu=struct.pack('>BHH', READ_INPUT_REGISTERS, reg_addr, reg_nb), rx_min_len=3)
+        tx_pdu = struct.pack('>BHH', READ_INPUT_REGISTERS, reg_addr, reg_nb)
+        rx_pdu = self._req_pdu(tx_pdu=bytearray(tx_pdu), rx_min_len=3)
         # check error
         if not rx_pdu:
             return None
@@ -438,7 +442,8 @@ class ModbusClient(object):
         # format "bit value" field for PDU
         bit_value_raw = (0x0000, 0xff00)[bool(bit_value)]
         # make a request
-        rx_pdu = self._req_pdu(tx_pdu=struct.pack('>BHH', WRITE_SINGLE_COIL, bit_addr, bit_value_raw), rx_min_len=5)
+        tx_pdu = struct.pack('>BHH', WRITE_SINGLE_COIL, bit_addr, bit_value_raw)
+        rx_pdu = self._req_pdu(tx_pdu=bytearray(tx_pdu), rx_min_len=5)
         # check error
         if not rx_pdu:
             return None
@@ -464,7 +469,8 @@ class ModbusClient(object):
         if not 0 <= int(reg_value) <= 0xffff:
             raise ValueError('reg_value out of range (valid from 0 to 65535)')
         # make a request
-        rx_pdu = self._req_pdu(tx_pdu=struct.pack('>BHH', WRITE_SINGLE_REGISTER, reg_addr, reg_value), rx_min_len=5)
+        tx_pdu = struct.pack('>BHH', WRITE_SINGLE_REGISTER, reg_addr, reg_value)
+        rx_pdu = self._req_pdu(tx_pdu=bytearray(tx_pdu), rx_min_len=5)
         # check error
         if not rx_pdu:
             return None
@@ -504,7 +510,7 @@ class ModbusClient(object):
         tx_pdu = struct.pack('>BHHB', WRITE_MULTIPLE_COILS, bits_addr, len(bits_value), len(pdu_coils_part))
         tx_pdu += pdu_coils_part
         # make a request
-        rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=5)
+        rx_pdu = self._req_pdu(tx_pdu=bytearray(tx_pdu), rx_min_len=5)
         # return None on error
         if not rx_pdu:
             return None
@@ -545,7 +551,7 @@ class ModbusClient(object):
         tx_pdu = struct.pack('>BHHB', WRITE_MULTIPLE_REGISTERS, regs_addr, len(regs_value), bytes_nb)
         tx_pdu += pdu_regs_part
         # make a request
-        rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=5)
+        rx_pdu = self._req_pdu(tx_pdu=bytearray(tx_pdu), rx_min_len=5)
         # check error
         if not rx_pdu:
             return False
@@ -707,7 +713,7 @@ class ModbusClient(object):
             exp_code = rx_pdu[1]
             self._req_evt_except(exp_code)
             return None
-        # check PDU len for regulary frame
+        # check PDU len for valid frame
         if len(rx_pdu) < min_len:
             self._req_evt_error(MB_RECV_ERR, 'PDU length is too short (min length = %d)' % min_len)
             return None

@@ -1,8 +1,10 @@
+""" pyModbusTCP package constants definition """
+
+# Package version
 VERSION = '0.2.0-dev'
-# ModBus/TCP
+# Modbus/TCP
 MODBUS_PORT = 502
 # Modbus function code
-# standard
 READ_COILS = 0x01
 READ_DISCRETE_INPUTS = 0x02
 READ_HOLDING_REGISTERS = 0x03
@@ -56,7 +58,7 @@ EXP_DETAILS = {
                               'Master should request diagnostic or error information from slave.',
     EXP_MEMORY_PARITY_ERROR: 'Slave detected a parity error in memory. '
                              'Master can retry the request, but service may be required on the slave device.',
-    EXP_GATEWAY_PATH_UNAVAILABLE: 'Specialized for Modbus gateways, this indicates a misconfigured gateway.',
+    EXP_GATEWAY_PATH_UNAVAILABLE: 'Specialized for Modbus gateways, this indicates a misconfiguration on gateway.',
     EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND: 'Specialized for Modbus gateways, sent when slave fails to respond.'
 }
 # Module error codes
