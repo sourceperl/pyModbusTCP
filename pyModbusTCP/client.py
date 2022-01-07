@@ -1,4 +1,4 @@
-# Python module: ModbusClient class (Client ModBus/TCP)
+""" Python module: ModbusClient class (Client ModBus/TCP) """
 
 from .constants import READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS, \
     WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS, WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER, \
@@ -62,9 +62,9 @@ class ModbusClient(object):
         self.auto_close = auto_close
 
     def __repr__(self):
-        repr = 'ModbusClient(host=\'%s\', port=%d, unit_id=%d, timeout=%.2f, debug=%s, auto_open=%s, auto_close=%s)'
-        repr %= (self.host, self.port, self.unit_id, self.timeout, self.debug, self.auto_open, self.auto_close)
-        return repr
+        r_str = 'ModbusClient(host=\'%s\', port=%d, unit_id=%d, timeout=%.2f, debug=%s, auto_open=%s, auto_close=%s)'
+        r_str %= (self.host, self.port, self.unit_id, self.timeout, self.debug, self.auto_open, self.auto_close)
+        return r_str
 
     @property
     def version(self):
