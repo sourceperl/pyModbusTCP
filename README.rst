@@ -2,7 +2,7 @@
                 :target: https://github.com/sourceperl/pyModbusTCP/actions/workflows/tests.yml
 
 .. |badge_docs| image:: https://readthedocs.org/projects/pymodbustcp/badge/?version=latest
-               :target: http://pymodbustcp.readthedocs.io/en/latest/?badge=latest
+               :target: http://pymodbustcp.readthedocs.io/
 
 pyModbusTCP |badge_tests| |badge_docs|
 ======================================
