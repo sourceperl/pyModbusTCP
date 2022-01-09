@@ -44,7 +44,7 @@ From GitHub:
     # install a specific version (here release v0.1.10) directly from github servers
     sudo pip install git+https://github.com/sourceperl/pyModbusTCP.git@v0.1.10
 
-GitHub:
+GitHub clone:
 
 .. code-block:: bash
 
@@ -116,8 +116,8 @@ Documentation
 
 Documentation available online at http://pymodbustcp.readthedocs.io/.
 
-Know issue for older releases (v0.1.x) that support python 2
-------------------------------------------------------------
+Know issue with older Python version on Windows
+-----------------------------------------------
 
 On windows OS with older Python version (<3), win_inet_pton module is require. This avoid exception "AttributeError:
 'module' object has no attribute 'inet_pton'".
