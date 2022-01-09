@@ -7,13 +7,13 @@ Bit functions
 -------------
 
 .. automodule:: pyModbusTCP.utils
-   :members: get_bits_from_int, set_bit, reset_bit, toggle_bit, test_bit
+   :members: byte_length, get_bits_from_int, reset_bit, set_bit, test_bit, toggle_bit
 
 Word functions
 --------------
 
 .. automodule:: pyModbusTCP.utils
-   :members: word_list_to_long, long_list_to_word
+   :members: long_list_to_word, word_list_to_long
 
 Two's complement functions
 --------------------------
@@ -31,4 +31,4 @@ Misc functions
 --------------
 
 .. automodule:: pyModbusTCP.utils
-   :members: crc16
+   :members: crc16, valid_host

@@ -272,7 +272,7 @@ def crc16(frame):
     """Compute CRC16.
 
     :param frame: frame
-    :type frame: str (Python2) or class bytes (Python3)
+    :type frame: bytearray
     :returns: CRC16
     :rtype: int
     """
