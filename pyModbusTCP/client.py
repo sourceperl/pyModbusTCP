@@ -7,7 +7,6 @@ from .constants import READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS,
     MB_SOCK_CLOSE_ERR, VERSION
 from .utils import byte_length, set_bit, valid_host
 import socket
-import select
 import struct
 import random
 
@@ -561,20 +560,6 @@ class ModbusClient(object):
         write_ok = resp_write_addr == regs_addr and resp_write_count == len(regs_value)
         return write_ok
 
-    def _can_read(self):
-        """Wait data available for socket read.
-
-        :returns: True if data available
-        :rtype: bool
-        """
-        if self._sock is None:
-            return False
-        if select.select([self._sock], [], [], self.timeout)[0]:
-            return True
-        else:
-            self._req_evt_error(MB_TIMEOUT_ERR, 'timeout error')
-            return False
-
     def _send(self, frame):
         """Send frame over current socket.
 
@@ -590,6 +575,9 @@ class ModbusClient(object):
         # send
         try:
             self._sock.send(frame)
+        except socket.timeout:
+            self._req_evt_error(MB_TIMEOUT_ERR, 'timeout error')
+            return False
         except socket.error:
             self._req_evt_error(MB_SEND_ERR, 'send error')
             return False
@@ -624,12 +612,12 @@ class ModbusClient(object):
         :returns: receive data or None if error
         :rtype: bytearray
         """
-        # wait for read
-        if not self._can_read():
-            return None
         # recv
         try:
             r_buffer = self._sock.recv(size)
+        except socket.timeout:
+            self._req_evt_error(MB_TIMEOUT_ERR, 'timeout error')
+            return None
         except socket.error:
             r_buffer = b''
         # handle recv error
