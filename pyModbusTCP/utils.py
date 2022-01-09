@@ -37,6 +37,8 @@ def byte_length(bit_length):
 
     :param bit_length: the number of bits
     :type bit_length: int
+    :returns: the number of bytes
+    :rtype: int
     """
     return (bit_length + 7) // 8
 
