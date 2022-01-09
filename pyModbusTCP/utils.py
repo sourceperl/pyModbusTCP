@@ -1,4 +1,4 @@
-""" pyModbusTCP utils functions for modbus data mangling """
+""" pyModbusTCP utils functions """
 
 import re
 import socket
