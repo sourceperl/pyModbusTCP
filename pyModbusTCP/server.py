@@ -420,7 +420,7 @@ class ModbusServer(object):
 
     """ Modbus TCP server """
 
-    class InternalError(Exception):
+    class _InternalError(Exception):
         pass
 
     class MBAP:
@@ -441,20 +441,20 @@ class ModbusServer(object):
                                    self.protocol_id, self.length,
                                    self.unit_id)
             except struct.error as e:
-                raise ModbusServer.InternalError('MBAP raw encode pack error: %s' % e)
+                raise ModbusServer._InternalError('MBAP raw encode pack error: %s' % e)
 
         def raw_decode(self, value):
             # close connection if no standard 7 bytes mbap header
             if not (value and len(value) == 7):
-                raise ModbusServer.InternalError('MBAP must have a length of 7 bytes')
+                raise ModbusServer._InternalError('MBAP must have a length of 7 bytes')
             # decode header
             (self.transaction_id, self.protocol_id,
              self.length, self.unit_id) = struct.unpack('>HHHB', value)
             # check frame header content inconsistency
             if self.protocol_id != 0:
-                raise ModbusServer.InternalError('MBAP protocol ID must be 0')
+                raise ModbusServer._InternalError('MBAP protocol ID must be 0')
             if not 2 < self.length < 256:
-                raise ModbusServer.InternalError('MBAP length must be between 2 and 256')
+                raise ModbusServer._InternalError('MBAP length must be between 2 and 256')
 
         def raw_with_pdu(self, pdu):
             self.length = len(pdu) + 1
@@ -498,7 +498,7 @@ class ModbusServer(object):
                 self.raw += bytearray(struct.pack(fmt, *args))
             except struct.error:
                 err_msg = 'unable to format PDU message (fmt: %s, values: %s)' % (fmt, args)
-                raise ModbusServer.InternalError(err_msg)
+                raise ModbusServer._InternalError(err_msg)
 
         def unpack(self, fmt, from_byte=None, to_byte=None):
             raw_section = self.raw[from_byte:to_byte]
@@ -506,7 +506,7 @@ class ModbusServer(object):
                 return struct.unpack(fmt, raw_section)
             except struct.error:
                 err_msg = 'unable to decode PDU message  (fmt: %s, values: %s)' % (fmt, raw_section)
-                raise ModbusServer.InternalError(err_msg)
+                raise ModbusServer._InternalError(err_msg)
 
     class ModbusService(BaseRequestHandler):
 
@@ -527,7 +527,7 @@ class ModbusServer(object):
                 try:
                     # avoid keeping this TCP thread run after server.stop() on main server
                     if not self.server_running:
-                        raise ModbusServer.InternalError('main server is not running')
+                        raise ModbusServer._InternalError('main server is not running')
                     # recv all data or a chunk of it
                     data += self.request.recv(size - len(data))
                 except socket.timeout:
@@ -692,7 +692,7 @@ class ModbusServer(object):
             self.srv_info.client_port = port
 
         def handle(self):
-            # try/except end current thread on ModbusServer.InternalError or socket.error
+            # try/except end current thread on ModbusServer._InternalError or socket.error
             # this also close the current TCP session associated with it
             try:
                 # main processing loop
@@ -721,7 +721,7 @@ class ModbusServer(object):
                         tx_pdu = ModbusServer.PDU().build_except(rx_pdu.func_code, EXP_ILLEGAL_FUNCTION)
                     # send the tx pdu with the last rx mbap (only length field change)
                     self._send_all(rx_mbap.raw_with_pdu(tx_pdu))
-            except (ModbusServer.InternalError, socket.error):
+            except (ModbusServer._InternalError, socket.error):
                 # on main loop except: exit from it and cleanly close the current socket
                 self.request.close()
 
