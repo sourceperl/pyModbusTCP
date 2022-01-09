@@ -81,7 +81,7 @@ MB_ERR_TXT = {
     MB_RECV_ERR: 'socket recv error',
     MB_TIMEOUT_ERR: 'recv timeout occur',
     MB_FRAME_ERR: 'frame format error',
-    MB_EXCEPT_ERR: 'modbus exception occur',
+    MB_EXCEPT_ERR: 'modbus exception',
     MB_CRC_ERR: 'bad CRC on receive frame',
     MB_SOCK_CLOSE_ERR: 'socket is closed'
 }
