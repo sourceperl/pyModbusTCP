@@ -632,8 +632,7 @@ class ModbusClient(object):
         # send frame with error check
         self._send(tx_frame)
         # debug
-        if self.debug:
-            self._pretty_dump('Tx', tx_frame)
+        self._debug_dump('Tx', tx_frame)
 
     def _recv(self, size):
         """Receive data over current socket.
@@ -692,8 +691,7 @@ class ModbusClient(object):
         f_unit_id_err = f_unit_id != self.unit_id
         # check error status of fields
         if f_transaction_err or f_protocol_err or f_length_err or f_unit_id_err:
-            if self.debug:
-                self._pretty_dump('Rx', rx_mbap)
+            self._debug_dump('Rx', rx_mbap)
             raise ModbusClient._NetworkError(MB_RECV_ERR, 'MBAP check error')
         # recv PDU
         rx_pdu = self._recv_all(f_length - 1)
@@ -701,8 +699,7 @@ class ModbusClient(object):
         if self.auto_close:
             self.close()
         # dump frame
-        if self.debug:
-            self._pretty_dump('Rx', rx_mbap + rx_pdu)
+        self._debug_dump('Rx', rx_mbap + rx_pdu)
         # body decode
         # check MBAP length field and PDU size
         if len(rx_pdu) != f_length - 1:
@@ -753,17 +750,18 @@ class ModbusClient(object):
         return self._recv_pdu(min_len=rx_min_len)
 
     def _req_init(self):
-        # reset status flags
+        """Reset request status flags."""
         self._last_error = MB_NO_ERR
         self._last_except = EXP_NONE
 
     def _req_except_handler(self, _except):
-        # on request error
+        """Global handler for internal exceptions."""
+        # on request network error
         if isinstance(_except, ModbusClient._NetworkError):
             self._last_error = _except.code
             self._debug_msg(_except.message)
             self.close()
-        # on request except
+        # on request modbus except
         if isinstance(_except, ModbusClient._ModbusExcept):
             self._last_error = MB_EXCEPT_ERR
             self._last_except = _except.code
@@ -777,6 +775,17 @@ class ModbusClient(object):
         """
         if self.debug:
             print(msg)
+
+    def _debug_dump(self, label, frame):
+        """Print debug dump if debug mode is on.
+
+        :param label: head label
+        :type label: str
+        :param frame: modbus frame
+        :type frame: bytearray
+        """
+        if self.debug:
+            self._pretty_dump(label, frame)
 
     @staticmethod
     def _pretty_dump(label, frame):
