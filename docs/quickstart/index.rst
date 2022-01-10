@@ -45,49 +45,40 @@ init module from constructor (raise ValueError if host/port error)::
 
     from pyModbusTCP.client import ModbusClient
     try:
-        c = ModbusClient(host="localhost", port=502)
+        c = ModbusClient(host='localhost', port=502)
     except ValueError:
         print("Error with host or port params")
 
-you can also init module from functions host/port return None if error::
+you can also init module with property::
 
     from pyModbusTCP.client import ModbusClient
+
     c = ModbusClient()
-    if not c.host("localhost"):
-        print("host error")
-    if not c.port(502):
-        print("port error")
+    c.host = 'localhost'
+    c.port = 502
 
-ModbusClient: manage TCP link
------------------------------
+ModbusClient: TCP link management
+---------------------------------
 
-Now, it's possible to use auto mode to let module deal with TCP open/close.
+Since version 0.2.0, "auto open" mode is the default behaviour to deal with TCP open/close.
 
-For keep TCP open, add auto_open=True in init::
+The "auto open" mode keep the TCP connection always open, so the default constructor is::
 
-        c = ModbusClient(host="localhost", auto_open=True)
+        c = ModbusClient(host="localhost", auto_open=True, auto_close=False)
 
-For open/close socket before/after read or write, do this::
+It's also possible to open/close TCP socket before and after each request::
 
         c = ModbusClient(host="localhost", auto_open=True, auto_close=True)
 
-You can also open manually the TCP link. After this, you call a modbus request
-function (see list in next section)::
+Another way to deal with connection is to manually set it. Like this::
 
-    if c.open():
-        regs_list_1 = c.read_holding_registers(0, 10)
-        regs_list_2 = c.read_holding_registers(55, 10)
-        c.close()
+        c = ModbusClient(host="localhost", auto_open=False, auto_close=False)
 
-With a forever polling loop, TCP always open (auto-reconnect code)::
-
-    while True:
-        if c.is_open():
+        # open the socket for 2 reads then close it.
+        if c.open():
             regs_list_1 = c.read_holding_registers(0, 10)
             regs_list_2 = c.read_holding_registers(55, 10)
-        else:
-            c.open()
-        time.sleep(1)
+            c.close()
 
 ModbusClient: available modbus requests functions
 -------------------------------------------------
@@ -146,7 +137,7 @@ If need, you can enable a debug mode for ModbusClient like this::
 
 or::
 
-    c.debug(True)
+    c.debug = True
 
 when debug is enable all debug message is print on console and you can see
 modbus frame::
@@ -165,21 +156,24 @@ print::
 utils module: Modbus data mangling
 ----------------------------------
 
-Sample data mangling, usefull for interface PLC device.
+When we have to deal with the variety types of internal registers of PLC device,
+we often need of some data mangling. Utils part of pyModbusTCP can help you in
+this task. Now, let's see some use cases.
 
-- 16 bits to 32 bits integers::
+- We need to read 32 bits registers (also know as long format) in a PLC::
 
     from pyModbusTCP import utils
-    list_16_bits = [0x0123, 0x4567, 0x89ab, 0xcdef]
+
+    list_16_bits = [0x0123, 0x4567, 0xdead, 0xbeef]
 
     # big endian sample (default)
     list_32_bits = utils.word_list_to_long(list_16_bits)
-    # display "['0x1234567', '0x89abcdef']"
+    # display "['0x1234567', '0xeadbeef']"
     print([hex(i) for i in list_32_bits])
 
     # little endian sample
     list_32_bits = utils.word_list_to_long(list_16_bits, big_endian=False)
-    # display "['0x45670123', '0xcdef89ab']"
+    # display "['0x45670123', '0xbeefdead']"
     print([hex(i) for i in list_32_bits])
 
 - two's complement (see http://en.wikipedia.org/wiki/Two%27s_complement)::
@@ -196,6 +190,7 @@ Sample data mangling, usefull for interface PLC device.
 - an integer of val_size bits (default is 16) to an array of boolean::
 
     from pyModbusTCP import utils
+
     # display "[True, False, True, False, False, False, False, False]"
     print(utils.get_bits_from_int(0x05, val_size=8))
 
