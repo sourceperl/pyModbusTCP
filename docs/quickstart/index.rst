@@ -156,11 +156,32 @@ print::
 utils module: Modbus data mangling
 ----------------------------------
 
-When we have to deal with the variety types of internal registers of PLC device,
-we often need of some data mangling. Utils part of pyModbusTCP can help you in
-this task. Now, let's see some use cases.
+When we have to deal with the variety types of registers of PLC device, we often
+need some data mangling. Utils part of pyModbusTCP can help you in this task.
+Now, let's see some use cases.
 
-- We need to read 32 bits registers (also know as long format) in a PLC::
+- deal with negative numbers (two's complement)::
+
+    from pyModbusTCP import utils
+
+    list_16_bits = [0x0000, 0xFFFF, 0x00FF, 0x8001]
+
+    # show "[0, -1, 255, -32767]"
+    print(utils.get_list_2comp(list_16_bits, 16))
+
+    # show "-1"
+    print(utils.get_2comp(list_16_bits[1], 16))
+
+More at http://en.wikipedia.org/wiki/Two%27s_complement
+
+- convert integer of val_size bits (default is 16) to an array of boolean::
+
+    from pyModbusTCP import utils
+
+    # show "[True, False, True, False, False, False, False, False]"
+    print(utils.get_bits_from_int(0x05, val_size=8))
+
+- read of 32 bits registers (also know as long format)::
 
     from pyModbusTCP import utils
 
@@ -168,31 +189,13 @@ this task. Now, let's see some use cases.
 
     # big endian sample (default)
     list_32_bits = utils.word_list_to_long(list_16_bits)
-    # display "['0x1234567', '0xeadbeef']"
+    # show "['0x1234567', '0xdeadbeef']"
     print([hex(i) for i in list_32_bits])
 
     # little endian sample
     list_32_bits = utils.word_list_to_long(list_16_bits, big_endian=False)
-    # display "['0x45670123', '0xbeefdead']"
+    # show "['0x45670123', '0xbeefdead']"
     print([hex(i) for i in list_32_bits])
-
-- two's complement (see http://en.wikipedia.org/wiki/Two%27s_complement)::
-
-    from pyModbusTCP import utils
-    list_16_bits = [0x0000, 0xFFFF, 0x00FF, 0x8001]
-
-    # display "[0, -1, 255, -32767]"
-    print(utils.get_list_2comp(list_16_bits, 16))
-
-    # display "-1"
-    print(utils.get_2comp(list_16_bits[1], 16))
-
-- an integer of val_size bits (default is 16) to an array of boolean::
-
-    from pyModbusTCP import utils
-
-    # display "[True, False, True, False, False, False, False, False]"
-    print(utils.get_bits_from_int(0x05, val_size=8))
 
 - IEEE single/double precision floating-point::
 
@@ -203,7 +206,7 @@ this task. Now, let's see some use cases.
     # display "0x3e99999a"
     print(hex(utils.encode_ieee(0.3)))
     # decode: python int 0x3e99999a -> float 0.3
-    # display "0.300000011921" (it's not 0.3, precision leak with float...)
+    # show "0.300000011921" (it's not 0.3, precision leak with float...)
     print(utils.decode_ieee(0x3e99999a))
 
     # 64 bits IEEE double precision
