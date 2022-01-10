@@ -41,15 +41,16 @@ from Github::
 ModbusClient: init
 ------------------
 
-init module from constructor (raise ValueError if host/port error)::
+Init module from constructor (raise ValueError if host/port error)::
 
     from pyModbusTCP.client import ModbusClient
+
     try:
         c = ModbusClient(host='localhost', port=502)
     except ValueError:
         print("Error with host or port params")
 
-you can also init module with property::
+Or with properties::
 
     from pyModbusTCP.client import ModbusClient
 
