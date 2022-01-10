@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 
-# Modbus/TCP server
-#
-# run this as root to listen on TCP priviliged ports (<= 1024)
-# add "--host 0.0.0.0" to listen on all available IPv4 addresses of the host
-#
-#   sudo ./server.py --host 0.0.0.0
+"""
+Modbus/TCP server
+~~~~~~~~~~~~~~~~~
+
+Run this as root to listen on TCP privileged ports (<= 1024).
+
+Add "--host 0.0.0.0" to listen on all available IPv4 addresses of the host.
+$ sudo ./server.py --host 0.0.0.0
+"""
 
 import argparse
 from pyModbusTCP.server import ModbusServer

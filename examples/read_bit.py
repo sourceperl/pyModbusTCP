@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 
-# read_bit
-# read 10 bits and print result on stdout
+""" Read 10 bits and print result on stdout. """
 
 import time
 from pyModbusTCP.client import ModbusClient
 
 # init modbus client
-c = ModbusClient(host='localhost', port=502, unit_id=1, auto_open=True, debug=False)
+c = ModbusClient(host='localhost', port=502, auto_open=True, debug=False)
 
 # main read loop
 while True:

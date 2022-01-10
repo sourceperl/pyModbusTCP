@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 
-# An example of Modbus/TCP server which allow modbus read and/or write only from specific IPs
-#
-# run this as root to listen on TCP priviliged ports (<= 1024) to avoid [Errno 13]
+"""
+An example of Modbus/TCP server which allow modbus read and/or write only from
+specific IPs.
+
+Run this as root to listen on TCP priviliged ports (<= 1024) to avoid [Errno 13].
+"""
 
 import argparse
 from pyModbusTCP.server import ModbusServer, ModbusServerDataHandler, DataHandlerReturn
@@ -14,7 +17,7 @@ ALLOW_R_L = ['127.0.0.1', '192.168.0.10']
 ALLOW_W_L = ['127.0.0.1']
 
 
-# your custom data handler with IPs filter
+# a custom data handler with IPs filter
 class MyDataHandler(ModbusServerDataHandler):
     def read_coils(self, address, count, srv_info):
         if srv_info.client_addr in ALLOW_R_L:

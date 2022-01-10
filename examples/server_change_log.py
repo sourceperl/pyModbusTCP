@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
-# An example of Modbus/TCP server with a change logger
-#
-# run this as root to listen on TCP priviliged ports (<= 1024) to avoid [Errno 13]
+"""
+An example of Modbus/TCP server with a change logger.
+
+Run this as root to listen on TCP priviliged ports (<= 1024) to avoid [Errno 13].
+"""
 
 import argparse
 import logging
@@ -10,12 +12,16 @@ from pyModbusTCP.server import ModbusServer, ModbusServerDataBank
 
 
 class MyDataBank(ModbusServerDataBank):
+    """A custom ModbusServerDataBank for override on_xxx_change methods."""
+
     def on_coils_change(self, address, from_value, to_value, srv_info):
+        """Call by server when change occur on coils space."""
         msg = 'change in coil space [{0!r:^5} > {1!r:^5}] at @ 0x{2:04X} from ip: {3:<15}'
         msg = msg.format(from_value, to_value, address, srv_info.client_addr)
         logging.info(msg)
 
     def on_holding_registers_change(self, address, from_value, to_value, srv_info):
+        """Call by server when change occur on holding registers space."""
         msg = 'change in hreg space [{0!r:^5} > {1!r:^5}] at @ 0x{2:04X} from ip: {3:<15}'
         msg = msg.format(from_value, to_value, address, srv_info.client_addr)
         logging.info(msg)

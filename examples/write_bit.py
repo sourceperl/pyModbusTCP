@@ -1,49 +1,41 @@
 #!/usr/bin/env python3
 
-# write_bit
-# write 4 bits to True, wait 2s, write False, restart...
+"""Write 4 bits to True, wait 2s, write False and redo it."""
 
 import time
 from pyModbusTCP.client import ModbusClient
 
 # init
 c = ModbusClient(host='localhost', port=502, auto_open=True, debug=False)
-toggle = True
+bit = True
 
 # main loop
 while True:
-    # open or reconnect TCP to server
-    if not c.is_open():
-        if not c.open():
-            print('unable to connect')
-
-    # if open() is ok, write coils (modbus function 0x01)
-    if c.is_open():
-        # write 4 bits in modbus address 0 to 3
-        print("")
-        print("write bits")
-        print("----------")
-        print("")
-        for addr in range(4):
-            is_ok = c.write_single_coil(addr, toggle)
-            if is_ok:
-                print("bit #" + str(addr) + ": write to " + str(toggle))
-            else:
-                print("bit #" + str(addr) + ": unable to write " + str(toggle))
-            time.sleep(0.5)
-
-        time.sleep(1)
-
-        print("")
-        print("read bits")
-        print("---------")
-        print("")
-        bits = c.read_coils(0, 4)
-        if bits:
-            print("bits #0 to 3: "+str(bits))
+    # write 4 bits in modbus address 0 to 3
+    print('write bits')
+    print('----------\n')
+    for ad in range(4):
+        is_ok = c.write_single_coil(ad, bit)
+        if is_ok:
+            print('bit #%s: write to %s' % (ad, bit))
         else:
-            print("unable to read")
+            print('bit #%s: unable to write %s' % (ad, bit))
+        time.sleep(0.5)
 
-    toggle = not toggle
+    print('')
+    time.sleep(1)
+
+    # read 4 bits in modbus address 0 to 3
+    print('read bits')
+    print('---------\n')
+    bits = c.read_coils(0, 4)
+    if bits:
+        print('bits #0 to 3: %s' % bits)
+    else:
+        print('bits #0 to 3: unable to read')
+
+    # toggle
+    bit = not bit
     # sleep 2s before next polling
+    print('')
     time.sleep(2)

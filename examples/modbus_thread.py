@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 
-# modbus_thread
-# start a thread for polling a set of registers, display result on console
-# exit with ctrl+c
+"""
+modbus polling thread
+~~~~~~~~~~~~~~~~~~~~~
+
+Start a thread for polling a set of registers, display result on console.
+Exit with ctrl+c.
+"""
 
 import time
 from threading import Thread, Lock
@@ -18,18 +22,15 @@ regs = []
 regs_lock = Lock()
 
 
-# modbus polling thread
 def polling_thread():
-    global regs
-    c = ModbusClient(host=SERVER_HOST, port=SERVER_PORT)
+    """Modbus polling thread."""
+    global regs, regs_lock
+    c = ModbusClient(host=SERVER_HOST, port=SERVER_PORT, auto_open=True)
     # polling loop
     while True:
-        # keep TCP open
-        if not c.is_open():
-            c.open()
         # do modbus reading on socket
         reg_list = c.read_holding_registers(0, 10)
-        # if read is ok, store result in regs (with thread lock synchronization)
+        # if read is ok, store result in regs (with thread lock)
         if reg_list:
             with regs_lock:
                 regs = list(reg_list)

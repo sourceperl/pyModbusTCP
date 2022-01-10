@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 
-# Modbus/TCP server with start/stop schedule
+"""
+Modbus/TCP server with start/stop schedule
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-# run this as root to listen on TCP priviliged ports (<= 1024)
-# default Modbus/TCP port is 502 so we prefix call with sudo (avoid Errno 13)
-#
-#   sudo ./server_shedule.py --host 0.0.0.0
+Run this as root to listen on TCP priviliged ports (<= 1024).
+
+Default Modbus/TCP port is 502, so we prefix call with sudo (avoid Errno 13).
+$ sudo ./server_shedule.py --host 0.0.0.0
+"""
 
 import argparse
 import time
@@ -14,8 +17,11 @@ from pyModbusTCP.server import ModbusServer
 import schedule
 
 
-# word @0 = second since 00:00 divide by 10 to avoid 16 bits overflow
 def alive_word_job():
+    """Update holding register @0 with day second (since 00:00).
+
+    Job called every 10s by scheduler.
+    """
     server.data_bank.set_holding_registers(0, [int(time.time()) % (24*3600) // 10])
 
 

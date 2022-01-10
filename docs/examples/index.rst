@@ -6,10 +6,10 @@ pyModbusTCP examples
 .. toctree::
    :maxdepth: 2
 
-   float_support
    read_register
    read_bit
    write_bit
+   float_support
    modbus_thread
    server
    server_schedule

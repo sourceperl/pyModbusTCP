@@ -50,7 +50,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'pyModbusTCP'
-copyright = u'2021, Loïc Lefebvre'
+copyright = u'2022, Loïc Lefebvre'
 author = u'Loïc Lefebvre'
 
 # The version info for the project you're documenting, acts as replacement for
