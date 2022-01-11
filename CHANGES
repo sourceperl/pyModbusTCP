@@ -14,6 +14,7 @@ Revision history for pyModbusTCP
     - add or update server examples for new modbus server design.
     - some updates on tests, fix random arrays generation on client test part.
     - clarify usage of root privilege for open tcp/502 (avoid Errno 13) in server example.
+    - python 2 end of support.
 
 0.1.10 2021-03-02
 

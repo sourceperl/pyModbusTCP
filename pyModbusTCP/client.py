@@ -283,9 +283,9 @@ class ModbusClient(object):
         """Send a custom modbus request.
 
         :param pdu: a modbus PDU (protocol data unit)
-        :type pdu: bytearray
+        :type pdu: bytes
         :returns: modbus frame PDU or None if error
-        :rtype: bytearray or None
+        :rtype: bytes or None
         """
         # make request
         try:
@@ -315,7 +315,7 @@ class ModbusClient(object):
         # make request
         try:
             tx_pdu = struct.pack('>BHH', READ_COILS, bit_addr, bit_nb)
-            rx_pdu = self._req_pdu(tx_pdu=bytearray(tx_pdu), rx_min_len=3)
+            rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=3)
             # field "byte count" from PDU
             byte_count = rx_pdu[1]
             # coils PDU part
@@ -355,7 +355,7 @@ class ModbusClient(object):
         # make request
         try:
             tx_pdu = struct.pack('>BHH', READ_DISCRETE_INPUTS, bit_addr, bit_nb)
-            rx_pdu = self._req_pdu(tx_pdu=bytearray(tx_pdu), rx_min_len=3)
+            rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=3)
             # extract field "byte count"
             byte_count = rx_pdu[1]
             # frame with bits value -> bits[] list
@@ -395,7 +395,7 @@ class ModbusClient(object):
         # make request
         try:
             tx_pdu = struct.pack('>BHH', READ_HOLDING_REGISTERS, reg_addr, reg_nb)
-            rx_pdu = self._req_pdu(tx_pdu=bytearray(tx_pdu), rx_min_len=3)
+            rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=3)
             # extract field "byte count"
             byte_count = rx_pdu[1]
             # frame with regs value
@@ -435,7 +435,7 @@ class ModbusClient(object):
         # make request
         try:
             tx_pdu = struct.pack('>BHH', READ_INPUT_REGISTERS, reg_addr, reg_nb)
-            rx_pdu = self._req_pdu(tx_pdu=bytearray(tx_pdu), rx_min_len=3)
+            rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=3)
             # extract field "byte count"
             byte_count = rx_pdu[1]
             # frame with regs value
@@ -474,7 +474,7 @@ class ModbusClient(object):
             bit_value_raw = (0x0000, 0xff00)[bool(bit_value)]
             # make a request
             tx_pdu = struct.pack('>BHH', WRITE_SINGLE_COIL, bit_addr, bit_value_raw)
-            rx_pdu = self._req_pdu(tx_pdu=bytearray(tx_pdu), rx_min_len=5)
+            rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=5)
             # decode reply
             resp_coil_addr, resp_coil_value = struct.unpack('>HH', rx_pdu[1:5])
             # check server reply
@@ -505,7 +505,7 @@ class ModbusClient(object):
         try:
             # make a request
             tx_pdu = struct.pack('>BHH', WRITE_SINGLE_REGISTER, reg_addr, reg_value)
-            rx_pdu = self._req_pdu(tx_pdu=bytearray(tx_pdu), rx_min_len=5)
+            rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=5)
             # decode reply
             resp_reg_addr, resp_reg_value = struct.unpack('>HH', rx_pdu[1:5])
             # check server reply
@@ -549,7 +549,7 @@ class ModbusClient(object):
             tx_pdu = struct.pack('>BHHB', WRITE_MULTIPLE_COILS, bits_addr, len(bits_value), len(pdu_coils_part))
             tx_pdu += pdu_coils_part
             # make a request
-            rx_pdu = self._req_pdu(tx_pdu=bytearray(tx_pdu), rx_min_len=5)
+            rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=5)
             # response decode
             resp_write_addr, resp_write_count = struct.unpack('>HH', rx_pdu[1:5])
             # check response fields
@@ -580,7 +580,7 @@ class ModbusClient(object):
         # make request
         try:
             # init PDU registers part
-            pdu_regs_part = bytearray()
+            pdu_regs_part = b''
             # populate it with register values
             for reg in regs_value:
                 # check current register value
@@ -593,7 +593,7 @@ class ModbusClient(object):
             tx_pdu = struct.pack('>BHHB', WRITE_MULTIPLE_REGISTERS, regs_addr, len(regs_value), bytes_nb)
             tx_pdu += pdu_regs_part
             # make a request
-            rx_pdu = self._req_pdu(tx_pdu=bytearray(tx_pdu), rx_min_len=5)
+            rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=5)
             # response decode
             resp_write_addr, resp_write_count = struct.unpack('>HH', rx_pdu[1:5])
             # check response fields
@@ -608,7 +608,7 @@ class ModbusClient(object):
         """Send frame over current socket.
 
         :param frame: modbus frame to send (MBAP + PDU)
-        :type frame: bytearray
+        :type frame: bytes
         """
         # check socket
         if self._sock is None:
@@ -625,7 +625,7 @@ class ModbusClient(object):
         """Convert modbus PDU to frame and send it.
 
         :param pdu: modbus frame PDU
-        :type pdu: bytearray
+        :type pdu: bytes
         """
         # for auto_open mode, check TCP and open on need
         if self.auto_open and not self.is_open:
@@ -643,9 +643,8 @@ class ModbusClient(object):
         :param size: number of bytes to receive
         :type size: int
         :returns: receive data or None if error
-        :rtype: bytearray
+        :rtype: bytes
         """
-        # recv
         try:
             r_buffer = self._sock.recv(size)
         except socket.timeout:
@@ -655,7 +654,7 @@ class ModbusClient(object):
         # handle recv error
         if not r_buffer:
             raise ModbusClient._NetworkError(MB_RECV_ERR, 'recv error')
-        return bytearray(r_buffer)
+        return r_buffer
 
     def _recv_all(self, size):
         """Receive data over current socket, loop until all bytes is received (avoid TCP frag).
@@ -663,9 +662,9 @@ class ModbusClient(object):
         :param size: number of bytes to receive
         :type size: int
         :returns: receive data or None if error
-        :rtype: bytearray
+        :rtype: bytes
         """
-        r_buffer = bytearray()
+        r_buffer = b''
         while len(r_buffer) < size:
             r_buffer += self._recv(size - len(r_buffer))
         return r_buffer
@@ -676,15 +675,13 @@ class ModbusClient(object):
         :param min_len: minimal length of the PDU
         :type min_len: int
         :returns: modbus frame PDU or None if error
-        :rtype: bytearray or None
+        :rtype: bytes or None
         """
         # receive 7 bytes header (MBAP)
         rx_mbap = self._recv_all(7)
         # check MBAP length
         if len(rx_mbap) != 7:
             raise ModbusClient._NetworkError(MB_RECV_ERR, 'MBAP length error')
-        # enforce type bytearray
-        rx_mbap = bytearray(rx_mbap)
         # decode MBAP
         (f_transaction_id, f_protocol_id, f_length, f_unit_id) = struct.unpack('>HHHB', rx_mbap)
         # check MBAP fields
@@ -713,7 +710,7 @@ class ModbusClient(object):
         if rx_fc >= 0x80:
             exp_code = rx_pdu[1]
             raise ModbusClient._ModbusExcept(exp_code)
-        # check PDU len for valid frame
+        # check PDU len for valid frame (keep this after except checking)
         if len(rx_pdu) < min_len:
             raise ModbusClient._NetworkError(MB_RECV_ERR, 'PDU length is too short (min length = %d)' % min_len)
         # if no error, return PDU
@@ -723,9 +720,9 @@ class ModbusClient(object):
         """Return full modbus frame with MBAP (modbus application protocol header) append to PDU.
 
         :param pdu: modbus PDU (protocol data unit)
-        :type pdu: bytearray
+        :type pdu: bytes
         :returns: full modbus frame
-        :rtype: bytearray
+        :rtype: bytes
         """
         # build MBAP
         self._transaction_id = random.randint(0, 65535)
@@ -733,17 +730,17 @@ class ModbusClient(object):
         length = len(pdu) + 1
         mbap = struct.pack('>HHHB', self._transaction_id, protocol_id, length, self.unit_id)
         # full modbus/TCP frame = [MBAP]PDU
-        return bytearray(mbap + pdu)
+        return mbap + pdu
 
     def _req_pdu(self, tx_pdu, rx_min_len=2):
         """Request processing (send and recv PDU).
 
         :param tx_pdu: modbus PDU (protocol data unit) to send
-        :type tx_pdu: bytearray
+        :type tx_pdu: bytes
         :param rx_min_len: min length of receive PDU
         :type rx_min_len: int
         :returns: the receive PDU or None if error
-        :rtype: bytearray
+        :rtype: bytes
         """
         # init request engine
         self._req_init()
@@ -785,7 +782,7 @@ class ModbusClient(object):
         :param label: head label
         :type label: str
         :param frame: modbus frame
-        :type frame: bytearray
+        :type frame: bytes
         """
         if self.debug:
             self._pretty_dump(label, frame)
@@ -799,7 +796,7 @@ class ModbusClient(object):
         :param label: head label
         :type label: str
         :param frame: modbus frame
-        :type frame: bytearray
+        :type frame: bytes
         """
         # split data string items to a list of hex value
         dump = ['%02X' % c for c in frame]

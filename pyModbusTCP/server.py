@@ -7,15 +7,10 @@ from .constants import READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS,
 from .utils import test_bit, set_bit
 from random import randint
 import socket
+from socketserver import BaseRequestHandler, ThreadingTCPServer
 import struct
 from threading import Lock, Thread, Event
 from warnings import warn
-
-# python2 compatibility
-try:
-    from socketserver import BaseRequestHandler, ThreadingTCPServer
-except ImportError:
-    from SocketServer import BaseRequestHandler, ThreadingTCPServer
 
 
 class DataBank:
@@ -61,8 +56,8 @@ class ModbusServerInfo:
 
     @property
     def rx_frame_as_str(self):
-        mbap_str = ' '.join(['%02X' % c for c in bytearray(self.rx_mbap.raw)])
-        pdu_str = ' '.join(['%02X' % c for c in bytearray(self.rx_pdu.raw)])
+        mbap_str = ' '.join(['%02X' % c for c in self.rx_mbap.raw])
+        pdu_str = ' '.join(['%02X' % c for c in self.rx_pdu.raw])
         return '[%s] %s' % (mbap_str, pdu_str)
 
 
@@ -470,9 +465,16 @@ class ModbusServer(object):
             return self.raw + pdu.raw
 
     class PDU:
+        """ Modbus PDU class """
+
         def __init__(self, raw=b''):
-            # enforce bytearray for py2
-            self.raw = bytearray(raw)
+            """
+            Constructor
+
+            :param raw: raw PDU
+            :type raw: bytes
+            """
+            self.raw = raw
 
         def __len__(self):
             return len(self.raw)
@@ -495,7 +497,7 @@ class ModbusServer(object):
             return self.__len__() < 2
 
         def clear(self):
-            self.raw = bytearray()
+            self.raw = b''
 
         def build_except(self, func_code, exp_status):
             self.clear()
@@ -504,7 +506,7 @@ class ModbusServer(object):
 
         def add_pack(self, fmt, *args):
             try:
-                self.raw += bytearray(struct.pack(fmt, *args))
+                self.raw += struct.pack(fmt, *args)
             except struct.error:
                 err_msg = 'unable to format PDU message (fmt: %s, values: %s)' % (fmt, args)
                 raise ModbusServer._InternalError(err_msg)
@@ -542,10 +544,16 @@ class ModbusServer(object):
                 except socket.timeout:
                     # just redo main server run test and recv operations on timeout
                     pass
-            return bytearray(data)
+            return data
 
         def _read_bits(self, rx_pdu):
-            # functions Read Coils (0x01) or Read Discrete Inputs (0x02)
+            """
+            Functions Read Coils (0x01) or Read Discrete Inputs (0x02).
+
+            :param rx_pdu: PDU of input frame
+            :type rx_pdu: ModbusServer.PDU
+            :rtype: ModbusServer.PDU
+            """
             # init PDU() for return value
             ret_pdu = ModbusServer.PDU()
             # decode pdu
@@ -576,7 +584,13 @@ class ModbusServer(object):
             return ret_pdu
 
         def _read_words(self, rx_pdu):
-            # functions Read Holding Registers (0x03) or Read Input Registers (0x04)
+            """
+            Functions Read Holding Registers (0x03) or Read Input Registers (0x04).
+
+            :param rx_pdu: PDU of input frame
+            :type rx_pdu: ModbusServer.PDU
+            :rtype: ModbusServer.PDU
+            """
             # init PDU() for return value
             ret_pdu = ModbusServer.PDU()
             # decode pdu
@@ -601,7 +615,13 @@ class ModbusServer(object):
             return ret_pdu
 
         def _write_single_coil(self, rx_pdu):
-            # function Write Single Coil (0x05)
+            """
+            Function Write Single Coil (0x05).
+
+            :param rx_pdu: PDU of input frame
+            :type rx_pdu: ModbusServer.PDU
+            :rtype: ModbusServer.PDU
+            """
             # init PDU() for return value
             ret_pdu = ModbusServer.PDU()
             # decode pdu
@@ -618,7 +638,13 @@ class ModbusServer(object):
             return ret_pdu
 
         def _write_single_register(self, rx_pdu):
-            # function Write Single Register (0x06)
+            """
+            Functions Write Single Register (0x06).
+
+            :param rx_pdu: PDU of input frame
+            :type rx_pdu: ModbusServer.PDU
+            :rtype: ModbusServer.PDU
+            """
             # init PDU() for return value
             ret_pdu = ModbusServer.PDU()
             # decode pdu
@@ -633,7 +659,13 @@ class ModbusServer(object):
             return ret_pdu
 
         def _write_multiple_coils(self, rx_pdu):
-            # function Write Multiple Coils (0x0F)
+            """
+            Function Write Multiple Coils (0x0F).
+
+            :param rx_pdu: PDU of input frame
+            :type rx_pdu: ModbusServer.PDU
+            :rtype: ModbusServer.PDU
+            """
             # init PDU() for return value
             ret_pdu = ModbusServer.PDU()
             # decode pdu
@@ -662,7 +694,13 @@ class ModbusServer(object):
             return ret_pdu
 
         def _write_multiple_registers(self, rx_pdu):
-            # function Write Multiple Registers (0x10)
+            """
+            Function Write Multiple Registers (0x10).
+
+            :param rx_pdu: PDU of input frame
+            :type rx_pdu: ModbusServer.PDU
+            :rtype: ModbusServer.PDU
+            """
             # init PDU() for return value
             ret_pdu = ModbusServer.PDU()
             # decode pdu
@@ -725,8 +763,10 @@ class ModbusServer(object):
                     # call the ad-hoc function, if none exists, send an "illegal function" exception
                     try:
                         func = f_maps[rx_pdu.func_code]
-                        tx_pdu = func(rx_pdu)
-                    except KeyError:
+                        if not callable(func):
+                            raise ValueError
+                        tx_pdu = func(rx_pdu=rx_pdu)
+                    except (ValueError, KeyError):
                         tx_pdu = ModbusServer.PDU().build_except(rx_pdu.func_code, EXP_ILLEGAL_FUNCTION)
                     # send the tx pdu with the last rx mbap (only length field change)
                     self._send_all(rx_mbap.raw_with_pdu(tx_pdu))

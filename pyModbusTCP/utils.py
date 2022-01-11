@@ -274,12 +274,12 @@ def crc16(frame):
     """Compute CRC16.
 
     :param frame: frame
-    :type frame: bytearray
+    :type frame: bytes
     :returns: CRC16
     :rtype: int
     """
     crc = 0xFFFF
-    for item in bytearray(frame):
+    for item in frame:
         next_byte = item
         crc ^= next_byte
         for _ in range(8):
