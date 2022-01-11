@@ -92,6 +92,9 @@ class ModbusServerDataBank:
                 self.h_regs_size = 0
                 self.i_regs_size = 0
 
+        def __repr__(self):
+            return 'ModbusServerDataBank.Conf()'
+
     def __init__(self, conf=None):
         """Constructor
 
@@ -116,6 +119,9 @@ class ModbusServerDataBank:
         self._h_regs = [self.conf.h_regs_default_value] * self.conf.h_regs_size
         self._i_regs_lock = Lock()
         self._i_regs = [self.conf.i_regs_default_value] * self.conf.i_regs_size
+
+    def __repr__(self):
+        return 'ModbusServerDataBank(conf=%s)' % self.conf
 
     def get_coils(self, address, number=1, srv_info=None):
         """Read data on server coils space
@@ -360,6 +366,9 @@ class ModbusServerDataHandler:
             self.data_bank = data_bank
         else:
             raise ValueError('data_bank arg is invalid')
+
+    def __repr__(self):
+        return 'ModbusServerDataHandler(data_bank=%s)' % self.data_bank
 
     def read_coils(self, address, count, srv_info):
         # read bits from DataBank
@@ -764,6 +773,11 @@ class ModbusServer(object):
         self._evt_running = Event()
         self._service = None
         self._serve_th = None
+
+    def __repr__(self):
+        r_str = 'ModbusServer(host=\'%s\', port=%d, no_block=%s, ipv6=%s, data_bank=%s, data_hdl=%s)'
+        r_str %= (self.host, self.port, self.no_block, self.ipv6, self.data_bank, self.data_hdl)
+        return r_str
 
     def start(self):
         """Start the server.
