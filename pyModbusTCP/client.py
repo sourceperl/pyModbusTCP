@@ -178,6 +178,7 @@ class ModbusClient(object):
         """Get or set requests timeout (default is 30 seconds).
 
         The argument may be a floating point number for sub-second precision.
+        Setting timeout to a new value will close the current socket.
         """
         return self._timeout
 
@@ -187,7 +188,9 @@ class ModbusClient(object):
         value = float(value)
         # check validity
         if 0 < value < 3600:
-            self._timeout = value
+            if self._timeout != value:
+                self.close()
+                self._timeout = value
             return
         # can't be set
         raise ValueError('timeout can\'t be set (valid between 0 and 3600)')
