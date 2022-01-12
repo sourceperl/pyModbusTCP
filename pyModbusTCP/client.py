@@ -7,6 +7,7 @@ from .constants import READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS,
     MB_SOCK_CLOSE_ERR, VERSION
 from .utils import byte_length, set_bit, valid_host
 import socket
+from socket import AF_UNSPEC, SOCK_STREAM
 import struct
 import random
 
@@ -75,6 +76,9 @@ class ModbusClient(object):
         r_str = 'ModbusClient(host=\'%s\', port=%d, unit_id=%d, timeout=%.2f, debug=%s, auto_open=%s, auto_close=%s)'
         r_str %= (self.host, self.port, self.unit_id, self.timeout, self.debug, self.auto_open, self.auto_close)
         return r_str
+
+    def __del__(self):
+        self.close()
 
     @property
     def version(self):
@@ -228,7 +232,10 @@ class ModbusClient(object):
     @property
     def is_open(self):
         """Get current status of the TCP connection (True = open)."""
-        return self._sock is not None
+        if self._sock:
+            return self._sock.fileno() > 0
+        else:
+            return False
 
     def open(self):
         """Connect to modbus server (open TCP connection).
@@ -245,7 +252,7 @@ class ModbusClient(object):
 
     def _open(self):
         """Connect to modbus server (open TCP connection)."""
-        # call open() on an already open socket, reset it
+        # open an already open socket -> reset it
         if self.is_open:
             self.close()
         # init socket and connect
@@ -253,31 +260,27 @@ class ModbusClient(object):
         # AF_xxx : AF_INET -> IPv4, AF_INET6 -> IPv6,
         #          AF_UNSPEC -> IPv6 (priority on some system) or 4
         # list available socket on target host
-        for res in socket.getaddrinfo(self.host, self.port,
-                                      socket.AF_UNSPEC, socket.SOCK_STREAM):
+        for res in socket.getaddrinfo(self.host, self.port, AF_UNSPEC, SOCK_STREAM):
             af, sock_type, proto, canon_name, sa = res
             try:
                 self._sock = socket.socket(af, sock_type, proto)
             except socket.error:
-                self._sock = None
                 continue
             try:
                 self._sock.settimeout(self.timeout)
                 self._sock.connect(sa)
             except socket.error:
                 self._sock.close()
-                self._sock = None
                 continue
             break
         # check connect status
-        if self._sock is None:
-            raise ModbusClient._NetworkError(MB_CONNECT_ERR, 'connect error')
+        if not self.is_open:
+            raise ModbusClient._NetworkError(MB_CONNECT_ERR, 'connection refused')
 
     def close(self):
         """Close current TCP connection."""
         if self._sock:
             self._sock.close()
-            self._sock = None
 
     def custom_request(self, pdu):
         """Send a custom modbus request.
@@ -611,14 +614,16 @@ class ModbusClient(object):
         :type frame: bytes
         """
         # check socket
-        if self._sock is None:
+        if not self.is_open:
             raise ModbusClient._NetworkError(MB_SOCK_CLOSE_ERR, 'try to send on a close socket')
         # send
         try:
             self._sock.send(frame)
         except socket.timeout:
+            self._sock.close()
             raise ModbusClient._NetworkError(MB_TIMEOUT_ERR, 'timeout error')
         except socket.error:
+            self._sock.close()
             raise ModbusClient._NetworkError(MB_SEND_ERR, 'send error')
 
     def _send_pdu(self, pdu):
@@ -648,11 +653,13 @@ class ModbusClient(object):
         try:
             r_buffer = self._sock.recv(size)
         except socket.timeout:
+            self._sock.close()
             raise ModbusClient._NetworkError(MB_TIMEOUT_ERR, 'timeout error')
         except socket.error:
             r_buffer = b''
         # handle recv error
         if not r_buffer:
+            self._sock.close()
             raise ModbusClient._NetworkError(MB_RECV_ERR, 'recv error')
         return r_buffer
 
@@ -679,9 +686,6 @@ class ModbusClient(object):
         """
         # receive 7 bytes header (MBAP)
         rx_mbap = self._recv_all(7)
-        # check MBAP length
-        if len(rx_mbap) != 7:
-            raise ModbusClient._NetworkError(MB_RECV_ERR, 'MBAP length error')
         # decode MBAP
         (f_transaction_id, f_protocol_id, f_length, f_unit_id) = struct.unpack('>HHHB', rx_mbap)
         # check MBAP fields
@@ -689,10 +693,11 @@ class ModbusClient(object):
         f_protocol_err = f_protocol_id != 0
         f_length_err = f_length >= 256
         f_unit_id_err = f_unit_id != self.unit_id
-        # check error status of fields
+        # checking error status of fields
         if f_transaction_err or f_protocol_err or f_length_err or f_unit_id_err:
+            self.close()
             self._debug_dump('Rx', rx_mbap)
-            raise ModbusClient._NetworkError(MB_RECV_ERR, 'MBAP check error')
+            raise ModbusClient._NetworkError(MB_RECV_ERR, 'MBAP checking error')
         # recv PDU
         rx_pdu = self._recv_all(f_length - 1)
         # for auto_close mode, close socket after each request
@@ -701,9 +706,6 @@ class ModbusClient(object):
         # dump frame
         self._debug_dump('Rx', rx_mbap + rx_pdu)
         # body decode
-        # check MBAP length field and PDU size
-        if len(rx_pdu) != f_length - 1:
-            raise ModbusClient._NetworkError(MB_RECV_ERR, 'MBAP length field mismatch the PDU size')
         # extract function code
         rx_fc = rx_pdu[0]
         # check except status
@@ -760,7 +762,6 @@ class ModbusClient(object):
         if isinstance(_except, ModbusClient._NetworkError):
             self._last_error = _except.code
             self._debug_msg(_except.message)
-            self.close()
         # on request modbus except
         if isinstance(_except, ModbusClient._ModbusExcept):
             self._last_error = MB_EXCEPT_ERR
