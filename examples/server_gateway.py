@@ -6,8 +6,9 @@ Modbus/TCP gateway
 
 Run this as root to listen on TCP privileged ports (<= 1024).
 
-Add "--host 0.0.0.0" to listen on all available IPv4 addresses of the host.
-$ sudo ./server.py --host 0.0.0.0
+Open /dev/ttyUSBO at 115200 bauds and relay RTU messages to slave(s)
+from localhost:502 modbus TCP server (here end of frame delay is 30ms).
+$ sudo ./server_gateway.py --eof 0.03 -b 115200 /dev/ttyUSB0
 """
 
 import argparse
@@ -16,14 +17,13 @@ from threading import Thread, Event
 from queue import Queue
 from pyModbusTCP.server import ModbusServer
 from pyModbusTCP.utils import crc16
-from pyModbusTCP.constants import EXP_GATEWAY_PATH_UNAVAILABLE, EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
+from pyModbusTCP.constants import EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
 # need sudo pip install pyserial==3.4
 import serial
 
 
 # some class
 class ModbusRTUFrame:
-
     """ Modbus RTU frame container class. """
 
     def __init__(self, raw=b''):
@@ -69,6 +69,7 @@ class ModbusRTUFrame:
 
 class ModbusRTURequest:
     """ Modbus request container for deal with ModbusSerialWorker. """
+
     def __init__(self):
         self.completed = Event()
         self.tx_frame = ModbusRTUFrame()
@@ -78,12 +79,14 @@ class ModbusRTURequest:
 class ModbusSerialWorker(Thread):
     """ Main serial thread to manage I/O with RTU devices. """
 
-    def __init__(self, serial_port):
+    def __init__(self, port, timeout=1.0, end_of_frame=0.05):
         super().__init__()
         # this thread is a daemon
         self.daemon = True
         # public
-        self.serial_port = serial_port
+        self.serial_port = port
+        self.timeout = timeout
+        self.end_of_frame = end_of_frame
         self.requests_q = Queue(maxsize=100)
 
     def run(self):
@@ -91,16 +94,23 @@ class ModbusSerialWorker(Thread):
         while True:
             # get next request from queue
             request = self.requests_q.get()
-            # send over serial
+            # send to serial
             self.serial_port.reset_input_buffer()
             self.serial_port.write(request.tx_frame.raw)
-            # receive loop
-            rx_raw = b''
-            while True:
-                rx_chunk = self.serial_port.read(256)
-                if not rx_chunk:
-                    break
-                rx_raw += rx_chunk
+            # receive from serial
+            # wait for first byte of data until timeout delay
+            self.serial_port.timeout = self.timeout
+            rx_raw = self.serial_port.read(1)
+            # if ok, wait for the remaining
+            if rx_raw:
+                self.serial_port.timeout = self.end_of_frame
+                # wait for next bytes of data until end of frame delay
+                while True:
+                    rx_chunk = self.serial_port.read(256)
+                    if not rx_chunk:
+                        break
+                    else:
+                        rx_raw += rx_chunk
             request.rx_frame.raw = rx_raw
             # mark all as done
             request.completed.set()
@@ -129,17 +139,17 @@ def gw_engine(in_mbap, in_pdu):
 if __name__ == '__main__':
     # parse args
     parser = argparse.ArgumentParser()
-    parser.add_argument('device', type=str, help='Serial device (like /dev/ttyUSB0)')
-    parser.add_argument('-H', '--host', type=str, default='localhost', help='Host (default: localhost)')
+    parser.add_argument('device', type=str, help='serial device (like /dev/ttyUSB0)')
+    parser.add_argument('-H', '--host', type=str, default='localhost', help='host (default: localhost)')
     parser.add_argument('-p', '--port', type=int, default=502, help='TCP port (default: 502)')
-    parser.add_argument('-b', '--baudrate', type=int, default=9600)
-    parser.add_argument('-t', '--timeout', type=float, help='override default timeout (0.050s)')
+    parser.add_argument('-b', '--baudrate', type=int, default=9600, help='serial rate (default is 9600)')
+    parser.add_argument('-t', '--timeout', type=float, default=1.0, help='timeout delay (default is 1.0 s)')
+    parser.add_argument('-e', '--eof', type=float, default=0.05, help='end of frame delay (default is 0.05 s)')
     args = parser.parse_args()
     # init serial port
-    serial_timeout = args.timeout if args.timeout else 0.050
-    serial_port = serial.Serial(port=args.device, baudrate=args.baudrate, timeout=serial_timeout)
+    serial_port = serial.Serial(port=args.device, baudrate=args.baudrate)
     # start main thread
-    serial_worker = ModbusSerialWorker(serial_port)
+    serial_worker = ModbusSerialWorker(serial_port, args.timeout, args.eof)
     serial_worker.start()
     # init and launch modbus server with custom engine
     srv = ModbusServer(host=args.host, port=args.port, ext_engine=gw_engine)
