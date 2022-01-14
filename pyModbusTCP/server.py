@@ -421,13 +421,14 @@ class ModbusServerDataHandler:
 
 
 class ModbusServer(object):
-
     """ Modbus TCP server """
 
     class _InternalError(Exception):
         pass
 
     class MBAP:
+        """ MBAP (Modbus Application Protocol) container class. """
+
         def __init__(self, raw=None):
             # public
             self.transaction_id = randint(0, 0xffff)
@@ -436,7 +437,7 @@ class ModbusServer(object):
             self.unit_id = 1
             # if raw arg is defined, decode it now
             if raw is not None:
-                self.raw_decode(raw)
+                self.raw = raw
 
         @property
         def raw(self):
@@ -447,7 +448,8 @@ class ModbusServer(object):
             except struct.error as e:
                 raise ModbusServer._InternalError('MBAP raw encode pack error: %s' % e)
 
-        def raw_decode(self, value):
+        @raw.setter
+        def raw(self, value):
             # close connection if no standard 7 bytes mbap header
             if not (value and len(value) == 7):
                 raise ModbusServer._InternalError('MBAP must have a length of 7 bytes')
@@ -465,7 +467,7 @@ class ModbusServer(object):
             return self.raw + pdu.raw
 
     class PDU:
-        """ Modbus PDU class """
+        """ PDU (Protocol Data Unit) container class. """
 
         def __init__(self, raw=b''):
             """
@@ -545,6 +547,32 @@ class ModbusServer(object):
                     # just redo main server run test and recv operations on timeout
                     pass
             return data
+
+        def _external_engine(self, in_mbap, in_pdu):
+            """Call external PDU processing engine, if it is defined.
+
+            :type in_mbap: ModbusServer.MBAP
+            :type in_pdu: ModbusServer.PDU
+            """
+            if callable(self.server.ext_engine):
+                return self.server.ext_engine(in_mbap, in_pdu)
+            else:
+                raise NotImplementedError
+
+        def _default_engine(self, in_mbap, in_pdu):
+            """Default PDU processing engine: call default modbus func.
+
+            :type in_mbap: ModbusServer.MBAP
+            :type in_pdu: ModbusServer.PDU
+            """
+            try:
+                # call the ad-hoc function, if none exists, send an "illegal function" exception
+                func = self._default_func[in_pdu.func_code]
+                if not callable(func):
+                    raise ValueError
+                return func(rx_pdu=in_pdu)
+            except (ValueError, KeyError):
+                return ModbusServer.PDU().build_except(in_pdu.func_code, EXP_ILLEGAL_FUNCTION)
 
         def _read_bits(self, rx_pdu):
             """
@@ -731,12 +759,21 @@ class ModbusServer(object):
         def setup(self):
             # set a socket timeout of 1s on blocking operations (like send/recv)
             # this avoids hang thread deletion when main server exit (see _recv_all method)
-            self.request.settimeout(1)
+            self.request.settimeout(1.0)
             # init and update server info structure
             self.srv_info = ModbusServerInfo()
             (addr, port) = self.request.getpeername()
             self.srv_info.client_addr = addr
             self.srv_info.client_port = port
+            # modbus default functions maps
+            self._default_func = {READ_COILS: self._read_bits,
+                                  READ_DISCRETE_INPUTS: self._read_bits,
+                                  READ_HOLDING_REGISTERS: self._read_words,
+                                  READ_INPUT_REGISTERS: self._read_words,
+                                  WRITE_SINGLE_COIL: self._write_single_coil,
+                                  WRITE_SINGLE_REGISTER: self._write_single_register,
+                                  WRITE_MULTIPLE_COILS: self._write_multiple_coils,
+                                  WRITE_MULTIPLE_REGISTERS: self._write_multiple_registers}
 
         def handle(self):
             # try/except end current thread on ModbusServer._InternalError or socket.error
@@ -751,23 +788,11 @@ class ModbusServer(object):
                     # set modbus server info
                     self.srv_info.rx_mbap = rx_mbap
                     self.srv_info.rx_pdu = rx_pdu
-                    # modbus functions maps
-                    f_maps = {READ_COILS: self._read_bits,
-                              READ_DISCRETE_INPUTS: self._read_bits,
-                              READ_HOLDING_REGISTERS: self._read_words,
-                              READ_INPUT_REGISTERS: self._read_words,
-                              WRITE_SINGLE_COIL: self._write_single_coil,
-                              WRITE_SINGLE_REGISTER: self._write_single_register,
-                              WRITE_MULTIPLE_COILS: self._write_multiple_coils,
-                              WRITE_MULTIPLE_REGISTERS: self._write_multiple_registers}
-                    # call the ad-hoc function, if none exists, send an "illegal function" exception
+                    # pass the current PDU to request engine
                     try:
-                        func = f_maps[rx_pdu.func_code]
-                        if not callable(func):
-                            raise ValueError
-                        tx_pdu = func(rx_pdu=rx_pdu)
-                    except (ValueError, KeyError):
-                        tx_pdu = ModbusServer.PDU().build_except(rx_pdu.func_code, EXP_ILLEGAL_FUNCTION)
+                        tx_pdu = self._external_engine(rx_mbap, rx_pdu)
+                    except NotImplementedError:
+                        tx_pdu = self._default_engine(rx_mbap, rx_pdu)
                     # send the tx pdu with the last rx mbap (only length field change)
                     self._send_all(rx_mbap.raw_with_pdu(tx_pdu))
             except (ModbusServer._InternalError, socket.error):
@@ -775,7 +800,7 @@ class ModbusServer(object):
                 self.request.close()
 
     def __init__(self, host='localhost', port=MODBUS_PORT, no_block=False, ipv6=False,
-                 data_bank=None, data_hdl=None):
+                 data_bank=None, data_hdl=None, ext_engine=None):
         """Constructor
 
         Modbus server constructor.
@@ -792,31 +817,41 @@ class ModbusServer(object):
         :type data_bank: ModbusServerDataBank
         :param data_hdl: instance of custom data handler, if you don't want the default one
         :type data_hdl: ModbusServerDataHandler
+        :param ext_engine: external engine (can replace ModbusService._default_engine(in_mbap, in_pdu))
+        :type ext_engine: callable
         """
         # public
         self.host = host
         self.port = port
         self.no_block = no_block
         self.ipv6 = ipv6
-        # default data handler is ModbusServerDataHandler or a child of it
-        if data_hdl is None:
-            self.data_hdl = ModbusServerDataHandler(data_bank=data_bank)
-        elif isinstance(data_hdl, ModbusServerDataHandler):
-            self.data_hdl = data_hdl
-            if data_bank:
-                raise ValueError('when data_hdl is set, you must define data_bank in it')
+        self.ext_engine = ext_engine
+        self.data_hdl = None
+        self.data_bank = None
+        # if external engine is defined, ignore data_hdl and data_bank
+        if ext_engine:
+            if not callable(self.ext_engine):
+                raise ValueError('ext_engine must be callable')
         else:
-            raise ValueError('data_hdl is not a ModbusServerDataHandler (or child of it) instance')
-        # data bank shortcut
-        self.data_bank = self.data_hdl.data_bank
+            # default data handler is ModbusServerDataHandler or a child of it
+            if data_hdl is None:
+                self.data_hdl = ModbusServerDataHandler(data_bank=data_bank)
+            elif isinstance(data_hdl, ModbusServerDataHandler):
+                self.data_hdl = data_hdl
+                if data_bank:
+                    raise ValueError('when data_hdl is set, you must define data_bank in it')
+            else:
+                raise ValueError('data_hdl is not a ModbusServerDataHandler (or child of it) instance')
+            # data bank shortcut
+            self.data_bank = self.data_hdl.data_bank
         # private
         self._evt_running = Event()
         self._service = None
         self._serve_th = None
 
     def __repr__(self):
-        r_str = 'ModbusServer(host=\'%s\', port=%d, no_block=%s, ipv6=%s, data_bank=%s, data_hdl=%s)'
-        r_str %= (self.host, self.port, self.no_block, self.ipv6, self.data_bank, self.data_hdl)
+        r_str = 'ModbusServer(host=\'%s\', port=%d, no_block=%s, ipv6=%s, data_bank=%s, data_hdl=%s, ext_engine=%s)'
+        r_str %= (self.host, self.port, self.no_block, self.ipv6, self.data_bank, self.data_hdl, self.ext_engine)
         return r_str
 
     def start(self):
@@ -834,6 +869,7 @@ class ModbusServer(object):
             # pass some things shared with server threads (access via self.server in ModbusService.handle())
             self._service.evt_running = self._evt_running
             self._service.data_hdl = self.data_hdl
+            self._service.ext_engine = self.ext_engine
             # set socket options
             self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
