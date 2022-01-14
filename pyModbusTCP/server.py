@@ -542,7 +542,12 @@ class ModbusServer(object):
                     if not self.server_running:
                         raise ModbusServer._InternalError('main server is not running')
                     # recv all data or a chunk of it
-                    data += self.request.recv(size - len(data))
+                    data_chunk = self.request.recv(size - len(data))
+                    # check data chunk
+                    if data_chunk:
+                        data += data_chunk
+                    else:
+                        raise ModbusServer._InternalError('recv return null')
                 except socket.timeout:
                     # just redo main server run test and recv operations on timeout
                     pass
