@@ -8,17 +8,20 @@ pyModbusTCP |badge_tests| |badge_docs|
 ======================================
 
 A simple Modbus/TCP client library for Python.
+pyModbusTCP is pure Python code without any extension or external module dependency.
 
 Since version 0.1.0, a server is also available for test purpose only (don't use in project).
-
-pyModbusTCP is pure Python code without any extension or external module
-dependency.
 
 Tests
 -----
 
 The module is currently test on Python 3.5, 3.6, 3.7, 3.8, 3.9 and 3.10.
+For Linux, Mac OS and Windows system.
 
+Documentation
+-------------
+
+Documentation of the last release is available online at https://pymodbustcp.readthedocs.io/.
 
 Setup
 -----
@@ -29,7 +32,7 @@ PyPI, the easy way:
 
 .. code-block:: bash
 
-    # install the last available release
+    # install the last available release (stable)
     sudo pip install pyModbusTCP
 
 .. code-block:: bash
@@ -44,15 +47,6 @@ From GitHub:
     # install a specific version (here release v0.1.10) directly from github servers
     sudo pip install git+https://github.com/sourceperl/pyModbusTCP.git@v0.1.10
 
-GitHub clone:
-
-.. code-block:: bash
-
-    git clone https://github.com/sourceperl/pyModbusTCP
-    cd pyModbusTCP
-    git ckeckout v0.1.10
-    sudo python setup.py install
-
 Note on the use of versions:
 
 Over time, some things can change. So, it's a good practice that you always use a specific version of a package for
@@ -60,7 +54,8 @@ your project, instead of just relying on the default behavior. Without precision
 install the latest version available for a package, this may have some drawbacks. For example, in pyModbusTCP, the TCP
 automatic open mode will be active by default from version 0.2.0. It is not the case with previous versions and it just
 doesn't exist before the 0.0.12. This can lead to some strange behaviour of your application if you are not aware of
-the change.
+the change. Look at `CHANGES <https://github.com/sourceperl/pyModbusTCP/blob/master/CHANGES>`_ for details on versions
+available.
 
 Usage example
 -------------
@@ -110,11 +105,6 @@ Write value 44 and 55 to registers at modbus address 10 :
         print("write ok")
     else:
         print("write error")
-
-Documentation
--------------
-
-Documentation available online at http://pymodbustcp.readthedocs.io/.
 
 Know issue with older Python version on Windows
 -----------------------------------------------
