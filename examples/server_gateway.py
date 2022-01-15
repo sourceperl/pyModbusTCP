@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
 
 """
-Modbus/TCP gateway
-~~~~~~~~~~~~~~~~~~
+Modbus/TCP basic gateway
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+[pyModbusTCP server] -> [ModbusSerialWorker] -> [serial RTU devices]
 
 Run this as root to listen on TCP privileged ports (<= 1024).
 
-Open /dev/ttyUSBO at 115200 bauds and relay RTU messages to slave(s)
-from localhost:502 modbus TCP server (here end of frame delay is 30ms).
-$ sudo ./server_gateway.py --eof 0.03 -b 115200 /dev/ttyUSB0
+Open /dev/ttyUSB0 at 115200 bauds and relay it RTU messages to slave(s)
+$ sudo ./server_gateway.py --baudrate 115200 /dev/ttyUSB0
 """
 
 import argparse
+import queue
 import struct
 from threading import Thread, Event
 from queue import Queue
 from pyModbusTCP.server import ModbusServer
 from pyModbusTCP.utils import crc16
-from pyModbusTCP.constants import EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
+from pyModbusTCP.constants import EXP_GATEWAY_PATH_UNAVAILABLE, EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
 # need sudo pip install pyserial==3.4
 import serial
 
@@ -62,22 +64,23 @@ class ModbusRTUFrame:
         :param slave_ad: address of the slave
         :type slave_ad: int
         """
+        # [address] + PDU
         tmp_raw = struct.pack('B', slave_ad) + raw_pdu
+        # [address] + PDU + [CRC 16]
         tmp_raw += struct.pack('<H', crc16(tmp_raw))
         self.raw = tmp_raw
 
 
-class ModbusRTURequest:
-    """ Modbus request container for deal with ModbusSerialWorker. """
-
-    def __init__(self):
-        self.completed = Event()
-        self.tx_frame = ModbusRTUFrame()
-        self.rx_frame = ModbusRTUFrame()
-
-
 class ModbusSerialWorker(Thread):
     """ Main serial thread to manage I/O with RTU devices. """
+
+    class _SerialRequest:
+        """ Internal request container to deal with serial worker thread. """
+
+        def __init__(self):
+            self.completed = Event()
+            self.tx_frame = ModbusRTUFrame()
+            self.rx_frame = ModbusRTUFrame()
 
     def __init__(self, port, timeout=1.0, end_of_frame=0.05):
         super().__init__()
@@ -87,10 +90,12 @@ class ModbusSerialWorker(Thread):
         self.serial_port = port
         self.timeout = timeout
         self.end_of_frame = end_of_frame
-        self.requests_q = Queue(maxsize=100)
+        # internal request queue
+        # accept 5 simultaneous requests before overloaded exception is return
+        self.requests_q = Queue(maxsize=5)
 
     def run(self):
-        """ main requests processing loop. """
+        """Serial worker thread."""
         while True:
             # get next request from queue
             request = self.requests_q.get()
@@ -116,24 +121,27 @@ class ModbusSerialWorker(Thread):
             request.completed.set()
             self.requests_q.task_done()
 
-
-# some function
-def gw_engine(in_mbap, in_pdu):
-    """ deal with serial worker to process server input PDU """
-    # init a request with input PDU
-    request = ModbusRTURequest()
-    request.tx_frame.build(raw_pdu=in_pdu.raw, slave_ad=in_mbap.unit_id)
-    # add a request in the serial worker queue
-    serial_worker.requests_q.put(request, block=False)
-    # print(f'schedule request {request.tx_frame.raw}')
-    # wait result available
-    request.completed.wait()
-    # print(f'receive: {request.rx_frame.raw} is valid: {request.rx_frame.is_valid}')
-    if request.rx_frame.is_valid:
-        return ModbusServer.PDU(request.rx_frame.pdu)
-    else:
-        return ModbusServer.PDU().build_except(func_code=request.tx_frame.function_code,
-                                               exp_status=EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND)
+    def srv_engine_entry(self, mbap, pdu):
+        """Server engine entry point (pass request to serial worker thread)."""
+        # init a request with input PDU
+        request = ModbusSerialWorker._SerialRequest()
+        request.tx_frame.build(raw_pdu=pdu.raw, slave_ad=mbap.unit_id)
+        try:
+            # add a request in the serial worker queue, can raise queue.Full
+            self.requests_q.put(request, block=False)
+            # wait result
+            request.completed.wait()
+            # check receive frame status
+            if request.rx_frame.is_valid:
+                return ModbusServer.PDU(request.rx_frame.pdu)
+            # except status for slave failed to respond
+            exp_status = EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
+        except queue.Full:
+            # except status for overloaded gateway
+            exp_status = EXP_GATEWAY_PATH_UNAVAILABLE
+        # return modbus exception
+        func_code = request.tx_frame.function_code
+        return ModbusServer.PDU().build_except(func_code=func_code, exp_status=exp_status)
 
 
 if __name__ == '__main__':
@@ -152,5 +160,5 @@ if __name__ == '__main__':
     serial_worker = ModbusSerialWorker(serial_port, args.timeout, args.eof)
     serial_worker.start()
     # init and launch modbus server with custom engine
-    srv = ModbusServer(host=args.host, port=args.port, ext_engine=gw_engine)
+    srv = ModbusServer(host=args.host, port=args.port, ext_engine=serial_worker.srv_engine_entry)
     srv.start()
