@@ -564,7 +564,7 @@ class ModbusServer(object):
             else:
                 raise NotImplementedError
 
-        def _default_engine(self, in_mbap, in_pdu):
+        def _internal_engine(self, in_mbap, in_pdu):
             """Default PDU processing engine: call default modbus func.
 
             :type in_mbap: ModbusServer.MBAP
@@ -797,7 +797,7 @@ class ModbusServer(object):
                     try:
                         tx_pdu = self._external_engine(rx_mbap, rx_pdu)
                     except NotImplementedError:
-                        tx_pdu = self._default_engine(rx_mbap, rx_pdu)
+                        tx_pdu = self._internal_engine(rx_mbap, rx_pdu)
                     # send the tx pdu with the last rx mbap (only length field change)
                     self._send_all(rx_mbap.raw_with_pdu(tx_pdu))
             except (ModbusServer._InternalError, socket.error):

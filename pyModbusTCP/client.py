@@ -706,15 +706,18 @@ class ModbusClient(object):
         # dump frame
         self._debug_dump('Rx', rx_mbap + rx_pdu)
         # body decode
+        # check PDU length for global minimal frame (an except frame: func code + exp code)
+        if len(rx_pdu) < 2:
+            raise ModbusClient._NetworkError(MB_RECV_ERR, 'PDU length is too short')
         # extract function code
         rx_fc = rx_pdu[0]
         # check except status
         if rx_fc >= 0x80:
             exp_code = rx_pdu[1]
             raise ModbusClient._ModbusExcept(exp_code)
-        # check PDU len for valid frame (keep this after except checking)
+        # check PDU length for specific request set in min_len (keep this after except checking)
         if len(rx_pdu) < min_len:
-            raise ModbusClient._NetworkError(MB_RECV_ERR, 'PDU length is too short (min length = %d)' % min_len)
+            raise ModbusClient._NetworkError(MB_RECV_ERR, 'PDU length is too short for current request')
         # if no error, return PDU
         return rx_pdu
 

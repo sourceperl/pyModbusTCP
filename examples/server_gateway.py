@@ -156,9 +156,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # init serial port
     serial_port = serial.Serial(port=args.device, baudrate=args.baudrate)
-    # start main thread
+    # start serial worker thread
     serial_worker = ModbusSerialWorker(serial_port, args.timeout, args.eof)
     serial_worker.start()
-    # init and launch modbus server with custom engine
+    # start modbus server with custom engine
     srv = ModbusServer(host=args.host, port=args.port, ext_engine=serial_worker.srv_engine_entry)
     srv.start()
