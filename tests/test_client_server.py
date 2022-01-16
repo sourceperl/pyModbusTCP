@@ -163,10 +163,10 @@ class TestClientServer(unittest.TestCase):
         for func_code in range(0x80):
             if func_code not in SUPPORTED_FUNCTION_CODES:
                 # test with a min PDU length of 2 bytes (avoid short frame error)
-                self.assertEqual(self.client.custom_request(bytearray([func_code, 0x00])), None)
+                self.assertEqual(self.client.custom_request(bytes([func_code, 0x00])), None)
                 self.assertEqual(self.client.last_error, MB_EXCEPT_ERR)
                 self.assertEqual(self.client.last_except, EXP_ILLEGAL_FUNCTION)
-        # check a regulary request status: no error, no except
+        # check a regular request status: no error, no except
         self.assertEqual(self.client.read_coils(0), [False])
         self.assertEqual(self.client.last_error, MB_NO_ERR)
         self.assertEqual(self.client.last_except, EXP_NONE)

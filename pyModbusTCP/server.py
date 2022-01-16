@@ -5,7 +5,6 @@ from .constants import READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS,
     EXP_NONE, EXP_ILLEGAL_FUNCTION, EXP_DATA_ADDRESS, EXP_DATA_VALUE, \
     MODBUS_PORT
 from .utils import test_bit, set_bit
-from random import randint
 import socket
 from socketserver import BaseRequestHandler, ThreadingTCPServer
 import struct
@@ -45,22 +44,6 @@ class DataHandlerReturn:
         return self.exp_code == EXP_NONE
 
 
-class ModbusServerInfo:
-    """ Container class for server information """
-
-    def __init__(self):
-        self.client_addr = None
-        self.client_port = None
-        self.rx_mbap = None
-        self.rx_pdu = None
-
-    @property
-    def rx_frame_as_str(self):
-        mbap_str = ' '.join(['%02X' % c for c in self.rx_mbap.raw])
-        pdu_str = ' '.join(['%02X' % c for c in self.rx_pdu.raw])
-        return '[%s] %s' % (mbap_str, pdu_str)
-
-
 class ModbusServerDataBank:
     """ Data space class with thread safe access functions """
 
@@ -98,13 +81,12 @@ class ModbusServerDataBank:
         :param conf: Modbus server data bank configuration (optional)
         :type conf: ModbusServerDataBank.Conf
         """
-        # public
-        if conf is None:
-            self.conf = ModbusServerDataBank.Conf()
-        elif isinstance(conf, ModbusServerDataBank.Conf):
-            self.conf = conf
-        else:
+        # check conf
+        if conf and not isinstance(conf, ModbusServerDataBank.Conf):
             raise ValueError('conf arg is invalid')
+        # public
+        self.conf = conf or ModbusServerDataBank.Conf()
+        self.srv_info = ModbusServer.ServerInfo()
         # private
         self._coils_lock = Lock()
         self._coils = [self.conf.coils_default_value] * self.conf.coils_size
@@ -126,7 +108,7 @@ class ModbusServerDataBank:
         :param number: number of bits (optional)
         :type number: int
         :param srv_info: some server info (must be set by server only)
-        :type srv_info: ModbusServerInfo
+        :type srv_info: ModbusServer.ServerInfo
         :returns: list of bool or None if error
         :rtype: list or None
         """
@@ -168,7 +150,7 @@ class ModbusServerDataBank:
         if srv_info:
             # notify changes with on change method (after atomic update)
             for address, from_value, to_value in changes_list:
-                self.on_coils_change(address, from_value, to_value, srv_info=srv_info)
+                self.on_coils_change(address, from_value, to_value, srv_info)
         return True
 
     def get_discrete_inputs(self, address, number=1, srv_info=None):
@@ -355,19 +337,28 @@ class ModbusServerDataHandler:
         :param data_bank: a reference to custom DefaultDataBank
         :type data_bank: ModbusServerDataBank
         """
-        if data_bank is None:
-            self.data_bank = ModbusServerDataBank()
-        elif isinstance(data_bank, ModbusServerDataBank):
-            self.data_bank = data_bank
-        else:
+        # check data_bank type
+        if data_bank and not isinstance(data_bank, ModbusServerDataBank):
             raise ValueError('data_bank arg is invalid')
+        # public
+        self.data_bank = data_bank or ModbusServerDataBank()
 
     def __repr__(self):
         return 'ModbusServerDataHandler(data_bank=%s)' % self.data_bank
 
     def read_coils(self, address, count, srv_info):
+        """Call by server for reading in coils space
+
+        :param address: start address
+        :type address: int
+        :param count: number of coils
+        :type count: int
+        :param srv_info: some server info
+        :type srv_info: ModbusServer.ServerInfo
+        :rtype: DataHandlerReturn
+        """
         # read bits from DataBank
-        bits_l = self.data_bank.get_coils(address, count, srv_info=srv_info)
+        bits_l = self.data_bank.get_coils(address, count, srv_info)
         # return DataStatus to server
         if bits_l is not None:
             return DataHandlerReturn(exp_code=EXP_NONE, data=bits_l)
@@ -375,8 +366,18 @@ class ModbusServerDataHandler:
             return DataHandlerReturn(exp_code=EXP_DATA_ADDRESS)
 
     def write_coils(self, address, bits_l, srv_info):
+        """Call by server for writing in the coils space
+
+        :param address: start address
+        :type address: int
+        :param bits_l: list of boolean to write
+        :type bits_l: list
+        :param srv_info: some server info
+        :type srv_info: ModbusServer.ServerInfo
+        :rtype: DataHandlerReturn
+        """
         # write bits to DataBank
-        update_ok = self.data_bank.set_coils(address, bits_l, srv_info=srv_info)
+        update_ok = self.data_bank.set_coils(address, bits_l, srv_info)
         # return DataStatus to server
         if update_ok:
             return DataHandlerReturn(exp_code=EXP_NONE)
@@ -384,8 +385,18 @@ class ModbusServerDataHandler:
             return DataHandlerReturn(exp_code=EXP_DATA_ADDRESS)
 
     def read_d_inputs(self, address, count, srv_info):
+        """Call by server for reading in the discrete inputs space
+
+        :param address: start address
+        :type address: int
+        :param count: number of discrete inputs
+        :type count: int
+        :param srv_info: some server info
+        :type srv_info: ModbusServer.ServerInfo
+        :rtype: DataHandlerReturn
+        """
         # read bits from DataBank
-        bits_l = self.data_bank.get_discrete_inputs(address, count, srv_info=srv_info)
+        bits_l = self.data_bank.get_discrete_inputs(address, count, srv_info)
         # return DataStatus to server
         if bits_l is not None:
             return DataHandlerReturn(exp_code=EXP_NONE, data=bits_l)
@@ -393,8 +404,18 @@ class ModbusServerDataHandler:
             return DataHandlerReturn(exp_code=EXP_DATA_ADDRESS)
 
     def read_h_regs(self, address, count, srv_info):
+        """Call by server for reading in the holding registers space
+
+        :param address: start address
+        :type address: int
+        :param count: number of holding registers
+        :type count: int
+        :param srv_info: some server info
+        :type srv_info: ModbusServer.ServerInfo
+        :rtype: DataHandlerReturn
+        """
         # read words from DataBank
-        words_l = self.data_bank.get_holding_registers(address, count, srv_info=srv_info)
+        words_l = self.data_bank.get_holding_registers(address, count, srv_info)
         # return DataStatus to server
         if words_l is not None:
             return DataHandlerReturn(exp_code=EXP_NONE, data=words_l)
@@ -402,8 +423,18 @@ class ModbusServerDataHandler:
             return DataHandlerReturn(exp_code=EXP_DATA_ADDRESS)
 
     def write_h_regs(self, address, words_l, srv_info):
+        """Call by server for writing in the holding registers space
+
+        :param address: start address
+        :type address: int
+        :param words_l: list of word value to write
+        :type words_l: list
+        :param srv_info: some server info
+        :type srv_info: ModbusServer.ServerInfo
+        :rtype: DataHandlerReturn
+        """
         # write words to DataBank
-        update_ok = self.data_bank.set_holding_registers(address, words_l, srv_info=srv_info)
+        update_ok = self.data_bank.set_holding_registers(address, words_l, srv_info)
         # return DataStatus to server
         if update_ok:
             return DataHandlerReturn(exp_code=EXP_NONE)
@@ -411,8 +442,18 @@ class ModbusServerDataHandler:
             return DataHandlerReturn(exp_code=EXP_DATA_ADDRESS)
 
     def read_i_regs(self, address, count, srv_info):
+        """Call by server for reading in the input registers space
+
+        :param address: start address
+        :type address: int
+        :param count: number of input registers
+        :type count: int
+        :param srv_info: some server info
+        :type srv_info: ModbusServer.ServerInfo
+        :rtype: DataHandlerReturn
+        """
         # read words from DataBank
-        words_l = self.data_bank.get_input_registers(address, count, srv_info=srv_info)
+        words_l = self.data_bank.get_input_registers(address, count, srv_info)
         # return DataStatus to server
         if words_l is not None:
             return DataHandlerReturn(exp_code=EXP_NONE, data=words_l)
@@ -420,18 +461,56 @@ class ModbusServerDataHandler:
             return DataHandlerReturn(exp_code=EXP_DATA_ADDRESS)
 
 
-class ModbusServer(object):
+class ModbusServer:
     """ Modbus TCP server """
 
     class _InternalError(Exception):
         pass
+
+    class ClientInfo:
+        """ Container class for client information """
+
+        def __init__(self):
+            self.address = ''
+            self.port = 0
+
+    class ServerInfo:
+        """ Container class for server information """
+
+        def __init__(self):
+            self.client = ModbusServer.ClientInfo()
+            self.recv_frame = ModbusServer.ModbusFrame()
+
+    class SessionData:
+        """ Container class for server session data. """
+        def __init__(self):
+            self.client = ModbusServer.ClientInfo()
+            self.request = ModbusServer.ModbusFrame()
+            self.response = ModbusServer.ModbusFrame()
+
+        @property
+        def srv_info(self):
+            info = ModbusServer.ServerInfo()
+            info.client = self.client
+            info.recv_frame = self.request
+            return info
+
+        def new_request(self):
+            self.request = ModbusServer.ModbusFrame()
+            self.response = ModbusServer.ModbusFrame()
+
+    class ModbusFrame:
+        def __init__(self):
+            """ Modbus Frame container. """
+            self.mbap = ModbusServer.MBAP()
+            self.pdu = ModbusServer.PDU()
 
     class MBAP:
         """ MBAP (Modbus Application Protocol) container class. """
 
         def __init__(self, raw=None):
             # public
-            self.transaction_id = randint(0, 0xffff)
+            self.transaction_id = 0
             self.protocol_id = 0
             self.length = 0
             self.unit_id = 1
@@ -553,253 +632,30 @@ class ModbusServer(object):
                     pass
             return data
 
-        def _external_engine(self, in_mbap, in_pdu):
-            """Call external PDU processing engine, if it is defined.
-
-            :type in_mbap: ModbusServer.MBAP
-            :type in_pdu: ModbusServer.PDU
-            """
-            if callable(self.server.ext_engine):
-                return self.server.ext_engine(in_mbap, in_pdu)
-            else:
-                raise NotImplementedError
-
-        def _internal_engine(self, in_mbap, in_pdu):
-            """Default PDU processing engine: call default modbus func.
-
-            :type in_mbap: ModbusServer.MBAP
-            :type in_pdu: ModbusServer.PDU
-            """
-            try:
-                # call the ad-hoc function, if none exists, send an "illegal function" exception
-                func = self._default_func[in_pdu.func_code]
-                if not callable(func):
-                    raise ValueError
-                return func(rx_pdu=in_pdu)
-            except (ValueError, KeyError):
-                return ModbusServer.PDU().build_except(in_pdu.func_code, EXP_ILLEGAL_FUNCTION)
-
-        def _read_bits(self, rx_pdu):
-            """
-            Functions Read Coils (0x01) or Read Discrete Inputs (0x02).
-
-            :param rx_pdu: PDU of input frame
-            :type rx_pdu: ModbusServer.PDU
-            :rtype: ModbusServer.PDU
-            """
-            # init PDU() for return value
-            ret_pdu = ModbusServer.PDU()
-            # decode pdu
-            (start_addr, quantity_bits) = rx_pdu.unpack('>HH', from_byte=1, to_byte=5)
-            # check quantity of requested bits
-            if 0x0001 <= quantity_bits <= 0x07D0:
-                # data handler read request: for coils or discrete inputs space
-                if rx_pdu.func_code == READ_COILS:
-                    ret_hdl = self.server.data_hdl.read_coils(start_addr, quantity_bits, srv_info=self.srv_info)
-                else:
-                    ret_hdl = self.server.data_hdl.read_d_inputs(start_addr, quantity_bits, srv_info=self.srv_info)
-                # format regular or except response
-                if ret_hdl.ok:
-                    # allocate bytes list
-                    b_size = (quantity_bits + 7) // 8
-                    bytes_l = [0] * b_size
-                    # populate bytes list with data bank bits
-                    for i, item in enumerate(ret_hdl.data):
-                        if item:
-                            bytes_l[i // 8] = set_bit(bytes_l[i // 8], i % 8)
-                    # build pdu
-                    ret_pdu.add_pack('BB', rx_pdu.func_code, len(bytes_l))
-                    ret_pdu.add_pack('%dB' % len(bytes_l), *bytes_l)
-                else:
-                    ret_pdu.build_except(rx_pdu.func_code, ret_hdl.exp_code)
-            else:
-                ret_pdu.build_except(rx_pdu.func_code, EXP_DATA_VALUE)
-            return ret_pdu
-
-        def _read_words(self, rx_pdu):
-            """
-            Functions Read Holding Registers (0x03) or Read Input Registers (0x04).
-
-            :param rx_pdu: PDU of input frame
-            :type rx_pdu: ModbusServer.PDU
-            :rtype: ModbusServer.PDU
-            """
-            # init PDU() for return value
-            ret_pdu = ModbusServer.PDU()
-            # decode pdu
-            (start_addr, quantity_regs) = rx_pdu.unpack('>HH', from_byte=1, to_byte=5)
-            # check quantity of requested words
-            if 0x0001 <= quantity_regs <= 0x007D:
-                # data handler read request: for holding or input registers space
-                if rx_pdu.func_code == READ_HOLDING_REGISTERS:
-                    ret_hdl = self.server.data_hdl.read_h_regs(start_addr, quantity_regs, srv_info=self.srv_info)
-                else:
-                    ret_hdl = self.server.data_hdl.read_i_regs(start_addr, quantity_regs, srv_info=self.srv_info)
-                # format regular or except response
-                if ret_hdl.ok:
-                    # build pdu
-                    ret_pdu.add_pack('BB', rx_pdu.func_code, quantity_regs * 2)
-                    # add_pack requested words
-                    ret_pdu.add_pack('>%dH' % len(ret_hdl.data), *ret_hdl.data)
-                else:
-                    ret_pdu.build_except(rx_pdu.func_code, ret_hdl.exp_code)
-            else:
-                ret_pdu.build_except(rx_pdu.func_code, EXP_DATA_VALUE)
-            return ret_pdu
-
-        def _write_single_coil(self, rx_pdu):
-            """
-            Function Write Single Coil (0x05).
-
-            :param rx_pdu: PDU of input frame
-            :type rx_pdu: ModbusServer.PDU
-            :rtype: ModbusServer.PDU
-            """
-            # init PDU() for return value
-            ret_pdu = ModbusServer.PDU()
-            # decode pdu
-            (coil_addr, coil_value) = rx_pdu.unpack('>HH', from_byte=1, to_byte=5)
-            # format coil raw value to bool
-            coil_as_bool = bool(coil_value == 0xFF00)
-            # data handler update request
-            ret_hdl = self.server.data_hdl.write_coils(coil_addr, [coil_as_bool], srv_info=self.srv_info)
-            # format regular or except response
-            if ret_hdl.ok:
-                ret_pdu.add_pack('>BHH', rx_pdu.func_code, coil_addr, coil_value)
-            else:
-                ret_pdu.build_except(rx_pdu.func_code, ret_hdl.exp_code)
-            return ret_pdu
-
-        def _write_single_register(self, rx_pdu):
-            """
-            Functions Write Single Register (0x06).
-
-            :param rx_pdu: PDU of input frame
-            :type rx_pdu: ModbusServer.PDU
-            :rtype: ModbusServer.PDU
-            """
-            # init PDU() for return value
-            ret_pdu = ModbusServer.PDU()
-            # decode pdu
-            (reg_addr, reg_value) = rx_pdu.unpack('>HH', from_byte=1, to_byte=5)
-            # data handler update request
-            ret_hdl = self.server.data_hdl.write_h_regs(reg_addr, [reg_value], srv_info=self.srv_info)
-            # format regular or except response
-            if ret_hdl.ok:
-                ret_pdu.add_pack('>BHH', rx_pdu.func_code, reg_addr, reg_value)
-            else:
-                ret_pdu.build_except(rx_pdu.func_code, ret_hdl.exp_code)
-            return ret_pdu
-
-        def _write_multiple_coils(self, rx_pdu):
-            """
-            Function Write Multiple Coils (0x0F).
-
-            :param rx_pdu: PDU of input frame
-            :type rx_pdu: ModbusServer.PDU
-            :rtype: ModbusServer.PDU
-            """
-            # init PDU() for return value
-            ret_pdu = ModbusServer.PDU()
-            # decode pdu
-            (start_addr, quantity_bits, byte_count) = rx_pdu.unpack('>HHB', from_byte=1, to_byte=6)
-            # ok flags: some tests on pdu fields
-            qty_bits_ok = 0x0001 <= quantity_bits <= 0x07B0
-            b_count_ok = byte_count >= (quantity_bits + 7) // 8
-            pdu_len_ok = len(rx_pdu.raw[6:]) >= byte_count
-            # test ok flags
-            if qty_bits_ok and b_count_ok and pdu_len_ok:
-                # allocate bits list
-                bits_l = [False] * quantity_bits
-                # populate bits list with bits from rx frame
-                for i, _ in enumerate(bits_l):
-                    bit_val = rx_pdu.raw[i // 8 + 6]
-                    bits_l[i] = test_bit(bit_val, i % 8)
-                # data handler update request
-                ret_hdl = self.server.data_hdl.write_coils(start_addr, bits_l, srv_info=self.srv_info)
-                # format regular or except response
-                if ret_hdl.ok:
-                    ret_pdu.add_pack('>BHH', rx_pdu.func_code, start_addr, quantity_bits)
-                else:
-                    ret_pdu.build_except(rx_pdu.func_code, ret_hdl.exp_code)
-            else:
-                ret_pdu.build_except(rx_pdu.func_code, EXP_DATA_VALUE)
-            return ret_pdu
-
-        def _write_multiple_registers(self, rx_pdu):
-            """
-            Function Write Multiple Registers (0x10).
-
-            :param rx_pdu: PDU of input frame
-            :type rx_pdu: ModbusServer.PDU
-            :rtype: ModbusServer.PDU
-            """
-            # init PDU() for return value
-            ret_pdu = ModbusServer.PDU()
-            # decode pdu
-            (start_addr, quantity_regs, byte_count) = rx_pdu.unpack('>HHB', from_byte=1, to_byte=6)
-            # ok flags: some tests on pdu fields
-            qty_regs_ok = 0x0001 <= quantity_regs <= 0x007B
-            b_count_ok = byte_count == quantity_regs * 2
-            pdu_len_ok = len(rx_pdu.raw[6:]) >= byte_count
-            # test ok flags
-            if qty_regs_ok and b_count_ok and pdu_len_ok:
-                # allocate words list
-                regs_l = [0] * quantity_regs
-                # populate words list with words from rx frame
-                for i, _ in enumerate(regs_l):
-                    offset = i * 2 + 6
-                    regs_l[i] = rx_pdu.unpack('>H', from_byte=offset, to_byte=offset + 2)[0]
-                # data handler update request
-                ret_hdl = self.server.data_hdl.write_h_regs(start_addr, regs_l, srv_info=self.srv_info)
-                # format regular or except response
-                if ret_hdl.ok:
-                    ret_pdu.add_pack('>BHH', rx_pdu.func_code, start_addr, quantity_regs)
-                else:
-                    ret_pdu.build_except(rx_pdu.func_code, ret_hdl.exp_code)
-            else:
-                ret_pdu.build_except(rx_pdu.func_code, EXP_DATA_VALUE)
-            return ret_pdu
-
         def setup(self):
             # set a socket timeout of 1s on blocking operations (like send/recv)
             # this avoids hang thread deletion when main server exit (see _recv_all method)
             self.request.settimeout(1.0)
-            # init and update server info structure
-            self.srv_info = ModbusServerInfo()
-            (addr, port) = self.request.getpeername()
-            self.srv_info.client_addr = addr
-            self.srv_info.client_port = port
-            # modbus default functions maps
-            self._default_func = {READ_COILS: self._read_bits,
-                                  READ_DISCRETE_INPUTS: self._read_bits,
-                                  READ_HOLDING_REGISTERS: self._read_words,
-                                  READ_INPUT_REGISTERS: self._read_words,
-                                  WRITE_SINGLE_COIL: self._write_single_coil,
-                                  WRITE_SINGLE_REGISTER: self._write_single_register,
-                                  WRITE_MULTIPLE_COILS: self._write_multiple_coils,
-                                  WRITE_MULTIPLE_REGISTERS: self._write_multiple_registers}
 
         def handle(self):
             # try/except end current thread on ModbusServer._InternalError or socket.error
             # this also close the current TCP session associated with it
+            # init and update server info structure
+            session_data = ModbusServer.SessionData()
+            (session_data.client.address, session_data.client.port) = self.request.getpeername()
             try:
                 # main processing loop
                 while True:
+                    # init session data for new request
+                    session_data.new_request()
                     # receive mbap from client
-                    rx_mbap = ModbusServer.MBAP(raw=self._recv_all(7))
+                    session_data.request.mbap.raw = self._recv_all(7)
                     # receive pdu from client
-                    rx_pdu = ModbusServer.PDU(raw=self._recv_all(rx_mbap.length - 1))
-                    # set modbus server info
-                    self.srv_info.rx_mbap = rx_mbap
-                    self.srv_info.rx_pdu = rx_pdu
+                    session_data.request.pdu.raw = self._recv_all(session_data.request.mbap.length - 1)
                     # pass the current PDU to request engine
-                    try:
-                        tx_pdu = self._external_engine(rx_mbap, rx_pdu)
-                    except NotImplementedError:
-                        tx_pdu = self._internal_engine(rx_mbap, rx_pdu)
+                    self.server.engine(session_data)
                     # send the tx pdu with the last rx mbap (only length field change)
-                    self._send_all(rx_mbap.raw_with_pdu(tx_pdu))
+                    self._send_all(session_data.request.mbap.raw_with_pdu(session_data.response.pdu))
             except (ModbusServer._InternalError, socket.error):
                 # on main loop except: exit from it and cleanly close the current socket
                 self.request.close()
@@ -853,11 +709,229 @@ class ModbusServer(object):
         self._evt_running = Event()
         self._service = None
         self._serve_th = None
+        # modbus default functions maps
+        self._default_func = {READ_COILS: self._read_bits,
+                              READ_DISCRETE_INPUTS: self._read_bits,
+                              READ_HOLDING_REGISTERS: self._read_words,
+                              READ_INPUT_REGISTERS: self._read_words,
+                              WRITE_SINGLE_COIL: self._write_single_coil,
+                              WRITE_SINGLE_REGISTER: self._write_single_register,
+                              WRITE_MULTIPLE_COILS: self._write_multiple_coils,
+                              WRITE_MULTIPLE_REGISTERS: self._write_multiple_registers}
 
     def __repr__(self):
         r_str = 'ModbusServer(host=\'%s\', port=%d, no_block=%s, ipv6=%s, data_bank=%s, data_hdl=%s, ext_engine=%s)'
         r_str %= (self.host, self.port, self.no_block, self.ipv6, self.data_bank, self.data_hdl, self.ext_engine)
         return r_str
+
+    def _engine(self, session_data):
+        # pass the current PDU to request engine
+        try:
+            self._external_engine(session_data)
+        except NotImplementedError:
+            self._internal_engine(session_data)
+
+    def _external_engine(self, session_data):
+        """Call external PDU processing engine, if it is defined.
+
+        :type session_data: ModbusServer.SessionData
+        """
+        if callable(self.ext_engine):
+            self.ext_engine(session_data)
+        else:
+            raise NotImplementedError
+
+    def _internal_engine(self, session_data):
+        """Default PDU processing engine: call default modbus func.
+
+        :type session_data: ModbusServer.SessionData
+        """
+        try:
+            # call the ad-hoc function, if none exists, send an "illegal function" exception
+            func = self._default_func[session_data.request.pdu.func_code]
+            # check function found is callable
+            if not callable(func):
+                raise ValueError
+            # call ad-hoc func
+            func(session_data)
+        except (ValueError, KeyError):
+            session_data.response.pdu.build_except(session_data.request.pdu.func_code, EXP_ILLEGAL_FUNCTION)
+
+    def _read_bits(self, session_data):
+        """
+        Functions Read Coils (0x01) or Read Discrete Inputs (0x02).
+
+        :param session_data: server engine data
+        :type session_data: ModbusServer.SessionData
+        """
+        # pdu alias
+        recv_pdu = session_data.request.pdu
+        send_pdu = session_data.response.pdu
+        # decode pdu
+        (start_address, quantity_bits) = recv_pdu.unpack('>HH', from_byte=1, to_byte=5)
+        # check quantity of requested bits
+        if 0x0001 <= quantity_bits <= 0x07D0:
+            # data handler read request: for coils or discrete inputs space
+            if recv_pdu.func_code == READ_COILS:
+                ret_hdl = self.data_hdl.read_coils(start_address, quantity_bits, session_data.srv_info)
+            else:
+                ret_hdl = self.data_hdl.read_d_inputs(start_address, quantity_bits, session_data.srv_info)
+            # format regular or except response
+            if ret_hdl.ok:
+                # allocate bytes list
+                b_size = (quantity_bits + 7) // 8
+                bytes_l = [0] * b_size
+                # populate bytes list with data bank bits
+                for i, item in enumerate(ret_hdl.data):
+                    if item:
+                        bytes_l[i // 8] = set_bit(bytes_l[i // 8], i % 8)
+                # build pdu
+                send_pdu.add_pack('BB', recv_pdu.func_code, len(bytes_l))
+                send_pdu.add_pack('%dB' % len(bytes_l), *bytes_l)
+            else:
+                send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
+        else:
+            send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
+
+    def _read_words(self, session_data):
+        """
+        Functions Read Holding Registers (0x03) or Read Input Registers (0x04).
+
+        :param session_data: server engine data
+        :type session_data: ModbusServer.SessionData
+        """
+        # pdu alias
+        recv_pdu = session_data.request.pdu
+        send_pdu = session_data.response.pdu
+        # decode pdu
+        (start_addr, quantity_regs) = recv_pdu.unpack('>HH', from_byte=1, to_byte=5)
+        # check quantity of requested words
+        if 0x0001 <= quantity_regs <= 0x007D:
+            # data handler read request: for holding or input registers space
+            if recv_pdu.func_code == READ_HOLDING_REGISTERS:
+                ret_hdl = self.data_hdl.read_h_regs(start_addr, quantity_regs, session_data.srv_info)
+            else:
+                ret_hdl = self.data_hdl.read_i_regs(start_addr, quantity_regs, session_data.srv_info)
+            # format regular or except response
+            if ret_hdl.ok:
+                # build pdu
+                send_pdu.add_pack('BB', recv_pdu.func_code, quantity_regs * 2)
+                # add_pack requested words
+                send_pdu.add_pack('>%dH' % len(ret_hdl.data), *ret_hdl.data)
+            else:
+                send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
+        else:
+            send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
+
+    def _write_single_coil(self, session_data):
+        """
+        Function Write Single Coil (0x05).
+
+        :param session_data: server engine data
+        :type session_data: ModbusServer.SessionData
+        """
+        # pdu alias
+        recv_pdu = session_data.request.pdu
+        send_pdu = session_data.response.pdu
+        # decode pdu
+        (coil_addr, coil_value) = recv_pdu.unpack('>HH', from_byte=1, to_byte=5)
+        # format coil raw value to bool
+        coil_as_bool = bool(coil_value == 0xFF00)
+        # data handler update request
+        ret_hdl = self.data_hdl.write_coils(coil_addr, [coil_as_bool], session_data.srv_info)
+        # format regular or except response
+        if ret_hdl.ok:
+            send_pdu.add_pack('>BHH', recv_pdu.func_code, coil_addr, coil_value)
+        else:
+            send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
+
+    def _write_single_register(self, session_data):
+        """
+        Functions Write Single Register (0x06).
+
+        :param session_data: server engine data
+        :type session_data: ModbusServer.SessionData
+        """
+        # pdu alias
+        recv_pdu = session_data.request.pdu
+        send_pdu = session_data.response.pdu
+        # decode pdu
+        (reg_addr, reg_value) = recv_pdu.unpack('>HH', from_byte=1, to_byte=5)
+        # data handler update request
+        ret_hdl = self.data_hdl.write_h_regs(reg_addr, [reg_value], session_data.srv_info)
+        # format regular or except response
+        if ret_hdl.ok:
+            send_pdu.add_pack('>BHH', recv_pdu.func_code, reg_addr, reg_value)
+        else:
+            send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
+
+    def _write_multiple_coils(self, session_data):
+        """
+        Function Write Multiple Coils (0x0F).
+
+        :param session_data: server engine data
+        :type session_data: ModbusServer.SessionData
+        """
+        # pdu alias
+        recv_pdu = session_data.request.pdu
+        send_pdu = session_data.response.pdu
+        # decode pdu
+        (start_addr, quantity_bits, byte_count) = recv_pdu.unpack('>HHB', from_byte=1, to_byte=6)
+        # ok flags: some tests on pdu fields
+        qty_bits_ok = 0x0001 <= quantity_bits <= 0x07B0
+        b_count_ok = byte_count >= (quantity_bits + 7) // 8
+        pdu_len_ok = len(recv_pdu.raw[6:]) >= byte_count
+        # test ok flags
+        if qty_bits_ok and b_count_ok and pdu_len_ok:
+            # allocate bits list
+            bits_l = [False] * quantity_bits
+            # populate bits list with bits from rx frame
+            for i, _ in enumerate(bits_l):
+                bit_val = recv_pdu.raw[i // 8 + 6]
+                bits_l[i] = test_bit(bit_val, i % 8)
+            # data handler update request
+            ret_hdl = self.data_hdl.write_coils(start_addr, bits_l, session_data.srv_info)
+            # format regular or except response
+            if ret_hdl.ok:
+                send_pdu.add_pack('>BHH', recv_pdu.func_code, start_addr, quantity_bits)
+            else:
+                send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
+        else:
+            send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
+
+    def _write_multiple_registers(self, session_data):
+        """
+        Function Write Multiple Registers (0x10).
+
+        :param session_data: server engine data
+        :type session_data: ModbusServer.SessionData
+        """
+        # pdu alias
+        recv_pdu = session_data.request.pdu
+        send_pdu = session_data.response.pdu
+        # decode pdu
+        (start_addr, quantity_regs, byte_count) = recv_pdu.unpack('>HHB', from_byte=1, to_byte=6)
+        # ok flags: some tests on pdu fields
+        qty_regs_ok = 0x0001 <= quantity_regs <= 0x007B
+        b_count_ok = byte_count == quantity_regs * 2
+        pdu_len_ok = len(recv_pdu.raw[6:]) >= byte_count
+        # test ok flags
+        if qty_regs_ok and b_count_ok and pdu_len_ok:
+            # allocate words list
+            regs_l = [0] * quantity_regs
+            # populate words list with words from rx frame
+            for i, _ in enumerate(regs_l):
+                offset = i * 2 + 6
+                regs_l[i] = recv_pdu.unpack('>H', from_byte=offset, to_byte=offset + 2)[0]
+            # data handler update request
+            ret_hdl = self.data_hdl.write_h_regs(start_addr, regs_l, session_data.srv_info)
+            # format regular or except response
+            if ret_hdl.ok:
+                send_pdu.add_pack('>BHH', recv_pdu.func_code, start_addr, quantity_regs)
+            else:
+                send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
+        else:
+            send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
 
     def start(self):
         """Start the server.
@@ -873,8 +947,7 @@ class ModbusServer(object):
             self._service = ThreadingTCPServer((self.host, self.port), self.ModbusService, bind_and_activate=False)
             # pass some things shared with server threads (access via self.server in ModbusService.handle())
             self._service.evt_running = self._evt_running
-            self._service.data_hdl = self.data_hdl
-            self._service.ext_engine = self.ext_engine
+            self._service.engine = self._engine
             # set socket options
             self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)

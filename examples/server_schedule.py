@@ -4,10 +4,12 @@
 Modbus/TCP server with start/stop schedule
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Run this as root to listen on TCP priviliged ports (<= 1024).
+Run this as root to listen on TCP privileged ports (<= 1024).
 
-Default Modbus/TCP port is 502, so we prefix call with sudo (avoid Errno 13).
-$ sudo ./server_shedule.py --host 0.0.0.0
+Default Modbus/TCP port is 502, so we prefix call with sudo. With argument
+"--host 0.0.0.0", server listen on all IPv4 of the host. Instead of just
+open tcp/502 on local interface.
+$ sudo ./server_schedule.py --host 0.0.0.0
 """
 
 import argparse

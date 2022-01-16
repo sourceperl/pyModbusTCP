@@ -8,7 +8,7 @@ Modbus/TCP basic gateway
 
 Run this as root to listen on TCP privileged ports (<= 1024).
 
-Open /dev/ttyUSB0 at 115200 bauds and relay it RTU messages to slave(s)
+Open /dev/ttyUSB0 at 115200 bauds and relay it RTU messages to slave(s).
 $ sudo ./server_gateway.py --baudrate 115200 /dev/ttyUSB0
 """
 
@@ -74,13 +74,13 @@ class ModbusRTUFrame:
 class ModbusSerialWorker(Thread):
     """ Main serial thread to manage I/O with RTU devices. """
 
-    class _SerialRequest:
+    class _RtuQuery:
         """ Internal request container to deal with serial worker thread. """
 
         def __init__(self):
             self.completed = Event()
-            self.tx_frame = ModbusRTUFrame()
-            self.rx_frame = ModbusRTUFrame()
+            self.request = ModbusRTUFrame()
+            self.response = ModbusRTUFrame()
 
     def __init__(self, port, timeout=1.0, end_of_frame=0.05):
         super().__init__()
@@ -92,16 +92,16 @@ class ModbusSerialWorker(Thread):
         self.end_of_frame = end_of_frame
         # internal request queue
         # accept 5 simultaneous requests before overloaded exception is return
-        self.requests_q = Queue(maxsize=5)
+        self.rtu_queries_q = Queue(maxsize=5)
 
     def run(self):
         """Serial worker thread."""
         while True:
-            # get next request from queue
-            request = self.requests_q.get()
+            # get next exchange from queue
+            rtu_query = self.rtu_queries_q.get()
             # send to serial
             self.serial_port.reset_input_buffer()
-            self.serial_port.write(request.tx_frame.raw)
+            self.serial_port.write(rtu_query.request.raw)
             # receive from serial
             # wait for first byte of data until timeout delay
             self.serial_port.timeout = self.timeout
@@ -116,32 +116,38 @@ class ModbusSerialWorker(Thread):
                         break
                     else:
                         rx_raw += rx_chunk
-            request.rx_frame.raw = rx_raw
+            rtu_query.response.raw = rx_raw
             # mark all as done
-            request.completed.set()
-            self.requests_q.task_done()
+            rtu_query.completed.set()
+            self.rtu_queries_q.task_done()
 
-    def srv_engine_entry(self, mbap, pdu):
-        """Server engine entry point (pass request to serial worker thread)."""
-        # init a request with input PDU
-        request = ModbusSerialWorker._SerialRequest()
-        request.tx_frame.build(raw_pdu=pdu.raw, slave_ad=mbap.unit_id)
+    def srv_engine_entry(self, session_data):
+        """Server engine entry point (pass request to serial worker thread).
+
+        :param session_data: server session data
+        :type session_data: ModbusServer.SessionData
+        """
+        # init a serial exchange from session data
+        rtu_query = ModbusSerialWorker._RtuQuery()
+        rtu_query.request.build(raw_pdu=session_data.request.pdu.raw,
+                                slave_ad=session_data.request.mbap.unit_id)
         try:
             # add a request in the serial worker queue, can raise queue.Full
-            self.requests_q.put(request, block=False)
+            self.rtu_queries_q.put(rtu_query, block=False)
             # wait result
-            request.completed.wait()
+            rtu_query.completed.wait()
             # check receive frame status
-            if request.rx_frame.is_valid:
-                return ModbusServer.PDU(request.rx_frame.pdu)
+            if rtu_query.response.is_valid:
+                session_data.response.pdu.raw = rtu_query.response.pdu
+                return
             # except status for slave failed to respond
             exp_status = EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
         except queue.Full:
             # except status for overloaded gateway
             exp_status = EXP_GATEWAY_PATH_UNAVAILABLE
         # return modbus exception
-        func_code = request.tx_frame.function_code
-        return ModbusServer.PDU().build_except(func_code=func_code, exp_status=exp_status)
+        func_code = rtu_query.request.function_code
+        session_data.response.pdu.build_except(func_code=func_code, exp_status=exp_status)
 
 
 if __name__ == '__main__':
