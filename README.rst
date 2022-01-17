@@ -16,6 +16,7 @@ Tests
 -----
 
 The module is currently test on Python 3.5, 3.6, 3.7, 3.8, 3.9 and 3.10.
+
 For Linux, Mac OS and Windows system.
 
 Documentation
@@ -91,6 +92,7 @@ Read 2x 16 bits registers at modbus address 0 :
 .. code-block:: python
 
     regs = c.read_holding_registers(0, 2)
+
     if regs:
         print(regs)
     else:
