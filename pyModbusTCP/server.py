@@ -13,92 +13,90 @@ from warnings import warn
 
 
 class DataBank:
-    """ This is historical data class provide for warn about DataBank change """
-
-    WARN_MSG = 'This class is deprecated, use ModbusServerDataBank instance instead.'
+    """ Data space class with thread safe access functions """
 
     @classmethod
     def get_bits(cls, *_args, **_kwargs):
-        warn(cls.WARN_MSG, DeprecationWarning, stacklevel=2)
+        warn_msg = 'This class method is now deprecated, use DataBank instance method instead.'
+        warn(warn_msg, DeprecationWarning, stacklevel=2)
 
     @classmethod
     def set_bits(cls, *_args, **_kwargs):
-        warn(cls.WARN_MSG, DeprecationWarning, stacklevel=2)
+        warn_msg = 'This class method is now deprecated, use DataBank instance method instead.'
+        warn(warn_msg, DeprecationWarning, stacklevel=2)
 
     @classmethod
     def get_words(cls, *_args, **_kwargs):
-        warn(cls.WARN_MSG, DeprecationWarning, stacklevel=2)
+        warn_msg = 'This class method is now deprecated, use DataBank instance method instead.'
+        warn(warn_msg, DeprecationWarning, stacklevel=2)
 
     @classmethod
     def set_words(cls, *_args, **_kwargs):
-        warn(cls.WARN_MSG, DeprecationWarning, stacklevel=2)
+        warn_msg = 'This class method is now deprecated, use DataBank instance method instead.'
+        warn(warn_msg, DeprecationWarning, stacklevel=2)
 
-
-class DataHandlerReturn:
-    def __init__(self, exp_code, data=None):
-        self.exp_code = exp_code
-        self.data = data
-
-    @property
-    def ok(self):
-        return self.exp_code == EXP_NONE
-
-
-class ModbusServerDataBank:
-    """ Data space class with thread safe access functions """
-
-    class Conf:
-        def __init__(self, coils_size=0x10000, coils_default_value=False,
-                     d_inputs_size=0x10000, d_inputs_default_value=False,
-                     h_regs_size=0x10000, h_regs_default_value=0,
-                     i_regs_size=0x10000, i_regs_default_value=0,
-                     virtual_mode=False):
-            # public
-            self.coils_size = int(coils_size)
-            self.coils_default_value = bool(coils_default_value)
-            self.d_inputs_size = int(d_inputs_size)
-            self.d_inputs_default_value = bool(d_inputs_default_value)
-            self.h_regs_size = int(h_regs_size)
-            self.h_regs_default_value = int(h_regs_default_value)
-            self.i_regs_size = int(i_regs_size)
-            self.i_regs_default_value = int(i_regs_default_value)
-            self.virtual_mode = virtual_mode
-            # specific modes (override some values)
-            if self.virtual_mode:
-                self.coils_size = 0
-                self.d_inputs_size = 0
-                self.h_regs_size = 0
-                self.i_regs_size = 0
-
-        def __repr__(self):
-            return 'ModbusServerDataBank.Conf()'
-
-    def __init__(self, conf=None):
+    def __init__(self, coils_size=0x10000, coils_default_value=False,
+                 d_inputs_size=0x10000, d_inputs_default_value=False,
+                 h_regs_size=0x10000, h_regs_default_value=0,
+                 i_regs_size=0x10000, i_regs_default_value=0,
+                 virtual_mode=False):
         """Constructor
 
         Modbus server data bank constructor.
 
-        :param conf: Modbus server data bank configuration (optional)
-        :type conf: ModbusServerDataBank.Conf
+        :param coils_size: Number of coils to allocate (default is 65536)
+        :type coils_size: int
+        :param coils_default_value: Coils default value at startup (default is False)
+        :type coils_default_value: bool
+        :param d_inputs_size: Number of discrete inputs to allocate (default is 65536)
+        :type d_inputs_size: int
+        :param d_inputs_default_value: Discrete inputs default value at startup (default is False)
+        :type d_inputs_default_value: bool
+        :param h_regs_size: Number of holding registers to allocate (default is 65536)
+        :type h_regs_size: int
+        :param h_regs_default_value: Holding registers default value at startup (default is 0)
+        :type h_regs_default_value: int
+        :param i_regs_size: Number of input registers to allocate (default is 65536)
+        :type i_regs_size: int
+        :param i_regs_default_value: Input registers default value at startup (default is 0)
+        :type i_regs_default_value: int
+        :param virtual_mode: Disallow all modbus data space to work with virtual values (default is False)
+        :type virtual_mode: bool
         """
-        # check conf
-        if conf and not isinstance(conf, ModbusServerDataBank.Conf):
-            raise ValueError('conf arg is invalid')
         # public
-        self.conf = conf or ModbusServerDataBank.Conf()
-        self.srv_info = ModbusServer.ServerInfo()
+        self.coils_size = int(coils_size)
+        self.coils_default_value = bool(coils_default_value)
+        self.d_inputs_size = int(d_inputs_size)
+        self.d_inputs_default_value = bool(d_inputs_default_value)
+        self.h_regs_size = int(h_regs_size)
+        self.h_regs_default_value = int(h_regs_default_value)
+        self.i_regs_size = int(i_regs_size)
+        self.i_regs_default_value = int(i_regs_default_value)
+        self.virtual_mode = virtual_mode
+        # specific modes (override some values)
+        if self.virtual_mode:
+            self.coils_size = 0
+            self.d_inputs_size = 0
+            self.h_regs_size = 0
+            self.i_regs_size = 0
         # private
         self._coils_lock = Lock()
-        self._coils = [self.conf.coils_default_value] * self.conf.coils_size
+        self._coils = [self.coils_default_value] * self.coils_size
         self._d_inputs_lock = Lock()
-        self._d_inputs = [self.conf.d_inputs_default_value] * self.conf.d_inputs_size
+        self._d_inputs = [self.d_inputs_default_value] * self.d_inputs_size
         self._h_regs_lock = Lock()
-        self._h_regs = [self.conf.h_regs_default_value] * self.conf.h_regs_size
+        self._h_regs = [self.h_regs_default_value] * self.h_regs_size
         self._i_regs_lock = Lock()
-        self._i_regs = [self.conf.i_regs_default_value] * self.conf.i_regs_size
+        self._i_regs = [self.i_regs_default_value] * self.i_regs_size
 
     def __repr__(self):
-        return 'ModbusServerDataBank(conf=%s)' % self.conf
+        attrs_str = ''
+        for attr_name in self.__dict__:
+            if isinstance(attr_name, str) and not attr_name.startswith('_'):
+                if attrs_str:
+                    attrs_str += ', '
+                attrs_str += '%s=%r' % (attr_name, self.__dict__[attr_name])
+        return 'DataBank(%s)' % attrs_str
 
     def get_coils(self, address, number=1, srv_info=None):
         """Read data on server coils space
@@ -323,11 +321,20 @@ class ModbusServerDataBank:
         pass
 
 
-class ModbusServerDataHandler:
+class DataHandler:
     """Default data handler for ModbusServer, map server threads calls to DataBank.
 
     Custom handler must derive from this class.
     """
+
+    class Return:
+        def __init__(self, exp_code, data=None):
+            self.exp_code = exp_code
+            self.data = data
+
+        @property
+        def ok(self):
+            return self.exp_code == EXP_NONE
 
     def __init__(self, data_bank=None):
         """Constructor
@@ -335,13 +342,13 @@ class ModbusServerDataHandler:
         Modbus server data handler constructor.
 
         :param data_bank: a reference to custom DefaultDataBank
-        :type data_bank: ModbusServerDataBank
+        :type data_bank: DataBank
         """
         # check data_bank type
-        if data_bank and not isinstance(data_bank, ModbusServerDataBank):
+        if data_bank and not isinstance(data_bank, DataBank):
             raise ValueError('data_bank arg is invalid')
         # public
-        self.data_bank = data_bank or ModbusServerDataBank()
+        self.data_bank = data_bank or DataBank()
 
     def __repr__(self):
         return 'ModbusServerDataHandler(data_bank=%s)' % self.data_bank
@@ -355,15 +362,15 @@ class ModbusServerDataHandler:
         :type count: int
         :param srv_info: some server info
         :type srv_info: ModbusServer.ServerInfo
-        :rtype: DataHandlerReturn
+        :rtype: Return
         """
         # read bits from DataBank
         bits_l = self.data_bank.get_coils(address, count, srv_info)
         # return DataStatus to server
         if bits_l is not None:
-            return DataHandlerReturn(exp_code=EXP_NONE, data=bits_l)
+            return DataHandler.Return(exp_code=EXP_NONE, data=bits_l)
         else:
-            return DataHandlerReturn(exp_code=EXP_DATA_ADDRESS)
+            return DataHandler.Return(exp_code=EXP_DATA_ADDRESS)
 
     def write_coils(self, address, bits_l, srv_info):
         """Call by server for writing in the coils space
@@ -374,15 +381,15 @@ class ModbusServerDataHandler:
         :type bits_l: list
         :param srv_info: some server info
         :type srv_info: ModbusServer.ServerInfo
-        :rtype: DataHandlerReturn
+        :rtype: Return
         """
         # write bits to DataBank
         update_ok = self.data_bank.set_coils(address, bits_l, srv_info)
         # return DataStatus to server
         if update_ok:
-            return DataHandlerReturn(exp_code=EXP_NONE)
+            return DataHandler.Return(exp_code=EXP_NONE)
         else:
-            return DataHandlerReturn(exp_code=EXP_DATA_ADDRESS)
+            return DataHandler.Return(exp_code=EXP_DATA_ADDRESS)
 
     def read_d_inputs(self, address, count, srv_info):
         """Call by server for reading in the discrete inputs space
@@ -393,15 +400,15 @@ class ModbusServerDataHandler:
         :type count: int
         :param srv_info: some server info
         :type srv_info: ModbusServer.ServerInfo
-        :rtype: DataHandlerReturn
+        :rtype: Return
         """
         # read bits from DataBank
         bits_l = self.data_bank.get_discrete_inputs(address, count, srv_info)
         # return DataStatus to server
         if bits_l is not None:
-            return DataHandlerReturn(exp_code=EXP_NONE, data=bits_l)
+            return DataHandler.Return(exp_code=EXP_NONE, data=bits_l)
         else:
-            return DataHandlerReturn(exp_code=EXP_DATA_ADDRESS)
+            return DataHandler.Return(exp_code=EXP_DATA_ADDRESS)
 
     def read_h_regs(self, address, count, srv_info):
         """Call by server for reading in the holding registers space
@@ -412,15 +419,15 @@ class ModbusServerDataHandler:
         :type count: int
         :param srv_info: some server info
         :type srv_info: ModbusServer.ServerInfo
-        :rtype: DataHandlerReturn
+        :rtype: Return
         """
         # read words from DataBank
         words_l = self.data_bank.get_holding_registers(address, count, srv_info)
         # return DataStatus to server
         if words_l is not None:
-            return DataHandlerReturn(exp_code=EXP_NONE, data=words_l)
+            return DataHandler.Return(exp_code=EXP_NONE, data=words_l)
         else:
-            return DataHandlerReturn(exp_code=EXP_DATA_ADDRESS)
+            return DataHandler.Return(exp_code=EXP_DATA_ADDRESS)
 
     def write_h_regs(self, address, words_l, srv_info):
         """Call by server for writing in the holding registers space
@@ -431,15 +438,15 @@ class ModbusServerDataHandler:
         :type words_l: list
         :param srv_info: some server info
         :type srv_info: ModbusServer.ServerInfo
-        :rtype: DataHandlerReturn
+        :rtype: Return
         """
         # write words to DataBank
         update_ok = self.data_bank.set_holding_registers(address, words_l, srv_info)
         # return DataStatus to server
         if update_ok:
-            return DataHandlerReturn(exp_code=EXP_NONE)
+            return DataHandler.Return(exp_code=EXP_NONE)
         else:
-            return DataHandlerReturn(exp_code=EXP_DATA_ADDRESS)
+            return DataHandler.Return(exp_code=EXP_DATA_ADDRESS)
 
     def read_i_regs(self, address, count, srv_info):
         """Call by server for reading in the input registers space
@@ -450,21 +457,22 @@ class ModbusServerDataHandler:
         :type count: int
         :param srv_info: some server info
         :type srv_info: ModbusServer.ServerInfo
-        :rtype: DataHandlerReturn
+        :rtype: Return
         """
         # read words from DataBank
         words_l = self.data_bank.get_input_registers(address, count, srv_info)
         # return DataStatus to server
         if words_l is not None:
-            return DataHandlerReturn(exp_code=EXP_NONE, data=words_l)
+            return DataHandler.Return(exp_code=EXP_NONE, data=words_l)
         else:
-            return DataHandlerReturn(exp_code=EXP_DATA_ADDRESS)
+            return DataHandler.Return(exp_code=EXP_DATA_ADDRESS)
 
 
 class ModbusServer:
     """ Modbus TCP server """
 
-    class _InternalError(Exception):
+    class Error(Exception):
+        """ Exception raise by ModbusServer objects on error. """
         pass
 
     class ClientInfo:
@@ -479,14 +487,15 @@ class ModbusServer:
 
         def __init__(self):
             self.client = ModbusServer.ClientInfo()
-            self.recv_frame = ModbusServer.ModbusFrame()
+            self.recv_frame = ModbusServer.Frame()
 
     class SessionData:
         """ Container class for server session data. """
+
         def __init__(self):
             self.client = ModbusServer.ClientInfo()
-            self.request = ModbusServer.ModbusFrame()
-            self.response = ModbusServer.ModbusFrame()
+            self.request = ModbusServer.Frame()
+            self.response = ModbusServer.Frame()
 
         @property
         def srv_info(self):
@@ -496,14 +505,24 @@ class ModbusServer:
             return info
 
         def new_request(self):
-            self.request = ModbusServer.ModbusFrame()
-            self.response = ModbusServer.ModbusFrame()
+            self.request = ModbusServer.Frame()
+            self.response = ModbusServer.Frame()
 
-    class ModbusFrame:
+        def set_response_mbap(self):
+            self.response.mbap.transaction_id = self.request.mbap.transaction_id
+            self.response.mbap.protocol_id = self.request.mbap.protocol_id
+            self.response.mbap.unit_id = self.request.mbap.unit_id
+
+    class Frame:
         def __init__(self):
             """ Modbus Frame container. """
             self.mbap = ModbusServer.MBAP()
             self.pdu = ModbusServer.PDU()
+
+        @property
+        def raw(self):
+            self.mbap.length = len(self.pdu) + 1
+            return self.mbap.raw + self.pdu.raw
 
     class MBAP:
         """ MBAP (Modbus Application Protocol) container class. """
@@ -513,7 +532,7 @@ class ModbusServer:
             self.transaction_id = 0
             self.protocol_id = 0
             self.length = 0
-            self.unit_id = 1
+            self.unit_id = 0
             # if raw arg is defined, decode it now
             if raw is not None:
                 self.raw = raw
@@ -525,25 +544,21 @@ class ModbusServer:
                                    self.protocol_id, self.length,
                                    self.unit_id)
             except struct.error as e:
-                raise ModbusServer._InternalError('MBAP raw encode pack error: %s' % e)
+                raise ModbusServer.Error('MBAP raw encode pack error: %s' % e)
 
         @raw.setter
         def raw(self, value):
             # close connection if no standard 7 bytes mbap header
             if not (value and len(value) == 7):
-                raise ModbusServer._InternalError('MBAP must have a length of 7 bytes')
+                raise ModbusServer.Error('MBAP must have a length of 7 bytes')
             # decode header
             (self.transaction_id, self.protocol_id,
              self.length, self.unit_id) = struct.unpack('>HHHB', value)
             # check frame header content inconsistency
             if self.protocol_id != 0:
-                raise ModbusServer._InternalError('MBAP protocol ID must be 0')
+                raise ModbusServer.Error('MBAP protocol ID must be 0')
             if not 2 < self.length < 256:
-                raise ModbusServer._InternalError('MBAP length must be between 2 and 256')
-
-        def raw_with_pdu(self, pdu):
-            self.length = len(pdu) + 1
-            return self.raw + pdu.raw
+                raise ModbusServer.Error('MBAP length must be between 2 and 256')
 
     class PDU:
         """ PDU (Protocol Data Unit) container class. """
@@ -590,7 +605,7 @@ class ModbusServer:
                 self.raw += struct.pack(fmt, *args)
             except struct.error:
                 err_msg = 'unable to format PDU message (fmt: %s, values: %s)' % (fmt, args)
-                raise ModbusServer._InternalError(err_msg)
+                raise ModbusServer.Error(err_msg)
 
         def unpack(self, fmt, from_byte=None, to_byte=None):
             raw_section = self.raw[from_byte:to_byte]
@@ -598,7 +613,7 @@ class ModbusServer:
                 return struct.unpack(fmt, raw_section)
             except struct.error:
                 err_msg = 'unable to decode PDU message  (fmt: %s, values: %s)' % (fmt, raw_section)
-                raise ModbusServer._InternalError(err_msg)
+                raise ModbusServer.Error(err_msg)
 
     class ModbusService(BaseRequestHandler):
 
@@ -619,14 +634,14 @@ class ModbusServer:
                 try:
                     # avoid keeping this TCP thread run after server.stop() on main server
                     if not self.server_running:
-                        raise ModbusServer._InternalError('main server is not running')
+                        raise ModbusServer.Error('main server is not running')
                     # recv all data or a chunk of it
                     data_chunk = self.request.recv(size - len(data))
                     # check data chunk
                     if data_chunk:
                         data += data_chunk
                     else:
-                        raise ModbusServer._InternalError('recv return null')
+                        raise ModbusServer.Error('recv return null')
                 except socket.timeout:
                     # just redo main server run test and recv operations on timeout
                     pass
@@ -652,11 +667,13 @@ class ModbusServer:
                     session_data.request.mbap.raw = self._recv_all(7)
                     # receive pdu from client
                     session_data.request.pdu.raw = self._recv_all(session_data.request.mbap.length - 1)
-                    # pass the current PDU to request engine
+                    # update response MBAP fields with request data
+                    session_data.set_response_mbap()
+                    # pass the current session data to request engine
                     self.server.engine(session_data)
                     # send the tx pdu with the last rx mbap (only length field change)
-                    self._send_all(session_data.request.mbap.raw_with_pdu(session_data.response.pdu))
-            except (ModbusServer._InternalError, socket.error):
+                    self._send_all(session_data.response.raw)
+            except (ModbusServer.Error, socket.error):
                 # on main loop except: exit from it and cleanly close the current socket
                 self.request.close()
 
@@ -675,9 +692,9 @@ class ModbusServer:
         :param ipv6: use ipv6 stack
         :type ipv6: bool
         :param data_bank: instance of custom data bank, if you don't want the default one
-        :type data_bank: ModbusServerDataBank
+        :type data_bank: DataBank
         :param data_hdl: instance of custom data handler, if you don't want the default one
-        :type data_hdl: ModbusServerDataHandler
+        :type data_hdl: DataHandler
         :param ext_engine: external engine (can replace ModbusService._default_engine(in_mbap, in_pdu))
         :type ext_engine: callable
         """
@@ -696,8 +713,8 @@ class ModbusServer:
         else:
             # default data handler is ModbusServerDataHandler or a child of it
             if data_hdl is None:
-                self.data_hdl = ModbusServerDataHandler(data_bank=data_bank)
-            elif isinstance(data_hdl, ModbusServerDataHandler):
+                self.data_hdl = DataHandler(data_bank=data_bank)
+            elif isinstance(data_hdl, DataHandler):
                 self.data_hdl = data_hdl
                 if data_bank:
                     raise ValueError('when data_hdl is set, you must define data_bank in it')

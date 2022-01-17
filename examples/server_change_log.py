@@ -8,10 +8,10 @@ Run this as root to listen on TCP privileged ports (<= 1024).
 
 import argparse
 import logging
-from pyModbusTCP.server import ModbusServer, ModbusServerDataBank
+from pyModbusTCP.server import ModbusServer, DataBank
 
 
-class MyDataBank(ModbusServerDataBank):
+class MyDataBank(DataBank):
     """A custom ModbusServerDataBank for override on_xxx_change methods."""
 
     def on_coils_change(self, address, from_value, to_value, srv_info):
