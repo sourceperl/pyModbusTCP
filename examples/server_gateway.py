@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 """
-Modbus/TCP basic gateway
-~~~~~~~~~~~~~~~~~~~~~~~~
+Modbus/TCP basic gateway (RTU slave(s) attached)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 [pyModbusTCP server] -> [ModbusSerialWorker] -> [serial RTU devices]
 

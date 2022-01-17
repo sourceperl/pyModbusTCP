@@ -1,6 +1,6 @@
-============================================
-Modbus/TCP gateway (with RTU slave attached)
-============================================
+==========================
+Server: Modbus/TCP gateway
+==========================
 
 
 .. literalinclude:: ../../examples/server_gateway.py

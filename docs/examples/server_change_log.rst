@@ -1,5 +1,5 @@
 ==========================
-Server: whit change logger
+Server: with change logger
 ==========================
 
 

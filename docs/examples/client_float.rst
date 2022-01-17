@@ -1,6 +1,6 @@
-================================================
-Client: float support (ModbusClient inheritance)
-================================================
+===============================
+Client: add float (inheritance)
+===============================
 
 
 .. literalinclude:: ../../examples/client_float.py
