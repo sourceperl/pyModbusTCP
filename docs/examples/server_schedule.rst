@@ -1,6 +1,6 @@
-======================================
-Server: downtime period and alive word
-======================================
+===============================
+Server: schedule and alive word
+===============================
 
 
 .. literalinclude:: ../../examples/server_schedule.py
