@@ -17,7 +17,7 @@ Tests
 
 The module is currently test on Python 3.5, 3.6, 3.7, 3.8, 3.9 and 3.10.
 
-For Linux, Mac OS and Windows system.
+For Linux, Mac OS and Windows.
 
 Documentation
 -------------
