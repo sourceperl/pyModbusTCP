@@ -15,25 +15,27 @@ from warnings import warn
 class DataBank:
     """ Data space class with thread safe access functions """
 
+    _DEPR_MSG = 'This class method is deprecated. Use DataBank instance method instead: '
+
     @classmethod
     def get_bits(cls, *_args, **_kwargs):
-        warn_msg = 'This class method is now deprecated, use DataBank instance method instead.'
-        warn(warn_msg, DeprecationWarning, stacklevel=2)
+        msg = DataBank._DEPR_MSG + 'server.data_bank.get_coils() or get_discrete_inputs()'
+        warn(msg, DeprecationWarning, stacklevel=2)
 
     @classmethod
     def set_bits(cls, *_args, **_kwargs):
-        warn_msg = 'This class method is now deprecated, use DataBank instance method instead.'
-        warn(warn_msg, DeprecationWarning, stacklevel=2)
+        msg = DataBank._DEPR_MSG + 'server.data_bank.set_coils() or set_discrete_inputs()'
+        warn(msg, DeprecationWarning, stacklevel=2)
 
     @classmethod
     def get_words(cls, *_args, **_kwargs):
-        warn_msg = 'This class method is now deprecated, use DataBank instance method instead.'
-        warn(warn_msg, DeprecationWarning, stacklevel=2)
+        msg = DataBank._DEPR_MSG + 'server.data_bank.get_holding_registers() or get_input_registers()'
+        warn(msg, DeprecationWarning, stacklevel=2)
 
     @classmethod
     def set_words(cls, *_args, **_kwargs):
-        warn_msg = 'This class method is now deprecated, use DataBank instance method instead.'
-        warn(warn_msg, DeprecationWarning, stacklevel=2)
+        msg = DataBank._DEPR_MSG + 'server.data_bank.set_holding_registers() or set_input_registers()'
+        warn(msg, DeprecationWarning, stacklevel=2)
 
     def __init__(self, coils_size=0x10000, coils_default_value=False,
                  d_inputs_size=0x10000, d_inputs_default_value=False,
