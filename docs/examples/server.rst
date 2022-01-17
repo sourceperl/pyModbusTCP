@@ -1,6 +1,6 @@
-===============================
-Server example (simple default)
-===============================
+===================
+Server: basic usage
+===================
 
 
 .. literalinclude:: ../../examples/server.py

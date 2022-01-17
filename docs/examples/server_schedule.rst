@@ -1,6 +1,6 @@
-==================================================
-Server example with alive word and downtime period
-==================================================
+======================================
+Server: downtime period and alive word
+======================================
 
 
 .. literalinclude:: ../../examples/server_schedule.py

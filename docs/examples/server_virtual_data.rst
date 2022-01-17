@@ -1,6 +1,6 @@
-===============================================================
-Server example with virtual data (publish system date and time)
-===============================================================
+====================
+Server: virtual data
+====================
 
 
 .. literalinclude:: ../../examples/server_virtual_data.py

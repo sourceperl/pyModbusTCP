@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Write 4 bits to True, wait 2s, write False and redo it."""
+"""Write 4 coils to True, wait 2s, write False and redo it."""
 
 import time
 from pyModbusTCP.client import ModbusClient
@@ -17,9 +17,9 @@ while True:
     for ad in range(4):
         is_ok = c.write_single_coil(ad, bit)
         if is_ok:
-            print('bit #%s: write to %s' % (ad, bit))
+            print('coil #%s: write to %s' % (ad, bit))
         else:
-            print('bit #%s: unable to write %s' % (ad, bit))
+            print('coil #%s: unable to write %s' % (ad, bit))
         time.sleep(0.5)
 
     print('')
@@ -30,9 +30,9 @@ while True:
     print('---------\n')
     bits = c.read_coils(0, 4)
     if bits:
-        print('bits #0 to 3: %s' % bits)
+        print('coils #0 to 3: %s' % bits)
     else:
-        print('bits #0 to 3: unable to read')
+        print('coils #0 to 3: unable to read')
 
     # toggle
     bit = not bit

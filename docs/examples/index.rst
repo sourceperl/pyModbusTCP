@@ -1,16 +1,20 @@
 pyModbusTCP examples
 ====================
 
-*Here some examples to see pyModbusTCP in some usages cases*
+*Here some examples to see pyModbusTCP in some use cases*
 
 .. toctree::
    :maxdepth: 2
 
-   read_register
-   read_bit
-   write_bit
-   float_support
-   modbus_thread
+   client_minimal
+   client_read_coils
+   client_read_h_registers
+   client_write_coils
+   client_float
+   client_thread
    server
+   server_allow
+   server_change_log
+   server_gateway
    server_schedule
    server_virtual_data

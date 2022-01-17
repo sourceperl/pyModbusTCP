@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-""" Read 10 registers and print result on stdout. """
+""" Read 10 holding registers and print result on stdout. """
 
 import time
 from pyModbusTCP.client import ModbusClient

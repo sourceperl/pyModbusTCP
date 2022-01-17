@@ -728,15 +728,15 @@ class ModbusServer:
         self._evt_running = Event()
         self._service = None
         self._serve_th = None
-        # modbus default functions maps
-        self._default_func = {READ_COILS: self._read_bits,
-                              READ_DISCRETE_INPUTS: self._read_bits,
-                              READ_HOLDING_REGISTERS: self._read_words,
-                              READ_INPUT_REGISTERS: self._read_words,
-                              WRITE_SINGLE_COIL: self._write_single_coil,
-                              WRITE_SINGLE_REGISTER: self._write_single_register,
-                              WRITE_MULTIPLE_COILS: self._write_multiple_coils,
-                              WRITE_MULTIPLE_REGISTERS: self._write_multiple_registers}
+        # modbus default functions map
+        self._func_map = {READ_COILS: self._read_bits,
+                          READ_DISCRETE_INPUTS: self._read_bits,
+                          READ_HOLDING_REGISTERS: self._read_words,
+                          READ_INPUT_REGISTERS: self._read_words,
+                          WRITE_SINGLE_COIL: self._write_single_coil,
+                          WRITE_SINGLE_REGISTER: self._write_single_register,
+                          WRITE_MULTIPLE_COILS: self._write_multiple_coils,
+                          WRITE_MULTIPLE_REGISTERS: self._write_multiple_registers}
 
     def __repr__(self):
         r_str = 'ModbusServer(host=\'%s\', port=%d, no_block=%s, ipv6=%s, data_bank=%s, data_hdl=%s, ext_engine=%s)'
@@ -767,7 +767,7 @@ class ModbusServer:
         """
         try:
             # call the ad-hoc function, if none exists, send an "illegal function" exception
-            func = self._default_func[session_data.request.pdu.func_code]
+            func = self._func_map[session_data.request.pdu.func_code]
             # check function found is callable
             if not callable(func):
                 raise ValueError
