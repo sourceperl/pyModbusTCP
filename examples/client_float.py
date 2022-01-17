@@ -25,14 +25,15 @@ class FloatModbusClient(ModbusClient):
         return self.write_multiple_registers(address, b16_l)
 
 
-# init modbus client
-c = FloatModbusClient(host='localhost', port=502, auto_open=True)
+if __name__ == '__main__':
+    # init modbus client
+    c = FloatModbusClient(host='localhost', port=502, auto_open=True)
 
-# write 10.0 at @0
-c.write_float(0, [10.0])
+    # write 10.0 at @0
+    c.write_float(0, [10.0])
 
-# read @0 to 9
-float_l = c.read_float(0, 10)
-print(float_l)
+    # read @0 to 9
+    float_l = c.read_float(0, 10)
+    print(float_l)
 
-c.close()
+    c.close()
