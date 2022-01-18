@@ -2,14 +2,17 @@
 
 from .constants import READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS, \
     WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS, WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER, \
-    EXP_NONE, EXP_ILLEGAL_FUNCTION, EXP_DATA_ADDRESS, EXP_DATA_VALUE, \
-    MODBUS_PORT
+    EXP_NONE, EXP_ILLEGAL_FUNCTION, EXP_DATA_ADDRESS, EXP_DATA_VALUE
 from .utils import test_bit, set_bit
+import logging
 import socket
 from socketserver import BaseRequestHandler, ThreadingTCPServer
 import struct
 from threading import Lock, Thread, Event
 from warnings import warn
+
+# add a logger for pyModbusTCP.server
+logger = logging.getLogger(__name__)
 
 
 class DataBank:
@@ -474,15 +477,26 @@ class ModbusServer:
     """ Modbus TCP server """
 
     class Error(Exception):
-        """ Exception raise by ModbusServer objects on error. """
+        """ Base exception for ModbusServer related errors. """
+        pass
+
+    class NetworkError(Error):
+        """ Exception raise by ModbusServer on I/O errors. """
+        pass
+
+    class DataFormatError(Error):
+        """ Exception raise by ModbusServer for data format errors. """
         pass
 
     class ClientInfo:
         """ Container class for client information """
 
-        def __init__(self):
-            self.address = ''
-            self.port = 0
+        def __init__(self, address='', port=0):
+            self.address = address
+            self.port = port
+
+        def __repr__(self):
+            return 'ClientInfo(address=%r, port=%r)' % (self.address, self.port)
 
     class ServerInfo:
         """ Container class for server information """
@@ -529,15 +543,12 @@ class ModbusServer:
     class MBAP:
         """ MBAP (Modbus Application Protocol) container class. """
 
-        def __init__(self, raw=None):
+        def __init__(self, transaction_id=0, protocol_id=0, length=0, unit_id=0):
             # public
-            self.transaction_id = 0
-            self.protocol_id = 0
-            self.length = 0
-            self.unit_id = 0
-            # if raw arg is defined, decode it now
-            if raw is not None:
-                self.raw = raw
+            self.transaction_id = transaction_id
+            self.protocol_id = protocol_id
+            self.length = length
+            self.unit_id = unit_id
 
         @property
         def raw(self):
@@ -546,21 +557,21 @@ class ModbusServer:
                                    self.protocol_id, self.length,
                                    self.unit_id)
             except struct.error as e:
-                raise ModbusServer.Error('MBAP raw encode pack error: %s' % e)
+                raise ModbusServer.DataFormatError('MBAP raw encode pack error: %s' % e)
 
         @raw.setter
         def raw(self, value):
             # close connection if no standard 7 bytes mbap header
             if not (value and len(value) == 7):
-                raise ModbusServer.Error('MBAP must have a length of 7 bytes')
+                raise ModbusServer.DataFormatError('MBAP must have a length of 7 bytes')
             # decode header
             (self.transaction_id, self.protocol_id,
              self.length, self.unit_id) = struct.unpack('>HHHB', value)
             # check frame header content inconsistency
             if self.protocol_id != 0:
-                raise ModbusServer.Error('MBAP protocol ID must be 0')
+                raise ModbusServer.DataFormatError('MBAP protocol ID must be 0')
             if not 2 < self.length < 256:
-                raise ModbusServer.Error('MBAP length must be between 2 and 256')
+                raise ModbusServer.DataFormatError('MBAP length must be between 2 and 256')
 
     class PDU:
         """ PDU (Protocol Data Unit) container class. """
@@ -607,7 +618,7 @@ class ModbusServer:
                 self.raw += struct.pack(fmt, *args)
             except struct.error:
                 err_msg = 'unable to format PDU message (fmt: %s, values: %s)' % (fmt, args)
-                raise ModbusServer.Error(err_msg)
+                raise ModbusServer.DataFormatError(err_msg)
 
         def unpack(self, fmt, from_byte=None, to_byte=None):
             raw_section = self.raw[from_byte:to_byte]
@@ -615,7 +626,7 @@ class ModbusServer:
                 return struct.unpack(fmt, raw_section)
             except struct.error:
                 err_msg = 'unable to decode PDU message  (fmt: %s, values: %s)' % (fmt, raw_section)
-                raise ModbusServer.Error(err_msg)
+                raise ModbusServer.DataFormatError(err_msg)
 
     class ModbusService(BaseRequestHandler):
 
@@ -623,9 +634,9 @@ class ModbusServer:
         def server_running(self):
             return self.server.evt_running.is_set()
 
-        def _send_all(self, data, flags=0):
+        def _send_all(self, data):
             try:
-                self.request.sendall(data, flags)
+                self.request.sendall(data)
                 return True
             except socket.timeout:
                 return False
@@ -636,14 +647,14 @@ class ModbusServer:
                 try:
                     # avoid keeping this TCP thread run after server.stop() on main server
                     if not self.server_running:
-                        raise ModbusServer.Error('main server is not running')
+                        raise ModbusServer.NetworkError('main server is not running')
                     # recv all data or a chunk of it
                     data_chunk = self.request.recv(size - len(data))
                     # check data chunk
                     if data_chunk:
                         data += data_chunk
                     else:
-                        raise ModbusServer.Error('recv return null')
+                        raise ModbusServer.NetworkError('recv return null')
                 except socket.timeout:
                     # just redo main server run test and recv operations on timeout
                     pass
@@ -660,6 +671,8 @@ class ModbusServer:
             # init and update server info structure
             session_data = ModbusServer.SessionData()
             (session_data.client.address, session_data.client.port) = self.request.getpeername()
+            # debug message
+            logger.debug('accept new connection %r', session_data.client)
             try:
                 # main processing loop
                 while True:
@@ -675,29 +688,31 @@ class ModbusServer:
                     self.server.engine(session_data)
                     # send the tx pdu with the last rx mbap (only length field change)
                     self._send_all(session_data.response.raw)
-            except (ModbusServer.Error, socket.error):
+            except (ModbusServer.Error, socket.error) as e:
+                # debug message
+                logger.debug('exception during request handling: %r', e)
                 # on main loop except: exit from it and cleanly close the current socket
                 self.request.close()
 
-    def __init__(self, host='localhost', port=MODBUS_PORT, no_block=False, ipv6=False,
+    def __init__(self, host='localhost', port=502, no_block=False, ipv6=False,
                  data_bank=None, data_hdl=None, ext_engine=None):
         """Constructor
 
         Modbus server constructor.
 
-        :param host: hostname or IPv4/IPv6 address server address (optional)
+        :param host: hostname or IPv4/IPv6 address server address (default is 'localhost')
         :type host: str
-        :param port: TCP port number (optional)
+        :param port: TCP port number (default is 502)
         :type port: int
-        :param no_block: set no block mode, in this mode start() return (optional)
+        :param no_block: no block mode, i.e. start() will return (default is False)
         :type no_block: bool
-        :param ipv6: use ipv6 stack
+        :param ipv6: use ipv6 stack (default is False)
         :type ipv6: bool
-        :param data_bank: instance of custom data bank, if you don't want the default one
+        :param data_bank: instance of custom data bank, if you don't want the default one (optional)
         :type data_bank: DataBank
-        :param data_hdl: instance of custom data handler, if you don't want the default one
+        :param data_hdl: instance of custom data handler, if you don't want the default one (optional)
         :type data_hdl: DataHandler
-        :param ext_engine: an external engine reference (ref to function like ext_engine(session_data))
+        :param ext_engine: an external engine reference (ref to ext_engine(session_data)) (optional)
         :type ext_engine: callable
         """
         # public
@@ -744,21 +759,18 @@ class ModbusServer:
         return r_str
 
     def _engine(self, session_data):
-        # pass the current PDU to request engine
-        try:
-            self._external_engine(session_data)
-        except NotImplementedError:
-            self._internal_engine(session_data)
-
-    def _external_engine(self, session_data):
-        """Call external processing engine, if it is defined.
+        """Main request processing engine.
 
         :type session_data: ModbusServer.SessionData
         """
+        # call external engine or internal one (if ext_engine undefined)
         if callable(self.ext_engine):
-            self.ext_engine(session_data)
+            try:
+                self.ext_engine(session_data)
+            except Exception as e:
+                raise ModbusServer.Error('external engine raise an exception: %r' % e)
         else:
-            raise NotImplementedError
+            self._internal_engine(session_data)
 
     def _internal_engine(self, session_data):
         """Default internal processing engine: call default modbus func.
