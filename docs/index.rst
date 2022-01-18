@@ -8,9 +8,3 @@ Welcome to pyModbusTCP's documentation
    package/index.rst
    examples/index.rst
 
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-
