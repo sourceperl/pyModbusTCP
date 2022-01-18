@@ -697,7 +697,7 @@ class ModbusServer:
         :type data_bank: DataBank
         :param data_hdl: instance of custom data handler, if you don't want the default one
         :type data_hdl: DataHandler
-        :param ext_engine: external engine (can replace ModbusService._default_engine(in_mbap, in_pdu))
+        :param ext_engine: an external engine reference (ref to function like ext_engine(session_data))
         :type ext_engine: callable
         """
         # public
@@ -751,7 +751,7 @@ class ModbusServer:
             self._internal_engine(session_data)
 
     def _external_engine(self, session_data):
-        """Call external PDU processing engine, if it is defined.
+        """Call external processing engine, if it is defined.
 
         :type session_data: ModbusServer.SessionData
         """
@@ -761,7 +761,7 @@ class ModbusServer:
             raise NotImplementedError
 
     def _internal_engine(self, session_data):
-        """Default PDU processing engine: call default modbus func.
+        """Default internal processing engine: call default modbus func.
 
         :type session_data: ModbusServer.SessionData
         """
