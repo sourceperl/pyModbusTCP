@@ -15,6 +15,6 @@ pyModbusTCP examples
    server
    server_allow
    server_change_log
-   server_gateway
+   server_serial_gw
    server_schedule
    server_virtual_data

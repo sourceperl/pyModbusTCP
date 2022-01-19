@@ -16,7 +16,7 @@ import argparse
 import logging
 import queue
 import struct
-from threading import Thread, Event
+from threading import Event
 from queue import Queue
 from pyModbusTCP.server import ModbusServer
 from pyModbusTCP.utils import crc16
@@ -72,21 +72,19 @@ class ModbusRTUFrame:
         self.raw = tmp_raw
 
 
-class ModbusSerialWorker(Thread):
-    """ Main serial thread to manage I/O with RTU devices. """
+class RtuQuery:
+    """ Request container to deal with modbus serial worker. """
 
-    class _RtuQuery:
-        """ Internal request container to deal with serial worker thread. """
+    def __init__(self):
+        self.completed = Event()
+        self.request = ModbusRTUFrame()
+        self.response = ModbusRTUFrame()
 
-        def __init__(self):
-            self.completed = Event()
-            self.request = ModbusRTUFrame()
-            self.response = ModbusRTUFrame()
+
+class ModbusSerialWorker:
+    """ A serial worker to manage I/O with RTU devices. """
 
     def __init__(self, port, timeout=1.0, end_of_frame=0.05):
-        super().__init__()
-        # this thread is a daemon
-        self.daemon = True
         # public
         self.serial_port = port
         self.timeout = timeout
@@ -95,8 +93,8 @@ class ModbusSerialWorker(Thread):
         # accept 5 simultaneous requests before overloaded exception is return
         self.rtu_queries_q = Queue(maxsize=5)
 
-    def run(self):
-        """Serial worker thread."""
+    def loop(self):
+        """Serial worker main loop."""
         while True:
             # get next exchange from queue
             rtu_query = self.rtu_queries_q.get()
@@ -123,13 +121,13 @@ class ModbusSerialWorker(Thread):
             self.rtu_queries_q.task_done()
 
     def srv_engine_entry(self, session_data):
-        """Server engine entry point (pass request to serial worker thread).
+        """Server engine entry point (pass request to serial worker queries queue).
 
         :param session_data: server session data
         :type session_data: ModbusServer.SessionData
         """
         # init a serial exchange from session data
-        rtu_query = ModbusSerialWorker._RtuQuery()
+        rtu_query = RtuQuery()
         rtu_query.request.build(raw_pdu=session_data.request.pdu.raw,
                                 slave_ad=session_data.request.mbap.unit_id)
         try:
@@ -169,14 +167,16 @@ if __name__ == '__main__':
         # init serial port
         logger.debug('Open serial port %s at %d bauds', args.device, args.baudrate)
         serial_port = Serial(port=args.device, baudrate=args.baudrate)
-        # start serial worker thread
-        logger.debug('Start serial worker thread')
+        # init serial worker
         serial_worker = ModbusSerialWorker(serial_port, args.timeout, args.eof)
-        serial_worker.start()
         # start modbus server with custom engine
         logger.debug('Start modbus server (%s, %d)', args.host, args.port)
-        srv = ModbusServer(host=args.host, port=args.port, ext_engine=serial_worker.srv_engine_entry)
+        srv = ModbusServer(host=args.host, port=args.port,
+                           no_block=True, ext_engine=serial_worker.srv_engine_entry)
         srv.start()
+        # start serial worker loop
+        logger.debug('Start serial worker')
+        serial_worker.loop()
     except serialutil.SerialException as e:
         logger.critical('Serial device error: %r', e)
         exit(1)
