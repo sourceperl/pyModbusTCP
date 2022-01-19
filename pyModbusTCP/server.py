@@ -12,7 +12,7 @@ from threading import Lock, Thread, Event
 from warnings import warn
 
 # add a logger for pyModbusTCP.server
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('pyModbusTCP.server')
 
 
 class DataBank:
@@ -672,7 +672,7 @@ class ModbusServer:
             session_data = ModbusServer.SessionData()
             (session_data.client.address, session_data.client.port) = self.request.getpeername()
             # debug message
-            logger.debug('accept new connection %r', session_data.client)
+            logger.debug('Accept new connection from %r', session_data.client)
             try:
                 # main processing loop
                 while True:
@@ -690,7 +690,7 @@ class ModbusServer:
                     self._send_all(session_data.response.raw)
             except (ModbusServer.Error, socket.error) as e:
                 # debug message
-                logger.debug('exception during request handling: %r', e)
+                logger.debug('Exception during request handling: %r', e)
                 # on main loop except: exit from it and cleanly close the current socket
                 self.request.close()
 
@@ -985,8 +985,11 @@ class ModbusServer:
             # TODO test no_delay with bench
             self._service.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             # bind and activate
-            self._service.server_bind()
-            self._service.server_activate()
+            try:
+                self._service.server_bind()
+                self._service.server_activate()
+            except OSError as e:
+                raise ModbusServer.NetworkError(e)
             # serve request
             if self.no_block:
                 self._serve_th = Thread(target=self._serve)
