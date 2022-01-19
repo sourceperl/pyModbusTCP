@@ -13,6 +13,7 @@ $ sudo ./server_gateway.py --baudrate 115200 /dev/ttyUSB0
 """
 
 import argparse
+import logging
 import queue
 import struct
 from threading import Thread, Event
@@ -21,7 +22,7 @@ from pyModbusTCP.server import ModbusServer
 from pyModbusTCP.utils import crc16
 from pyModbusTCP.constants import EXP_GATEWAY_PATH_UNAVAILABLE, EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
 # need sudo pip install pyserial==3.4
-import serial
+from serial import Serial, serialutil
 
 
 # some class
@@ -159,12 +160,26 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--baudrate', type=int, default=9600, help='serial rate (default is 9600)')
     parser.add_argument('-t', '--timeout', type=float, default=1.0, help='timeout delay (default is 1.0 s)')
     parser.add_argument('-e', '--eof', type=float, default=0.05, help='end of frame delay (default is 0.05 s)')
+    parser.add_argument('-d', '--debug', action='store_true', help='set debug mode')
     args = parser.parse_args()
-    # init serial port
-    serial_port = serial.Serial(port=args.device, baudrate=args.baudrate)
-    # start serial worker thread
-    serial_worker = ModbusSerialWorker(serial_port, args.timeout, args.eof)
-    serial_worker.start()
-    # start modbus server with custom engine
-    srv = ModbusServer(host=args.host, port=args.port, ext_engine=serial_worker.srv_engine_entry)
-    srv.start()
+    # init logging
+    logging.basicConfig(level=logging.DEBUG if args.debug else None)
+    logger = logging.getLogger(__name__)
+    try:
+        # init serial port
+        logger.debug('Open serial port %s at %d bauds', args.device, args.baudrate)
+        serial_port = Serial(port=args.device, baudrate=args.baudrate)
+        # start serial worker thread
+        logger.debug('Start serial worker thread')
+        serial_worker = ModbusSerialWorker(serial_port, args.timeout, args.eof)
+        serial_worker.start()
+        # start modbus server with custom engine
+        logger.debug('Start modbus server (%s, %d)', args.host, args.port)
+        srv = ModbusServer(host=args.host, port=args.port, ext_engine=serial_worker.srv_engine_entry)
+        srv.start()
+    except serialutil.SerialException as e:
+        logger.critical('Serial device error: %r', e)
+        exit(1)
+    except ModbusServer.Error as e:
+        logger.critical('Modbus server error: %r', e)
+        exit(2)
