@@ -9,7 +9,7 @@ Modbus/TCP basic gateway (RTU slave(s) attached)
 Run this as root to listen on TCP privileged ports (<= 1024).
 
 Open /dev/ttyUSB0 at 115200 bauds and relay it RTU messages to slave(s).
-$ sudo ./server_gateway.py --baudrate 115200 /dev/ttyUSB0
+$ sudo ./server_serial_gw.py --baudrate 115200 /dev/ttyUSB0
 """
 
 import argparse
