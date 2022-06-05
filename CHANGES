@@ -1,7 +1,7 @@
 
 Revision history for pyModbusTCP
 
-0.2.0-dev 202x-xx-xx
+0.2.0 2022-06-05
 
     - ModbusClient: parameters are now properties instead of methods (more intuitive).
     - ModbusClient: now TCP auto open mode is active by default (auto_open=True, auto_close=False).

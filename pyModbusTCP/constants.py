@@ -1,7 +1,7 @@
 """ pyModbusTCP package constants definition """
 
 # Package version
-VERSION = '0.2.0-dev'
+VERSION = '0.2.0'
 # Modbus/TCP
 MODBUS_PORT = 502
 # Modbus function code
