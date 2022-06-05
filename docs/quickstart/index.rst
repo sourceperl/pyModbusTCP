@@ -24,18 +24,19 @@ Package setup
 
 from PyPi::
 
-    # for Python 2
-    sudo pip2 install pyModbusTCP
-    # or for Python 3
+    # install the last available version (stable)
     sudo pip3 install pyModbusTCP
-    # upgrade from an older release
+    # or upgrade from an older version
     sudo pip3 install pyModbusTCP --upgrade
 
-from Github::
+    # you can also install a specific version (here v0.1.10)
+    sudo pip3 install pyModbusTCP==v0.1.10
+
+from GitHub::
 
     git clone https://github.com/sourceperl/pyModbusTCP.git
     cd pyModbusTCP
-    # here change "python" by your python target(s) version(s) (like python3.2)
+    # here change "python" by your python target(s) version(s) (like python3.9)
     sudo python setup.py install
 
 ModbusClient: init

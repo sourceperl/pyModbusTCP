@@ -107,22 +107,3 @@ Write value 44 and 55 to registers at modbus address 10 :
         print("write ok")
     else:
         print("write error")
-
-Know issue with older Python version on Windows
------------------------------------------------
-
-On windows OS with older Python version (<3), win_inet_pton module is require. This avoid exception "AttributeError:
-'module' object has no attribute 'inet_pton'".
-
-install win_inet_pton:
-
-.. code-block:: bash
-
-    sudo pip install win_inet_pton
-
-import win_inet_pton at beginning of your code:
-
-.. code-block:: python
-
-    import win_inet_pton
-    from pyModbusTCP.client import ModbusClient
