@@ -8,6 +8,7 @@ from pyModbusTCP.constants import SUPPORTED_FUNCTION_CODES, EXP_NONE, EXP_ILLEGA
 # some const
 MAX_READABLE_REGS = 125
 MAX_WRITABLE_REGS = 123
+MAX_WRITE_READ_REGS = 121
 MAX_READABLE_BITS = 2000
 MAX_WRITABLE_BITS = 1968
 
@@ -133,12 +134,18 @@ class TestClientServer(unittest.TestCase):
             words_l = [randint(0, 0xffff) for _ in range(MAX_WRITABLE_REGS)]
             self.assertEqual(self.client.write_multiple_registers(addr, words_l), True)
             self.assertEqual(self.client.read_holding_registers(addr, len(words_l)), words_l)
+            # holding registers space: multi-write at max size
+            words_l = [randint(0, 0xffff) for _ in range(MAX_WRITE_READ_REGS)]
+            self.assertEqual(self.client.write_read_multiple_registers(addr, len(words_l), addr, words_l), words_l)
         # holding registers space: read/write over limit
         self.assertRaises(ValueError, self.client.read_holding_registers, 0xfff0, 17)
         self.assertRaises(ValueError, self.client.write_single_register, 0, 0x10000)
         self.assertRaises(ValueError, self.client.write_single_register, 0x10000, 0)
         self.assertRaises(ValueError, self.client.write_multiple_registers, 0x1000, [0x10000])
         self.assertRaises(ValueError, self.client.write_multiple_registers, 0xfff0, [0] * 17)
+        self.assertRaises(ValueError, self.client.write_read_multiple_registers, 0x1000, 1, 0x1000, [0x10000])
+        self.assertRaises(ValueError, self.client.write_read_multiple_registers, 0xfff0, 1, 0xfff0, [0] * 17)
+        self.assertRaises(ValueError, self.client.write_read_multiple_registers, 0xfff0, 17, 0xfff0, [0] * 1)
 
         # input registers
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_READABLE_REGS]:
