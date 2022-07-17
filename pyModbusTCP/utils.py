@@ -313,7 +313,7 @@ def valid_host(host_str):
     except socket.error:
         pass
     # valid hostname ?
-    if re.match(r'^[a-z][a-z0-9.\-]+$', host_str):
+    if re.match(r'^[a-zA-Z][a-zA-Z0-9.\-]+$', host_str):
         return True
     # on invalid host
     return False
