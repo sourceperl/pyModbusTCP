@@ -16,6 +16,10 @@ class TestModbusClient(unittest.TestCase):
     def test_host(self):
         # default value
         self.assertEqual(ModbusClient().host, 'localhost')
+        # should pass
+        self.assertEqual(ModbusClient().host, 'LOCALHOST')
+        self.assertEqual(ModbusClient().host, 'Localhost')
+        self.assertEqual(ModbusClient().host, 'lOCALHOST')
         # should raise ValueError for bad value
         self.assertRaises(ValueError, ModbusClient, host='wrong@host')
         self.assertRaises(ValueError, ModbusClient, host='192.168.2.bad')
