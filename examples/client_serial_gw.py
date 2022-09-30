@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 """
-Modbus/TCP basic gateway (RTU master attached)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Modbus RTU to TCP basic gateway (master attached)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-[serial RTU master] -> Modbus RTU -> [ModbusSerialWorker] -> Modbus/TCP -> [Modbus server]
+Modbus master device -> [Modbus RTU] -> client_serial_gw -> [Modbus/TCP] -> Modbus server
 
 Open /dev/ttyUSB0 at 115200 bauds and relay RTU messages to modbus server for slave address 30.
 $ ./client_serial_gw.py /dev/ttyUSB0 --baudrate 115200 --address 30
@@ -189,14 +189,14 @@ if __name__ == '__main__':
     # parse args
     parser = argparse.ArgumentParser()
     parser.add_argument('serial_device', type=str, help='serial device (like /dev/ttyUSB0)')
-    parser.add_argument('-a', '--address', type=int, default=1, help='slave address')
-    parser.add_argument('--allow-broadcast', action='store_true', help='process broadcast frame (to slave @0)')
+    parser.add_argument('-d', '--debug', action='store_true', help='debug mode')
+    parser.add_argument('-a', '--address', type=int, default=1, help='slave address (default is 1)')
+    parser.add_argument('--allow-broadcast', action='store_true', help='serial allow broadcast frame (to address 0)')
     parser.add_argument('-b', '--baudrate', type=int, default=9600, help='serial rate (default is 9600)')
-    parser.add_argument('-d', '--debug', action='store_true', help='set debug mode')
-    parser.add_argument('-e', '--eof', type=float, default=0.05, help='end of frame delay (default is 0.05s)')
-    parser.add_argument('-H', '--host', type=str, default='localhost', help='client host (default: localhost)')
-    parser.add_argument('-p', '--port', type=int, default=502, help='client TCP port (default: 502)')
-    parser.add_argument('-t', '--timeout', type=float, default=1.0, help='client timeout delay (default is 1.0s)')
+    parser.add_argument('-e', '--eof', type=float, default=0.05, help='serial end of frame delay in s (default: 0.05)')
+    parser.add_argument('-H', '--host', type=str, default='localhost', help='server host (default: localhost)')
+    parser.add_argument('-p', '--port', type=int, default=502, help='server TCP port (default: 502)')
+    parser.add_argument('-t', '--timeout', type=float, default=1.0, help='server timeout delay in s (default: 1.0)')
     args = parser.parse_args()
     # init logging
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
@@ -211,7 +211,7 @@ if __name__ == '__main__':
         # init serial worker
         serial_worker = SlaveSerialWorker(serial_port, end_of_frame=args.eof)
         # start Serial2ModbusClient
-        logger.info('Start serial worker at slave address %d' % args.address)
+        logger.info('Start serial worker (slave address = %d)' % args.address)
         Serial2ModbusClient(mbus_cli=mbus_cli, serial_w=serial_worker,
                             slave_addr=args.address, allow_bcast=args.allow_broadcast).run()
     except serialutil.SerialException as e:
