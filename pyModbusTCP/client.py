@@ -50,13 +50,13 @@ class ModbusClient(object):
         """
         # private
         # internal variables
-        self._host = None
-        self._port = None
-        self._unit_id = None
-        self._timeout = None
-        self._debug = None
-        self._auto_open = None
-        self._auto_close = None
+        self._host = 'localhost'
+        self._port = 502
+        self._unit_id = 1
+        self._timeout = 30.0
+        self._debug = False
+        self._auto_open = True
+        self._auto_close = False
         self._sock = None  # socket
         self._transaction_id = 0  # MBAP transaction ID
         self._version = VERSION  # this package version number
