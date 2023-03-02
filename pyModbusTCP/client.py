@@ -378,13 +378,15 @@ class ModbusClient(object):
             self._req_except_handler(e)
             return None
 
-    def read_holding_registers(self, reg_addr, reg_nb=1):
+    def read_holding_registers(self, reg_addr, reg_nb=1, reg_format='H'):
         """Modbus function READ_HOLDING_REGISTERS (0x03).
 
         :param reg_addr: register address (0 to 65535)
         :type reg_addr: int
         :param reg_nb: number of registers to read (1 to 125)
         :type reg_nb: int
+        :param reg_format: format conversion of the readed registers (f, h, H, i, I, l, L, q, Q)
+        :type reg_format: str
         :returns: registers list or None if fail
         :rtype: list of int or None
         """
@@ -395,6 +397,8 @@ class ModbusClient(object):
             raise ValueError('reg_nb out of range (valid from 1 to 125)')
         if int(reg_addr) + int(reg_nb) > 0x10000:
             raise ValueError('read after end of modbus address space')
+        if reg_format not in ('f', 'h', 'H', 'i', 'I', 'l', 'L', 'q', 'Q'):
+            raise ValueError('reg_format must be one of these: "f", "h", "H", "i", "I", "l", "L", "q", "Q"')
         # make request
         try:
             tx_pdu = struct.pack('>BHH', READ_HOLDING_REGISTERS, reg_addr, reg_nb)
@@ -408,9 +412,16 @@ class ModbusClient(object):
                 raise ModbusClient._NetworkError(MB_RECV_ERR, 'rx byte count mismatch')
             # allocate a reg_nb size list
             registers = [0] * reg_nb
+            # pick the format padding
+            if reg_format in ['H', 'h']:
+                padding = 2
+            elif reg_format in ['f', 'l', 'L', 'i', 'I']:
+                padding = 4
+            elif reg_format in ['q', 'Q']:
+                padding = 8
             # fill registers list with register items
             for i in range(reg_nb):
-                registers[i] = struct.unpack('>H', f_regs[i * 2:i * 2 + 2])[0]
+                registers[i] = struct.unpack('>'+reg_format, f_regs[i * padding:i * padding + padding])[0]
             # return registers list
             return registers
         # handle error during request
@@ -418,13 +429,15 @@ class ModbusClient(object):
             self._req_except_handler(e)
             return None
 
-    def read_input_registers(self, reg_addr, reg_nb=1):
+    def read_input_registers(self, reg_addr, reg_nb=1, reg_format='H'):
         """Modbus function READ_INPUT_REGISTERS (0x04).
 
         :param reg_addr: register address (0 to 65535)
         :type reg_addr: int
         :param reg_nb: number of registers to read (1 to 125)
         :type reg_nb: int
+        :param reg_format: format conversion of the readed registers (f, h, H, i, I, l, L, q, Q)
+        :type reg_format: str
         :returns: registers list or None if fail
         :rtype: list of int or None
         """
@@ -435,6 +448,8 @@ class ModbusClient(object):
             raise ValueError('reg_nb out of range (valid from 1 to 125)')
         if int(reg_addr) + int(reg_nb) > 0x10000:
             raise ValueError('read after end of modbus address space')
+        if reg_format not in ('f', 'h', 'H', 'i', 'I', 'l', 'L', 'q', 'Q'):
+            raise ValueError('reg_format must be one of these: "f", "h", "H", "i", "I", "l", "L", "q", "Q"')
         # make request
         try:
             tx_pdu = struct.pack('>BHH', READ_INPUT_REGISTERS, reg_addr, reg_nb)
@@ -448,9 +463,16 @@ class ModbusClient(object):
                 raise ModbusClient._NetworkError(MB_RECV_ERR, 'rx byte count mismatch')
             # allocate a reg_nb size list
             registers = [0] * reg_nb
+            # pick the format padding
+            if reg_format in ['H', 'h']:
+                padding = 2
+            elif reg_format in ['f', 'l', 'L', 'i', 'I']:
+                padding = 4
+            elif reg_format in ['q', 'Q']:
+                padding = 8
             # fill registers list with register items
             for i in range(reg_nb):
-                registers[i] = struct.unpack('>H', f_regs[i * 2:i * 2 + 2])[0]
+                registers[i] = struct.unpack('>'+reg_format, f_regs[i * padding:i * padding + padding])[0]
             # return registers list
             return registers
         # handle error during request

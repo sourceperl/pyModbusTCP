@@ -4,7 +4,6 @@ from pyModbusTCP.server import ModbusServer
 from pyModbusTCP.client import ModbusClient
 from pyModbusTCP.constants import SUPPORTED_FUNCTION_CODES, EXP_NONE, EXP_ILLEGAL_FUNCTION, MB_NO_ERR, MB_EXCEPT_ERR
 
-
 # some const
 MAX_READABLE_REGS = 125
 MAX_WRITABLE_REGS = 123
@@ -129,16 +128,20 @@ class TestClientServer(unittest.TestCase):
             word = randint(0, 0xffff)
             self.assertEqual(self.client.write_single_register(addr, word), True)
             self.assertEqual(self.client.read_holding_registers(addr), [word])
+            self.assertEqual(self.client.read_holding_registers(addr, reg_format='H'), [word])
             # holding registers space: multi-write at max size
             words_l = [randint(0, 0xffff) for _ in range(MAX_WRITABLE_REGS)]
             self.assertEqual(self.client.write_multiple_registers(addr, words_l), True)
             self.assertEqual(self.client.read_holding_registers(addr, len(words_l)), words_l)
+            self.assertEqual(self.client.read_holding_registers(addr, len(words_l), reg_format='H'), words_l)
         # holding registers space: read/write over limit
         self.assertRaises(ValueError, self.client.read_holding_registers, 0xfff0, 17)
         self.assertRaises(ValueError, self.client.write_single_register, 0, 0x10000)
         self.assertRaises(ValueError, self.client.write_single_register, 0x10000, 0)
         self.assertRaises(ValueError, self.client.write_multiple_registers, 0x1000, [0x10000])
         self.assertRaises(ValueError, self.client.write_multiple_registers, 0xfff0, [0] * 17)
+        # holding registers format: read/write wrong format
+        self.assertRaises(ValueError, self.client.read_holding_registers, 0xfff0, 1, '!')
 
         # input registers
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_READABLE_REGS]:
@@ -150,12 +153,16 @@ class TestClientServer(unittest.TestCase):
             words_l = [randint(0, 0xffff) for _ in range(MAX_READABLE_REGS)]
             self.server.data_bank.set_input_registers(addr, words_l)
             self.assertEqual(self.client.read_input_registers(addr, len(words_l)), words_l)
+            self.assertEqual(self.client.read_input_registers(addr, len(words_l), reg_format='H'), words_l)
             # input registers space: multiple read/write over sized
             words_l.append(randint(0, 0xffff))
             self.server.data_bank.set_input_registers(addr, words_l)
             self.assertRaises(ValueError, self.client.read_input_registers, addr, len(words_l))
+            self.assertRaises(ValueError, self.client.read_input_registers, addr, len(words_l), 'H')
         # input registers space: read/write over limit
         self.assertRaises(ValueError, self.client.read_input_registers, 0xfff0, 17)
+        # input registers format: read wrong format
+        self.assertRaises(ValueError, self.client.read_input_registers, 0xfff0, 1, '!')
 
     def test_server_strength(self):
         # test server responses to abnormal events
