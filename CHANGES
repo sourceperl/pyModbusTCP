@@ -2,6 +2,7 @@ Revision history for pyModbusTCP
 
 0.2.x xxxx-xx-xx
 
+    - updated compatibility test (python versions): remove 3.5/3.6, add 3.11.
     - improve hostname validation in utils (thanks to MCXIV).
 
 0.2.0 2022-06-05
