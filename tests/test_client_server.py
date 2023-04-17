@@ -18,11 +18,12 @@ class TestModbusClient(unittest.TestCase):
         self.assertEqual(ModbusClient().host, 'localhost')
         # should raise ValueError for bad value
         self.assertRaises(ValueError, ModbusClient, host='wrong@host')
-        self.assertRaises(ValueError, ModbusClient, host='192.168.2.bad')
+        self.assertRaises(ValueError, ModbusClient, host='my.bad_name.host')
         self.assertRaises(ValueError, ModbusClient, host='::notip:1')
         # shouldn't raise ValueError for valid value
         try:
-            [ModbusClient(host=h) for h in ['CamelCaseHost', 'my.good.host', '127.0.0.1', '::1']]
+            [ModbusClient(host=h) for h in ['CamelCaseHost', 'plc-1.net', 'my.good.host', 
+                                            '42.example.com', '127.0.0.1', '::1']]
         except ValueError:
             self.fail('ModbusClient.host property raised ValueError unexpectedly')
 
