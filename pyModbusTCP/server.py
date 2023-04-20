@@ -2,7 +2,7 @@
 
 from .constants import READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS, \
     WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS, WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER, \
-    EXP_NONE, EXP_ILLEGAL_FUNCTION, EXP_DATA_ADDRESS, EXP_DATA_VALUE
+    EXP_NONE, EXP_ILLEGAL_FUNCTION, EXP_DATA_ADDRESS, EXP_DATA_VALUE, WRITE_READ_MULTIPLE_REGISTERS
 from .utils import test_bit, set_bit
 import logging
 import socket
@@ -751,7 +751,8 @@ class ModbusServer:
                           WRITE_SINGLE_COIL: self._write_single_coil,
                           WRITE_SINGLE_REGISTER: self._write_single_register,
                           WRITE_MULTIPLE_COILS: self._write_multiple_coils,
-                          WRITE_MULTIPLE_REGISTERS: self._write_multiple_registers}
+                          WRITE_MULTIPLE_REGISTERS: self._write_multiple_registers,
+                          WRITE_READ_MULTIPLE_REGISTERS: self._write_read_multiple_registers}
 
     def __repr__(self):
         r_str = 'ModbusServer(host=\'%s\', port=%d, no_block=%s, ipv6=%s, data_bank=%s, data_hdl=%s, ext_engine=%s)'
@@ -959,6 +960,52 @@ class ModbusServer:
             # format regular or except response
             if ret_hdl.ok:
                 send_pdu.add_pack('>BHH', recv_pdu.func_code, start_addr, quantity_regs)
+            else:
+                send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
+        else:
+            send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
+
+    def _write_read_multiple_registers(self, session_data):
+        """
+        Function Write Read Multiple Registers (0x17).
+
+        :param session_data: server engine data
+        :type session_data: ModbusServer.SessionData
+        """
+        # pdu alias
+        recv_pdu = session_data.request.pdu
+        send_pdu = session_data.response.pdu
+        # decode pdu
+        (read_start_addr,
+         read_quantity_regs,
+         write_start_addr,
+         write_quantity_regs,
+         byte_count) = recv_pdu.unpack('>HHHHB', from_byte=1, to_byte=10)
+        # ok flags: some tests on pdu fields
+        write_qty_regs_ok = 0x0001 <= write_quantity_regs <= 0x007B
+        write_b_count_ok = byte_count == write_quantity_regs * 2
+        write_pdu_len_ok = len(recv_pdu.raw[10:]) >= byte_count
+        read_qty_regs_ok = 0x0001 <= read_quantity_regs <= 0x007B
+        # test ok flags
+        if write_qty_regs_ok and write_b_count_ok and write_pdu_len_ok and read_qty_regs_ok:
+            # allocate words list
+            regs_l = [0] * write_quantity_regs
+            # populate words list with words from rx frame
+            for i, _ in enumerate(regs_l):
+                offset = i * 2 + 10
+                regs_l[i] = recv_pdu.unpack('>H', from_byte=offset, to_byte=offset + 2)[0]
+            # data handler update request
+            ret_hdl = self.data_hdl.write_h_regs(write_start_addr, regs_l, session_data.srv_info)
+            # format regular or except response
+            if ret_hdl.ok:
+                ret_hdl = self.data_hdl.read_h_regs(read_start_addr, read_quantity_regs, session_data.srv_info)
+                if ret_hdl.ok:
+                    # build pdu
+                    send_pdu.add_pack('BB', recv_pdu.func_code, read_quantity_regs * 2)
+                    # add_pack requested words
+                    send_pdu.add_pack('>%dH' % len(ret_hdl.data), *ret_hdl.data)
+                else:
+                    send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
             else:
                 send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
         else:
