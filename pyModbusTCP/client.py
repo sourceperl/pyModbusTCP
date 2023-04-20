@@ -607,33 +607,33 @@ class ModbusClient(object):
             self._req_except_handler(e)
             return False
 
-    def write_read_multiple_registers(self, read_reg_addr, read_reg_nb, write_regs_addr, write_regs_value):
+    def write_read_multiple_registers(self, write_regs_addr, write_regs_value, read_reg_addr, read_reg_nb):
         """Modbus function WRITE_READ_MULTIPLE_REGISTERS (0x17).
 
-        :param read_reg_addr: read register address (0 to 65535)
-        :type read_reg_addr: int
-        :param read_reg_nb: number of registers to read (1 to 125)
-        :type read_reg_nb: int
         :param write_regs_addr: write registers address (0 to 65535)
         :type write_regs_addr: int
         :param write_regs_value: registers values to write
         :type write_regs_value: list
+        :param read_reg_addr: read register address (0 to 65535)
+        :type read_reg_addr: int
+        :param read_reg_nb: number of registers to read (1 to 125)
+        :type read_reg_nb: int
         :returns: registers list or None if fail
         :rtype: list of int or None
         """
         # check params
-        if not 0 <= int(read_reg_addr) <= 0xffff:
-            raise ValueError('read_reg_addr out of range (valid from 0 to 65535)')
-        if not 1 <= int(read_reg_nb) <= 125:
-            raise ValueError('read_reg_nb out of range (valid from 1 to 125)')
-        if int(read_reg_addr) + int(read_reg_nb) > 0x10000:
-            raise ValueError('read after end of modbus address space')
         if not 0 <= int(write_regs_addr) <= 0xffff:
             raise ValueError('write_regs_addr out of range (valid from 0 to 65535)')
         if not 1 <= len(write_regs_value) <= 121:
             raise ValueError('number of registers out of range (valid from 1 to 121)')
         if int(write_regs_addr) + len(write_regs_value) > 0x10000:
             raise ValueError('write after end of modbus address space')
+        if not 0 <= int(read_reg_addr) <= 0xffff:
+            raise ValueError('read_reg_addr out of range (valid from 0 to 65535)')
+        if not 1 <= int(read_reg_nb) <= 125:
+            raise ValueError('read_reg_nb out of range (valid from 1 to 125)')
+        if int(read_reg_addr) + int(read_reg_nb) > 0x10000:
+            raise ValueError('read after end of modbus address space')
         # make request
         try:
             # init PDU registers part
@@ -675,7 +675,7 @@ class ModbusClient(object):
         # handle error during request
         except ModbusClient._InternalError as e:
             self._req_except_handler(e)
-            return False
+            return
 
     def _send(self, frame):
         """Send frame over current socket.

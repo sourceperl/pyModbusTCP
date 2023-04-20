@@ -2,6 +2,7 @@ Revision history for pyModbusTCP
 
 0.2.x xxxx-xx-xx
 
+    - experimental add of write_read_multiple_registers() function (code 0x17) to client and server (thanks to tanj).
     - updated compatibility test (python versions): remove 3.5/3.6, add 3.11.
     - improve hostname validation in utils (thanks to MCXIV).
 

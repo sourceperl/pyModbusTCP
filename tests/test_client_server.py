@@ -96,7 +96,7 @@ class TestClientServer(unittest.TestCase):
             bits_l = [bool(getrandbits(1)) for _ in range(MAX_WRITABLE_BITS)]
             self.assertEqual(self.client.write_multiple_coils(addr, bits_l), True)
             self.assertEqual(self.client.read_coils(addr, len(bits_l)), bits_l)
-            # coils space: multi-write over sized
+            # coils space: oversized multi-write
             bits_l.append(bool(getrandbits(1)))
             self.assertRaises(ValueError, self.client.write_multiple_coils, addr, bits_l)
         # coils space: read/write over limit
@@ -137,16 +137,17 @@ class TestClientServer(unittest.TestCase):
             self.assertEqual(self.client.read_holding_registers(addr, len(words_l)), words_l)
             # holding registers space: multi-write at max size
             words_l = [randint(0, 0xffff) for _ in range(MAX_WRITE_READ_REGS)]
-            self.assertEqual(self.client.write_read_multiple_registers(addr, len(words_l), addr, words_l), words_l)
+            self.assertEqual(self.client.write_read_multiple_registers(addr, words_l, addr, len(words_l)), words_l)
+            self.assertEqual(self.client.read_holding_registers(addr, len(words_l)), words_l)
         # holding registers space: read/write over limit
         self.assertRaises(ValueError, self.client.read_holding_registers, 0xfff0, 17)
         self.assertRaises(ValueError, self.client.write_single_register, 0, 0x10000)
         self.assertRaises(ValueError, self.client.write_single_register, 0x10000, 0)
         self.assertRaises(ValueError, self.client.write_multiple_registers, 0x1000, [0x10000])
         self.assertRaises(ValueError, self.client.write_multiple_registers, 0xfff0, [0] * 17)
-        self.assertRaises(ValueError, self.client.write_read_multiple_registers, 0x1000, 1, 0x1000, [0x10000])
-        self.assertRaises(ValueError, self.client.write_read_multiple_registers, 0xfff0, 1, 0xfff0, [0] * 17)
-        self.assertRaises(ValueError, self.client.write_read_multiple_registers, 0xfff0, 17, 0xfff0, [0] * 1)
+        self.assertRaises(ValueError, self.client.write_read_multiple_registers, 0x1000, [0x10000], 0x1000, 1)
+        self.assertRaises(ValueError, self.client.write_read_multiple_registers, 0xfff0, [0] * 17, 0xfff0, 1)
+        self.assertRaises(ValueError, self.client.write_read_multiple_registers, 0xfff0, [0] * 1, 0xfff0, 17)
 
         # input registers
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_READABLE_REGS]:
