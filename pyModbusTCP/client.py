@@ -607,52 +607,52 @@ class ModbusClient(object):
             self._req_except_handler(e)
             return False
 
-    def write_read_multiple_registers(self, write_regs_addr, write_regs_value, read_reg_addr, read_reg_nb):
+    def write_read_multiple_registers(self, write_addr, write_values, read_addr, read_nb=1):
         """Modbus function WRITE_READ_MULTIPLE_REGISTERS (0x17).
 
-        :param write_regs_addr: write registers address (0 to 65535)
-        :type write_regs_addr: int
-        :param write_regs_value: registers values to write
-        :type write_regs_value: list
-        :param read_reg_addr: read register address (0 to 65535)
-        :type read_reg_addr: int
-        :param read_reg_nb: number of registers to read (1 to 125)
-        :type read_reg_nb: int
+        :param write_addr: write registers address (0 to 65535)
+        :type write_addr: int
+        :param write_values: registers values to write
+        :type write_values: list
+        :param read_addr: read register address (0 to 65535)
+        :type read_addr: int
+        :param read_nb: number of registers to read (1 to 125)
+        :type read_nb: int
         :returns: registers list or None if fail
         :rtype: list of int or None
         """
         # check params
-        if not 0 <= int(write_regs_addr) <= 0xffff:
-            raise ValueError('write_regs_addr out of range (valid from 0 to 65535)')
-        if not 1 <= len(write_regs_value) <= 121:
+        if not 0 <= int(write_addr) <= 0xffff:
+            raise ValueError('write_addr out of range (valid from 0 to 65535)')
+        if not 1 <= len(write_values) <= 121:
             raise ValueError('number of registers out of range (valid from 1 to 121)')
-        if int(write_regs_addr) + len(write_regs_value) > 0x10000:
+        if int(write_addr) + len(write_values) > 0x10000:
             raise ValueError('write after end of modbus address space')
-        if not 0 <= int(read_reg_addr) <= 0xffff:
-            raise ValueError('read_reg_addr out of range (valid from 0 to 65535)')
-        if not 1 <= int(read_reg_nb) <= 125:
-            raise ValueError('read_reg_nb out of range (valid from 1 to 125)')
-        if int(read_reg_addr) + int(read_reg_nb) > 0x10000:
+        if not 0 <= int(read_addr) <= 0xffff:
+            raise ValueError('read_addr out of range (valid from 0 to 65535)')
+        if not 1 <= int(read_nb) <= 125:
+            raise ValueError('read_nb out of range (valid from 1 to 125)')
+        if int(read_addr) + int(read_nb) > 0x10000:
             raise ValueError('read after end of modbus address space')
         # make request
         try:
             # init PDU registers part
             pdu_regs_part = b''
             # populate it with register values
-            for reg in write_regs_value:
+            for reg in write_values:
                 # check current register value
                 if not 0 <= int(reg) <= 0xffff:
-                    raise ValueError('regs_value list contains out of range values')
+                    raise ValueError('write_values list contains out of range values')
                 # pack register for build frame
                 pdu_regs_part += struct.pack('>H', reg)
             bytes_nb = len(pdu_regs_part)
             # concatenate PDU parts
             tx_pdu = struct.pack('>BHHHHB',
                                  WRITE_READ_MULTIPLE_REGISTERS,
-                                 read_reg_addr,
-                                 read_reg_nb,
-                                 write_regs_addr,
-                                 len(write_regs_value),
+                                 read_addr,
+                                 read_nb,
+                                 write_addr,
+                                 len(write_values),
                                  bytes_nb)
             tx_pdu += pdu_regs_part
             # make a request
@@ -663,12 +663,12 @@ class ModbusClient(object):
             # frame with regs value
             f_regs = rx_pdu[2:]
             # check rx_byte_count: buffer size must be consistent and have at least the requested number of registers
-            if byte_count < 2 * read_reg_nb or byte_count != len(f_regs):
+            if byte_count < 2 * read_nb or byte_count != len(f_regs):
                 raise ModbusClient._NetworkError(MB_RECV_ERR, 'rx byte count mismatch')
             # allocate a reg_nb size list
-            registers = [0] * read_reg_nb
+            registers = [0] * read_nb
             # fill registers list with register items
-            for i in range(read_reg_nb):
+            for i in range(read_nb):
                 registers[i] = struct.unpack('>H', f_regs[i * 2:i * 2 + 2])[0]
             # return registers list
             return registers
