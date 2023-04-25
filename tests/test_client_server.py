@@ -1,8 +1,9 @@
 import unittest
 from random import randint, getrandbits
-from pyModbusTCP.server import ModbusServer
+from pyModbusTCP.server import ModbusServer, DeviceIdentification
 from pyModbusTCP.client import ModbusClient
-from pyModbusTCP.constants import SUPPORTED_FUNCTION_CODES, EXP_NONE, EXP_ILLEGAL_FUNCTION, MB_NO_ERR, MB_EXCEPT_ERR
+from pyModbusTCP.constants import SUPPORTED_FUNCTION_CODES, \
+    EXP_NONE, EXP_ILLEGAL_FUNCTION, EXP_DATA_ADDRESS, EXP_DATA_VALUE, MB_NO_ERR, MB_EXCEPT_ERR
 
 
 # some const
@@ -23,7 +24,7 @@ class TestModbusClient(unittest.TestCase):
         self.assertRaises(ValueError, ModbusClient, host='::notip:1')
         # shouldn't raise ValueError for valid value
         try:
-            [ModbusClient(host=h) for h in ['CamelCaseHost', 'plc-1.net', 'my.good.host', 
+            [ModbusClient(host=h) for h in ['CamelCaseHost', 'plc-1.net', 'my.good.host',
                                             '42.example.com', '127.0.0.1', '::1']]
         except ValueError:
             self.fail('ModbusClient.host property raised ValueError unexpectedly')
@@ -53,14 +54,39 @@ class TestModbusClient(unittest.TestCase):
             self.fail('ModbusClient.port property raised ValueError unexpectedly')
 
     def test_misc(self):
-        # misc default values
+        # default values
         self.assertEqual(ModbusClient().debug, False)
         self.assertEqual(ModbusClient().auto_open, True)
         self.assertEqual(ModbusClient().auto_close, False)
 
 
-class TestClientServer(unittest.TestCase):
+class TestModbusServer(unittest.TestCase):
+    def test_modbus_server(self):
+        # should raise exception
+        self.assertRaises(TypeError, ModbusServer, device_id=object())
+        # shouldn't raise exception
+        try:
+            ModbusServer(device_id=DeviceIdentification())
+        except Exception as e:
+            self.fail('ModbusServer raised exception "%r" unexpectedly' % e)
 
+    def test_device_identification_class(self):
+        device_id = DeviceIdentification()
+        # should raise exception
+        with self.assertRaises(ValueError):
+            device_id['UnknownShortcut'] = 'anything'
+        # shouldn't raise exception
+        try:
+            device_id['VendorName'] = 'me'
+            device_id['UserApplicationName'] = 'unittest'
+        except Exception as e:
+            self.fail('DeviceIdentification raised exception "%r" unexpectedly' % e)
+        # check acess by shortcut name (str) or object id (int) return same value
+        self.assertEqual(device_id['VendorName'], device_id[0x00])
+        self.assertEqual(device_id['UserApplicationName'], device_id[0x06])
+
+
+class TestClientServer(unittest.TestCase):
     def setUp(self):
         # modbus server
         self.server = ModbusServer(port=5020, no_block=True)
@@ -180,6 +206,25 @@ class TestClientServer(unittest.TestCase):
         self.assertEqual(self.client.last_error, MB_NO_ERR)
         self.assertEqual(self.client.last_except, EXP_NONE)
 
+    def test_server_read_identification(self):
+        # forge a basic read identification on unconfigured server (return a data address except)
+        self.assertEqual(self.client.custom_request(b'\x2b\x0e\x01\x00'), None)
+        self.assertEqual(self.client.last_error, MB_EXCEPT_ERR)
+        self.assertEqual(self.client.last_except, EXP_DATA_ADDRESS)
+        # configure server
+        self.server.device_id = DeviceIdentification()
+        self.server.device_id['VendorName'] = 'me'
+        # forge a basic read identification on a configured server (return a valid pdu)
+        self.assertNotEqual(self.client.custom_request(b'\x2b\x0e\x01\x00'), None)
+        # forge a read identifaction request with a bad read device id code (return except 3)
+        self.assertEqual(self.client.custom_request(b'\x2b\x0e\x05\x00'), None)
+        self.assertEqual(self.client.last_error, MB_EXCEPT_ERR)
+        self.assertEqual(self.client.last_except, EXP_DATA_VALUE)
+        # read VendorName field (id #0) with individual access (read device id = 4)
+        ret_pdu = self.client.custom_request(b'\x2b\x0e\x04\x00')
+        self.assertEqual(ret_pdu, b'\x2b\x0e\x04\x83\x00\x00\x01\x00\x02me')
+        # restore default configuration
+        self.server.device_id = None
 
 if __name__ == '__main__':
     unittest.main()

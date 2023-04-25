@@ -2,7 +2,8 @@
 
 from .constants import READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS, \
     WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS, WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER, \
-    EXP_NONE, EXP_ILLEGAL_FUNCTION, EXP_DATA_ADDRESS, EXP_DATA_VALUE, WRITE_READ_MULTIPLE_REGISTERS
+    EXP_NONE, EXP_ILLEGAL_FUNCTION, EXP_DATA_ADDRESS, EXP_DATA_VALUE, WRITE_READ_MULTIPLE_REGISTERS, \
+    ENCAPSULATED_INTERFACE_TRANSPORT, MEI_TYPE_READ_DEVICE_ID, MAX_PDU_SIZE
 from .utils import test_bit, set_bit
 import logging
 import socket
@@ -351,7 +352,7 @@ class DataHandler:
         """
         # check data_bank type
         if data_bank and not isinstance(data_bank, DataBank):
-            raise ValueError('data_bank arg is invalid')
+            raise TypeError('data_bank arg is invalid')
         # public
         self.data_bank = data_bank or DataBank()
 
@@ -471,6 +472,77 @@ class DataHandler:
             return DataHandler.Return(exp_code=EXP_NONE, data=words_l)
         else:
             return DataHandler.Return(exp_code=EXP_DATA_ADDRESS)
+
+
+class DeviceIdentification:
+    """ Container class for device identification objects (MEI type 0x0E) return by function 0x2B. """
+
+    def __init__(self, values_d=None):
+        """
+        Constructor
+
+        :param values_d: Device id values as dict example: {'VendorName':'me'} or {0:'me'} (optional)
+        :type values_d: dict
+        """
+        # private
+        self._objs_d = {}
+        self._shortcuts = ('VendorName', 'ProductCode', 'MajorMinorRevision', 'VendorUrl',
+                           'ProductName', 'ModelName', 'UserApplicationName')
+        # default values
+        for name in self._shortcuts:
+            self[name] = ''
+        # process contructor args
+        if isinstance(values_d, dict):
+            for key, value in values_d.items():
+                self[key] = value
+
+    def __getitem__(self, key):
+        # access with numeric object id
+        if isinstance(key, int):
+            return self._objs_d[key]
+        # access with shortcut name
+        elif isinstance(key, str):
+            try:
+                idx = self._shortcuts.index(key)
+                return self._objs_d[idx]
+            except ValueError:
+                raise ValueError('"%s" is an unknown shortcut name' % key)
+
+    def __setitem__(self, key, value):
+        # access with numeric object id
+        if isinstance(key, int):
+            if 0xff >= key >= 0x00:
+                self._objs_d[key] = value
+            else:
+                raise ValueError('key not in valid range (0 to 255)')
+        # access with shortcut name
+        elif isinstance(key, str):
+            try:
+                idx = self._shortcuts.index(key)
+                self._objs_d[idx] = value
+            except ValueError:
+                raise ValueError('"%s" is an unknown shortcut name' % key)
+
+    def __repr__(self):
+        args_str = ''
+        for key, value in self._objs_d.items():
+            if args_str:
+                args_str += ', '
+            try:
+                key = self._shortcuts[key]
+            except IndexError:
+                pass
+            args_str += '%r:%r' % (key, value)
+        return '%s({%s})' % (self.__class__.__name__, args_str)
+
+    def items(self, start=0x00, end=0xff):
+        items_l = []
+        for obj_id in range(start, end + 1):
+            try:
+                items_l.append((obj_id, self._objs_d[obj_id]))
+            except KeyError:
+                pass
+        return items_l
 
 
 class ModbusServer:
@@ -695,7 +767,7 @@ class ModbusServer:
                 self.request.close()
 
     def __init__(self, host='localhost', port=502, no_block=False, ipv6=False,
-                 data_bank=None, data_hdl=None, ext_engine=None):
+                 data_bank=None, data_hdl=None, ext_engine=None, device_id=None):
         """Constructor
 
         Modbus server constructor.
@@ -714,6 +786,8 @@ class ModbusServer:
         :type data_hdl: DataHandler
         :param ext_engine: an external engine reference (ref to ext_engine(session_data)) (optional)
         :type ext_engine: callable
+        :param device_id: instance of DeviceIdentification class for read device identification request (optional)
+        :type device_id: DeviceIdentification
         """
         # public
         self.host = host
@@ -723,10 +797,11 @@ class ModbusServer:
         self.ext_engine = ext_engine
         self.data_hdl = None
         self.data_bank = None
+        self.device_id = None
         # if external engine is defined, ignore data_hdl and data_bank
         if ext_engine:
             if not callable(self.ext_engine):
-                raise ValueError('ext_engine must be callable')
+                raise TypeError('ext_engine must be callable')
         else:
             # default data handler is ModbusServerDataHandler or a child of it
             if data_hdl is None:
@@ -736,9 +811,15 @@ class ModbusServer:
                 if data_bank:
                     raise ValueError('when data_hdl is set, you must define data_bank in it')
             else:
-                raise ValueError('data_hdl is not a ModbusServerDataHandler (or child of it) instance')
+                raise TypeError('data_hdl is not a ModbusServerDataHandler instance')
             # data bank shortcut
             self.data_bank = self.data_hdl.data_bank
+        # device_id (read device identification objects bank)
+        if device_id is not None:
+            if isinstance(device_id, DeviceIdentification):
+                self.device_id = device_id
+            else:
+                raise TypeError('device_id is not a DeviceIdentification instance')
         # private
         self._evt_running = Event()
         self._service = None
@@ -752,7 +833,8 @@ class ModbusServer:
                           WRITE_SINGLE_REGISTER: self._write_single_register,
                           WRITE_MULTIPLE_COILS: self._write_multiple_coils,
                           WRITE_MULTIPLE_REGISTERS: self._write_multiple_registers,
-                          WRITE_READ_MULTIPLE_REGISTERS: self._write_read_multiple_registers}
+                          WRITE_READ_MULTIPLE_REGISTERS: self._write_read_multiple_registers,
+                          ENCAPSULATED_INTERFACE_TRANSPORT: self._encapsulated_interface_transport}
 
     def __repr__(self):
         r_str = 'ModbusServer(host=\'%s\', port=%d, no_block=%s, ipv6=%s, data_bank=%s, data_hdl=%s, ext_engine=%s)'
@@ -783,10 +865,10 @@ class ModbusServer:
             func = self._func_map[session_data.request.pdu.func_code]
             # check function found is callable
             if not callable(func):
-                raise ValueError
+                raise TypeError
             # call ad-hoc func
             func(session_data)
-        except (ValueError, KeyError):
+        except (TypeError, KeyError):
             session_data.response.pdu.build_except(session_data.request.pdu.func_code, EXP_ILLEGAL_FUNCTION)
 
     def _read_bits(self, session_data):
@@ -1010,6 +1092,73 @@ class ModbusServer:
                 send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
         else:
             send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
+
+    def _encapsulated_interface_transport(self, session_data):
+        """
+        Modbus Encapsulated Interface transport (MEI) endpoint (0x2B).
+
+        :param session_data: server engine data
+        :type session_data: ModbusServer.SessionData
+        """
+        # pdu alias
+        recv_pdu = session_data.request.pdu
+        send_pdu = session_data.response.pdu
+        # decode pdu
+        (mei_type,) = recv_pdu.unpack('B', from_byte=1, to_byte=2)
+        # MEI type: read device identification
+        if mei_type == MEI_TYPE_READ_DEVICE_ID:
+            # check device_id property is set (default is None)
+            if not self.device_id:
+                # return except 2 if unset
+                send_pdu.build_except(recv_pdu.func_code, EXP_DATA_ADDRESS)
+                return
+            # list of requested objects
+            req_objects_l = list()
+            (device_id_code, object_id) = recv_pdu.unpack('BB', from_byte=2, to_byte=4)
+            # get basic device id (object id from 0x00 to 0x02)
+            if device_id_code == 1:
+                start_id = object_id
+                req_objects_l.extend(self.device_id.items(start=start_id, end=0x2))
+            # get regular device id (object id 0x03 to 0x7f)
+            elif device_id_code == 2:
+                start_id = max(object_id, 0x03)
+                req_objects_l.extend(self.device_id.items(start=start_id, end=0x7f))
+            # get extended device id (object id 0x80 to 0xff)
+            elif device_id_code == 3:
+                start_id = max(object_id, 0x80)
+                req_objects_l.extend(self.device_id.items(start=start_id, end=0xff))
+            # get specific id object
+            elif device_id_code == 4:
+                start_id = object_id
+                req_objects_l.extend(self.device_id.items(start=start_id, end=start_id))
+            else:
+                # return except 3 for unknown device id code
+                send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
+                return
+            # init variables for response PDU build
+            conformity_level = 0x83
+            more_follow = 0
+            next_obj_id = 0
+            number_of_objs = 0
+            fmt_pdu_head = 'BBBBBBB'
+            # format objects data part = [[obj id, obj len, obj val], ...]
+            obj_data_part = b''
+            for req_obj_id, req_obj_value in req_objects_l:
+                fmt_obj_blk = 'BB%ss' % len(req_obj_value)
+                if struct.calcsize(fmt_pdu_head) + len(obj_data_part) + struct.calcsize(fmt_obj_blk) > MAX_PDU_SIZE:
+                    # turn on "more follow" field and set "next object id" field with next object id to ask
+                    more_follow = 0xff
+                    next_obj_id = req_obj_id
+                    break
+                number_of_objs += 1
+                obj_data_part += struct.pack(fmt_obj_blk, req_obj_id, len(req_obj_value), req_obj_value.encode())
+            # full PDU response = [PDU header] + [objects data part]
+            send_pdu.add_pack(fmt_pdu_head, recv_pdu.func_code, mei_type, device_id_code,
+                              conformity_level, more_follow, next_obj_id, number_of_objs)
+            send_pdu.raw += obj_data_part
+        else:
+            # return except 2 for an unknown MEI type
+            send_pdu.build_except(recv_pdu.func_code, EXP_DATA_ADDRESS)
 
     def start(self):
         """Start the server.
