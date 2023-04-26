@@ -477,69 +477,151 @@ class DataHandler:
 class DeviceIdentification:
     """ Container class for device identification objects (MEI type 0x0E) return by function 0x2B. """
 
-    def __init__(self, values_d=None):
+    def __init__(self, vendor_name='', product_code='', major_minor_revision='', vendor_url='',
+                 product_name='', model_name='', user_application_name='', objects_id=None):
         """
         Constructor
 
-        :param values_d: Device id values as dict example: {'VendorName':'me'} or {0:'me'} (optional)
-        :type values_d: dict
+        :param vendor_name: VendorName mandatory object
+        :type vendor_name: str
+        :param product_code: ProductCode mandatory object
+        :type product_code: str
+        :param major_minor_revision: MajorMinorRevision mandatory object
+        :type major_minor_revision: str
+        :param vendor_url: VendorUrl regular object
+        :type vendor_url: str
+        :param product_name: ProductName regular object
+        :type product_name: str
+        :param model_name: ModelName regular object
+        :type model_name: str
+        :param user_application_name: UserApplicationName regular object
+        :type user_application_name: str
+        :param objects_id: Objects values by id as dict example: {42:'value'} (optional)
+        :type objects_id: dict
         """
         # private
         self._objs_d = {}
-        self._shortcuts = ('VendorName', 'ProductCode', 'MajorMinorRevision', 'VendorUrl',
-                           'ProductName', 'ModelName', 'UserApplicationName')
+        self._objs_lock = Lock()
         # default values
-        for name in self._shortcuts:
-            self[name] = ''
-        # process contructor args
-        if isinstance(values_d, dict):
-            for key, value in values_d.items():
+        self.vendor_name = vendor_name
+        self.product_code = product_code
+        self.major_minor_revision = major_minor_revision
+        self.vendor_url = vendor_url
+        self.product_name = product_name
+        self.model_name = model_name
+        self.user_application_name = user_application_name
+        # process objects_id dict (populate no name objects)
+        if isinstance(objects_id, dict):
+            for key, value in objects_id.items():
                 self[key] = value
 
     def __getitem__(self, key):
-        # access with numeric object id
-        if isinstance(key, int):
+        if not isinstance(key, int):
+            raise TypeError('key must be an int')
+        with self._objs_lock:
             return self._objs_d[key]
-        # access with shortcut name
-        elif isinstance(key, str):
-            try:
-                idx = self._shortcuts.index(key)
-                return self._objs_d[idx]
-            except ValueError:
-                raise ValueError('"%s" is an unknown shortcut name' % key)
 
     def __setitem__(self, key, value):
-        # access with numeric object id
-        if isinstance(key, int):
-            if 0xff >= key >= 0x00:
+        if not isinstance(key, int):
+            raise TypeError('key must be an int')
+        if 0xff >= key >= 0x00:
+            if key <= 0x06:
+                if not isinstance(value, str):
+                    raise TypeError('this object is of type str only')
+            with self._objs_lock:
                 self._objs_d[key] = value
-            else:
-                raise ValueError('key not in valid range (0 to 255)')
-        # access with shortcut name
-        elif isinstance(key, str):
-            try:
-                idx = self._shortcuts.index(key)
-                self._objs_d[idx] = value
-            except ValueError:
-                raise ValueError('"%s" is an unknown shortcut name' % key)
+        else:
+            raise ValueError('key not in valid range (0 to 255)')
 
     def __repr__(self):
-        args_str = ''
-        for key, value in self._objs_d.items():
-            if args_str:
-                args_str += ', '
+        named_params = ''
+        # add named parameters
+        for prop_name in ('vendor_name', 'product_code', 'major_minor_revision', 'vendor_url',
+                       'product_name', 'model_name', 'user_application_name'):
+            prop_value = getattr(self, prop_name)
+            if prop_value:
+                if named_params:
+                    named_params += ', '
+                named_params += '%s=%r' % (prop_name, getattr(self, prop_name))
+        # add parameters without shortcut name
+        objs_id_d_str = ''
+        for _id in range(0x07, 0x100):
             try:
-                key = self._shortcuts[key]
-            except IndexError:
+                obj_id_item = '%r: %r' % (_id, self[_id])
+                if objs_id_d_str:
+                    objs_id_d_str += ', '
+                objs_id_d_str += obj_id_item
+            except KeyError:
                 pass
-            args_str += '%r:%r' % (key, value)
-        return '%s({%s})' % (self.__class__.__name__, args_str)
+        # format str: classname(params_name=value, ..., objects_id={42: 'value'})
+        class_args = named_params
+        if objs_id_d_str:
+            if class_args:
+                class_args += ', '
+            class_args += 'objects_id={%s}' % objs_id_d_str
+        return '%s(%s)' % (self.__class__.__name__, class_args)
+
+    @property
+    def vendor_name(self):
+        return self[0]
+
+    @vendor_name.setter
+    def vendor_name(self, value):
+        self[0] = value
+
+    @property
+    def product_code(self):
+        return self[1]
+
+    @product_code.setter
+    def product_code(self, value):
+        self[1] = value
+
+    @property
+    def major_minor_revision(self):
+        return self[2]
+
+    @major_minor_revision.setter
+    def major_minor_revision(self, value):
+        self[2] = value
+
+    @property
+    def vendor_url(self):
+        return self[3]
+
+    @vendor_url.setter
+    def vendor_url(self, value):
+        self[3] = value
+
+    @property
+    def product_name(self):
+        return self[4]
+
+    @product_name.setter
+    def product_name(self, value):
+        self[4] = value
+
+    @property
+    def model_name(self):
+        return self[5]
+
+    @model_name.setter
+    def model_name(self, value):
+        self[5] = value
+
+    @property
+    def user_application_name(self):
+        return self[6]
+
+    @user_application_name.setter
+    def user_application_name(self, value):
+        self[6] = value
 
     def items(self, start=0x00, end=0xff):
         items_l = []
         for obj_id in range(start, end + 1):
             try:
-                items_l.append((obj_id, self._objs_d[obj_id]))
+                items_l.append((obj_id, self[obj_id]))
             except KeyError:
                 pass
         return items_l
@@ -1144,14 +1226,20 @@ class ModbusServer:
             # format objects data part = [[obj id, obj len, obj val], ...]
             obj_data_part = b''
             for req_obj_id, req_obj_value in req_objects_l:
-                fmt_obj_blk = 'BB%ss' % len(req_obj_value)
+                if isinstance(req_obj_value, str):
+                    fmt_obj_blk = 'BB%ss' % len(req_obj_value)
+                else:
+                    fmt_obj_blk = 'BBH'
                 if struct.calcsize(fmt_pdu_head) + len(obj_data_part) + struct.calcsize(fmt_obj_blk) > MAX_PDU_SIZE:
                     # turn on "more follow" field and set "next object id" field with next object id to ask
                     more_follow = 0xff
                     next_obj_id = req_obj_id
                     break
                 number_of_objs += 1
-                obj_data_part += struct.pack(fmt_obj_blk, req_obj_id, len(req_obj_value), req_obj_value.encode())
+                if isinstance(req_obj_value, str):
+                    obj_data_part += struct.pack(fmt_obj_blk, req_obj_id, len(req_obj_value), req_obj_value.encode())
+                else:
+                    obj_data_part += struct.pack(fmt_obj_blk, req_obj_id, 2, req_obj_value)
             # full PDU response = [PDU header] + [objects data part]
             send_pdu.add_pack(fmt_pdu_head, recv_pdu.func_code, mei_type, device_id_code,
                               conformity_level, more_follow, next_obj_id, number_of_objs)

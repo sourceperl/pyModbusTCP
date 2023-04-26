@@ -73,18 +73,24 @@ class TestModbusServer(unittest.TestCase):
     def test_device_identification_class(self):
         device_id = DeviceIdentification()
         # should raise exception
-        with self.assertRaises(ValueError):
-            device_id['UnknownShortcut'] = 'anything'
+        with self.assertRaises(TypeError):
+            device_id['obj_name'] = 'anything'
+        with self.assertRaises(TypeError):
+            device_id[0] = 0xfeed
         # shouldn't raise exception
         try:
-            device_id['VendorName'] = 'me'
-            device_id['UserApplicationName'] = 'unittest'
+            device_id.vendor_name = 'me'
+            device_id.user_application_name = 'unittest'
+            device_id[0x80] = 'feed'
+            device_id[0x80] = 0xfeed
         except Exception as e:
             self.fail('DeviceIdentification raised exception "%r" unexpectedly' % e)
-        # check acess by shortcut name (str) or object id (int) return same value
-        self.assertEqual(device_id['VendorName'], device_id[0x00])
-        self.assertEqual(device_id['UserApplicationName'], device_id[0x06])
-
+        # check access by shortcut name (str) or object id (int) return same value
+        self.assertEqual(device_id.vendor_name, device_id[0x00])
+        self.assertEqual(device_id.user_application_name, device_id[0x06])
+        # test __repr__
+        device_id = DeviceIdentification(product_name='server', objects_id={42: 'this'})
+        self.assertEqual(repr(device_id), "DeviceIdentification(product_name='server', objects_id={42: 'this'})")
 
 class TestClientServer(unittest.TestCase):
     def setUp(self):
@@ -213,16 +219,20 @@ class TestClientServer(unittest.TestCase):
         self.assertEqual(self.client.last_except, EXP_DATA_ADDRESS)
         # configure server
         self.server.device_id = DeviceIdentification()
-        self.server.device_id['VendorName'] = 'me'
+        self.server.device_id.vendor_name = 'me'
+        self.server.device_id[0x80]= 0xc0de
         # forge a basic read identification on a configured server (return a valid pdu)
         self.assertNotEqual(self.client.custom_request(b'\x2b\x0e\x01\x00'), None)
         # forge a read identifaction request with a bad read device id code (return except 3)
         self.assertEqual(self.client.custom_request(b'\x2b\x0e\x05\x00'), None)
         self.assertEqual(self.client.last_error, MB_EXCEPT_ERR)
         self.assertEqual(self.client.last_except, EXP_DATA_VALUE)
-        # read VendorName field (id #0) with individual access (read device id = 4)
+        # read VendorName str object(id #0) with individual access (read device id = 4)
         ret_pdu = self.client.custom_request(b'\x2b\x0e\x04\x00')
         self.assertEqual(ret_pdu, b'\x2b\x0e\x04\x83\x00\x00\x01\x00\x02me')
+        # read private int object(id #0x80) with individual access (read device id = 4)
+        ret_pdu = self.client.custom_request(b'\x2b\x0e\x04\x80')
+        self.assertEqual(ret_pdu, b'\x2b\x0e\x04\x83\x00\x00\x01\x80\x02\xde\xc0')
         # restore default configuration
         self.server.device_id = None
 
