@@ -67,7 +67,7 @@ class ModbusClient:
         self._debug = None
         self._auto_open = None
         self._auto_close = None
-        self._sock = None  # socket
+        self._sock = socket.socket()
         self._transaction_id = 0  # MBAP transaction ID
         self._version = VERSION  # this package version number
         self._last_error = MB_NO_ERR  # last error code
@@ -242,10 +242,7 @@ class ModbusClient:
     @property
     def is_open(self):
         """Get current status of the TCP connection (True = open)."""
-        if self._sock:
-            return self._sock.fileno() > 0
-        else:
-            return False
+        return self._sock.fileno() > 0
 
     def open(self):
         """Connect to modbus server (open TCP connection).
@@ -289,8 +286,7 @@ class ModbusClient:
 
     def close(self):
         """Close current TCP connection."""
-        if self._sock:
-            self._sock.close()
+        self._sock.close()
 
     def custom_request(self, pdu):
         """Send a custom modbus request.
