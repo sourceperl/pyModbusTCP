@@ -709,13 +709,8 @@ class ModbusClient:
                 pdu_regs_part += struct.pack('>H', reg)
             bytes_nb = len(pdu_regs_part)
             # concatenate PDU parts
-            tx_pdu = struct.pack('>BHHHHB',
-                                 WRITE_READ_MULTIPLE_REGISTERS,
-                                 read_addr,
-                                 read_nb,
-                                 write_addr,
-                                 len(write_values),
-                                 bytes_nb)
+            tx_pdu = struct.pack('>BHHHHB', WRITE_READ_MULTIPLE_REGISTERS, read_addr, read_nb,
+                                 write_addr, len(write_values), bytes_nb)
             tx_pdu += pdu_regs_part
             # make a request
             rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=4)

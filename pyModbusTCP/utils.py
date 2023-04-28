@@ -319,5 +319,5 @@ def valid_host(host_str):
     if host_str[-1] == '.':
         host_str = host_str[:-1]
     # validate each part of the hostname (part_1.part_2.part_3)
-    re_part_ok = re.compile('(?!-)[a-z\d-]{1,63}(?<!-)$', re.IGNORECASE)
+    re_part_ok = re.compile('(?!-)[a-z0-9-]{1,63}(?<!-)$', re.IGNORECASE)
     return all(re_part_ok.match(part) for part in host_str.split('.'))

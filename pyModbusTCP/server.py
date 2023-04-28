@@ -536,7 +536,7 @@ class DeviceIdentification:
         named_params = ''
         # add named parameters
         for prop_name in ('vendor_name', 'product_code', 'major_minor_revision', 'vendor_url',
-                       'product_name', 'model_name', 'user_application_name'):
+                          'product_name', 'model_name', 'user_application_name'):
             prop_value = getattr(self, prop_name)
             if prop_value:
                 if named_params:
