@@ -477,26 +477,26 @@ class DataHandler:
 class DeviceIdentification:
     """ Container class for device identification objects (MEI type 0x0E) return by function 0x2B. """
 
-    def __init__(self, vendor_name='', product_code='', major_minor_revision='', vendor_url='',
-                 product_name='', model_name='', user_application_name='', objects_id=None):
+    def __init__(self, vendor_name=b'', product_code=b'', major_minor_revision=b'', vendor_url=b'',
+                 product_name=b'', model_name=b'', user_application_name=b'', objects_id=None):
         """
         Constructor
 
         :param vendor_name: VendorName mandatory object
-        :type vendor_name: str
+        :type vendor_name: bytes
         :param product_code: ProductCode mandatory object
-        :type product_code: str
+        :type product_code: bytes
         :param major_minor_revision: MajorMinorRevision mandatory object
-        :type major_minor_revision: str
+        :type major_minor_revision: bytes
         :param vendor_url: VendorUrl regular object
-        :type vendor_url: str
+        :type vendor_url: bytes
         :param product_name: ProductName regular object
-        :type product_name: str
+        :type product_name: bytes
         :param model_name: ModelName regular object
-        :type model_name: str
+        :type model_name: bytes
         :param user_application_name: UserApplicationName regular object
-        :type user_application_name: str
-        :param objects_id: Objects values by id as dict example: {42:'value'} (optional)
+        :type user_application_name: bytes
+        :param objects_id: Objects values by id as dict example: {42:b'value'} (optional)
         :type objects_id: dict
         """
         # private
@@ -525,9 +525,8 @@ class DeviceIdentification:
         if not isinstance(key, int):
             raise TypeError('key must be an int')
         if 0xff >= key >= 0x00:
-            if key <= 0x06:
-                if not isinstance(value, str):
-                    raise TypeError('this object is of type str only')
+            if not isinstance(value, bytes):
+                raise TypeError('this object is of type bytes only')
             with self._objs_lock:
                 self._objs_d[key] = value
         else:
@@ -1226,20 +1225,19 @@ class ModbusServer:
             # format objects data part = [[obj id, obj len, obj val], ...]
             obj_data_part = b''
             for req_obj_id, req_obj_value in req_objects_l:
-                if isinstance(req_obj_value, str):
-                    fmt_obj_blk = 'BB%ss' % len(req_obj_value)
-                else:
-                    fmt_obj_blk = 'BBH'
+                fmt_obj_blk = 'BB%ss' % len(req_obj_value)
+                # skip if the next add to data part will exceed max PDU size of modbus frame
                 if struct.calcsize(fmt_pdu_head) + len(obj_data_part) + struct.calcsize(fmt_obj_blk) > MAX_PDU_SIZE:
                     # turn on "more follow" field and set "next object id" field with next object id to ask
                     more_follow = 0xff
                     next_obj_id = req_obj_id
                     break
-                number_of_objs += 1
+                # ensure bytes type for object value
                 if isinstance(req_obj_value, str):
-                    obj_data_part += struct.pack(fmt_obj_blk, req_obj_id, len(req_obj_value), req_obj_value.encode())
-                else:
-                    obj_data_part += struct.pack(fmt_obj_blk, req_obj_id, 2, req_obj_value)
+                    req_obj_value = req_obj_value.encode()
+                # add current object to data part
+                obj_data_part += struct.pack(fmt_obj_blk, req_obj_id, len(req_obj_value), req_obj_value)
+                number_of_objs += 1
             # full PDU response = [PDU header] + [objects data part]
             send_pdu.add_pack(fmt_pdu_head, recv_pdu.func_code, mei_type, device_id_code,
                               conformity_level, more_follow, next_obj_id, number_of_objs)

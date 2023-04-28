@@ -1,18 +1,28 @@
 """ pyModbusTCP Client """
 
+from dataclasses import dataclass, field
 from .constants import READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS, \
     WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS, WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER, \
-    WRITE_READ_MULTIPLE_REGISTERS, EXP_TXT, EXP_DETAILS, EXP_NONE, \
+    WRITE_READ_MULTIPLE_REGISTERS, ENCAPSULATED_INTERFACE_TRANSPORT, MEI_TYPE_READ_DEVICE_ID, \
     MB_ERR_TXT, MB_NO_ERR, MB_SEND_ERR, MB_RECV_ERR, MB_TIMEOUT_ERR, MB_EXCEPT_ERR, MB_CONNECT_ERR, \
-    MB_SOCK_CLOSE_ERR, VERSION
+    EXP_TXT, EXP_DETAILS, EXP_NONE, MB_SOCK_CLOSE_ERR, VERSION
 from .utils import byte_length, set_bit, valid_host
+import random
 import socket
 from socket import AF_UNSPEC, SOCK_STREAM
 import struct
-import random
+from typing import Dict
 
 
-class ModbusClient(object):
+@dataclass
+class DeviceIdentificationRequest:
+    conformity_level: int = 0
+    more_follows: int = 0
+    next_object_id: int = 0
+    objs_by_id: Dict[int, bytes] = field(default_factory=lambda: {})
+
+
+class ModbusClient:
     """Modbus TCP client"""
 
     class _InternalError(Exception):
@@ -453,6 +463,58 @@ class ModbusClient(object):
                 registers[i] = struct.unpack('>H', f_regs[i * 2:i * 2 + 2])[0]
             # return registers list
             return registers
+        # handle error during request
+        except ModbusClient._InternalError as e:
+            self._req_except_handler(e)
+            return None
+
+    def read_device_identification(self, read_id=1, object_id=0):
+        """Modbus function Read Device Identification (0x2B/0x0E).
+
+        :param read_id: register address (default is 1)
+        :type read_id: int
+        :param object_id: number of registers to read (default is 0)
+        :type object_id: int
+        :returns: a DeviceIdentificationRequest instance with data or None if fail
+        :rtype: DeviceIdentificationRequest or None
+        """
+        # check params
+        if not 1 <= int(read_id) <= 4:
+            raise ValueError('read_id out of range (valid from 1 to 4)')
+        if not 0 <= int(object_id) <= 0xff:
+            raise ValueError('object_id out of range (valid from 0 to 255)')
+        # make request
+        try:
+            tx_pdu = struct.pack('BBBB', ENCAPSULATED_INTERFACE_TRANSPORT, MEI_TYPE_READ_DEVICE_ID, read_id, object_id)
+            rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=7)
+            # init request for populate it
+            request = DeviceIdentificationRequest()
+            # extract fields
+            # field "conformity level"
+            request.conformity_level = rx_pdu[3]
+            # field "more follows"
+            request.more_follows = rx_pdu[4]
+            # field "next object id"
+            request.next_object_id = rx_pdu[5]
+            # field "number of objects"
+            nb_of_objs = rx_pdu[6]
+            # decode [[obj_id, obj_len, obj_value],...]
+            pdu_offset = 7
+            for _ in range(nb_of_objs):
+                # parse object PDU bytes
+                try:
+                    obj_id = rx_pdu[pdu_offset]
+                    obj_len = rx_pdu[pdu_offset+1]
+                    obj_value = rx_pdu[pdu_offset+2:pdu_offset+2+obj_len]
+                except IndexError:
+                    raise ModbusClient._NetworkError(MB_RECV_ERR, 'rx byte count mismatch')
+                if obj_len != len(obj_value):
+                    raise ModbusClient._NetworkError(MB_RECV_ERR, 'rx byte count mismatch')
+                # set offset to next object
+                pdu_offset += 2 + obj_len
+                # add result to request list
+                request.objs_by_id[obj_id] = obj_value
+            return request
         # handle error during request
         except ModbusClient._InternalError as e:
             self._req_except_handler(e)

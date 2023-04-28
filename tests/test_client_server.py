@@ -1,7 +1,8 @@
 import unittest
-from random import randint, getrandbits
+from random import randint, getrandbits, choice
+from string import ascii_letters
 from pyModbusTCP.server import ModbusServer, DeviceIdentification
-from pyModbusTCP.client import ModbusClient
+from pyModbusTCP.client import ModbusClient, DeviceIdentificationRequest
 from pyModbusTCP.constants import SUPPORTED_FUNCTION_CODES, \
     EXP_NONE, EXP_ILLEGAL_FUNCTION, EXP_DATA_ADDRESS, EXP_DATA_VALUE, MB_NO_ERR, MB_EXCEPT_ERR
 
@@ -76,21 +77,21 @@ class TestModbusServer(unittest.TestCase):
         with self.assertRaises(TypeError):
             device_id['obj_name'] = 'anything'
         with self.assertRaises(TypeError):
-            device_id[0] = 0xfeed
+            device_id[0] = 42
         # shouldn't raise exception
         try:
-            device_id.vendor_name = 'me'
-            device_id.user_application_name = 'unittest'
-            device_id[0x80] = 'feed'
-            device_id[0x80] = 0xfeed
+            device_id.vendor_name = b'me'
+            device_id.user_application_name = b'unittest'
+            device_id[0x80] = b'feed'
         except Exception as e:
             self.fail('DeviceIdentification raised exception "%r" unexpectedly' % e)
         # check access by shortcut name (str) or object id (int) return same value
         self.assertEqual(device_id.vendor_name, device_id[0x00])
         self.assertEqual(device_id.user_application_name, device_id[0x06])
         # test __repr__
-        device_id = DeviceIdentification(product_name='server', objects_id={42: 'this'})
-        self.assertEqual(repr(device_id), "DeviceIdentification(product_name='server', objects_id={42: 'this'})")
+        device_id = DeviceIdentification(product_name=b'server', objects_id={42: b'this'})
+        self.assertEqual(repr(device_id), "DeviceIdentification(product_name=b'server', objects_id={42: b'this'})")
+
 
 class TestClientServer(unittest.TestCase):
     def setUp(self):
@@ -219,8 +220,8 @@ class TestClientServer(unittest.TestCase):
         self.assertEqual(self.client.last_except, EXP_DATA_ADDRESS)
         # configure server
         self.server.device_id = DeviceIdentification()
-        self.server.device_id.vendor_name = 'me'
-        self.server.device_id[0x80]= 0xc0de
+        self.server.device_id.vendor_name = b'me'
+        self.server.device_id[0x80] = b'\xc0\xde'
         # forge a basic read identification on a configured server (return a valid pdu)
         self.assertNotEqual(self.client.custom_request(b'\x2b\x0e\x01\x00'), None)
         # forge a read identifaction request with a bad read device id code (return except 3)
@@ -232,9 +233,43 @@ class TestClientServer(unittest.TestCase):
         self.assertEqual(ret_pdu, b'\x2b\x0e\x04\x83\x00\x00\x01\x00\x02me')
         # read private int object(id #0x80) with individual access (read device id = 4)
         ret_pdu = self.client.custom_request(b'\x2b\x0e\x04\x80')
-        self.assertEqual(ret_pdu, b'\x2b\x0e\x04\x83\x00\x00\x01\x80\x02\xde\xc0')
+        self.assertEqual(ret_pdu, b'\x2b\x0e\x04\x83\x00\x00\x01\x80\x02\xc0\xde')
         # restore default configuration
         self.server.device_id = None
+
+    def test_client_read_identification(self):
+        # configure server
+        name = ''.join(choice(ascii_letters) for _ in range(16)).encode()
+        p_code = ''.join(choice(ascii_letters) for _ in range(32)).encode()
+        rev = b'v2.0'
+        url = b'https://github.com/sourceperl/pyModbusTCP'
+        self.server.device_id = DeviceIdentification(vendor_name=name, product_code=p_code,
+                                                     major_minor_revision=rev, vendor_url=url)
+        # read_device_identification: read basic device identification (stream access)
+        req = self.client.read_device_identification()
+        if not req:
+            self.fail('ModbusClient.read_device_identification() method failed unexpectedly')
+        else:
+            # return DeviceIdentificationRequest on success
+            self.assertEqual(isinstance(req, DeviceIdentificationRequest), True)
+            # check read data
+            self.assertEqual(len(req.objs_by_id), 3)
+            self.assertEqual(req.objs_by_id.get(0), name)
+            self.assertEqual(req.objs_by_id.get(1), p_code)
+            self.assertEqual(req.objs_by_id.get(2), rev)
+        # read_device_identification: read one specific identification object (individual access)
+        req = self.client.read_device_identification(read_id=4, object_id=3)
+        if not req:
+            self.fail('ModbusClient.read_device_identification() method failed unexpectedly')
+        else:
+            # return DeviceIdentificationRequest on success
+            self.assertEqual(isinstance(req, DeviceIdentificationRequest), True)
+            # check read data
+            self.assertEqual(len(req.objs_by_id), 1)
+            self.assertEqual(req.objs_by_id.get(3), url)
+        # restore default configuration
+        self.server.device_id = None
+
 
 if __name__ == '__main__':
     unittest.main()
