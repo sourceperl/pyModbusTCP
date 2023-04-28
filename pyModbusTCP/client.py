@@ -684,18 +684,15 @@ class ModbusClient:
         :rtype: list of int or None
         """
         # check params
-        if not 0 <= int(write_addr) <= 0xffff:
-            raise ValueError('write_addr out of range (valid from 0 to 65535)')
-        if not 1 <= len(write_values) <= 121:
-            raise ValueError('number of registers out of range (valid from 1 to 121)')
-        if int(write_addr) + len(write_values) > 0x10000:
-            raise ValueError('write after end of modbus address space')
-        if not 0 <= int(read_addr) <= 0xffff:
-            raise ValueError('read_addr out of range (valid from 0 to 65535)')
-        if not 1 <= int(read_nb) <= 125:
-            raise ValueError('read_nb out of range (valid from 1 to 125)')
-        if int(read_addr) + int(read_nb) > 0x10000:
-            raise ValueError('read after end of modbus address space')
+        check_l = [(not 0 <= int(write_addr) <= 0xffff, 'write_addr out of range (valid from 0 to 65535)'),
+                   (not 1 <= len(write_values) <= 121, 'number of registers out of range (valid from 1 to 121)'),
+                   (int(write_addr) + len(write_values) > 0x10000, 'write after end of modbus address space'),
+                   (not 0 <= int(read_addr) <= 0xffff, 'read_addr out of range (valid from 0 to 65535)'),
+                   (not 1 <= int(read_nb) <= 125, 'read_nb out of range (valid from 1 to 125)'),
+                   (int(read_addr) + int(read_nb) > 0x10000, 'read after end of modbus address space'), ]
+        for err, msg in check_l:
+            if err:
+                raise ValueError(msg)
         # make request
         try:
             # init PDU registers part
