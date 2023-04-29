@@ -15,7 +15,7 @@ from typing import Dict
 
 
 @dataclass
-class DeviceIdentificationRequest:
+class DeviceIdentificationResponse:
     conformity_level: int = 0
     more_follows: int = 0
     next_object_id: int = 0
@@ -483,15 +483,15 @@ class ModbusClient:
         try:
             tx_pdu = struct.pack('BBBB', ENCAPSULATED_INTERFACE_TRANSPORT, MEI_TYPE_READ_DEVICE_ID, read_id, object_id)
             rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=7)
-            # init request for populate it
-            request = DeviceIdentificationRequest()
+            # init response object for populate it
+            response = DeviceIdentificationResponse()
             # extract fields
             # field "conformity level"
-            request.conformity_level = rx_pdu[3]
+            response.conformity_level = rx_pdu[3]
             # field "more follows"
-            request.more_follows = rx_pdu[4]
+            response.more_follows = rx_pdu[4]
             # field "next object id"
-            request.next_object_id = rx_pdu[5]
+            response.next_object_id = rx_pdu[5]
             # field "number of objects"
             nb_of_objs = rx_pdu[6]
             # decode [[obj_id, obj_len, obj_value],...]
@@ -509,8 +509,8 @@ class ModbusClient:
                 # set offset to next object
                 pdu_offset += 2 + obj_len
                 # add result to request list
-                request.objs_by_id[obj_id] = obj_value
-            return request
+                response.objs_by_id[obj_id] = obj_value
+            return response
         # handle error during request
         except ModbusClient._InternalError as e:
             self._req_except_handler(e)
