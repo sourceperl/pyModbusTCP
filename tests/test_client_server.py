@@ -2,7 +2,7 @@ import unittest
 from random import randint, getrandbits, choice
 from string import ascii_letters
 from pyModbusTCP.server import ModbusServer, DeviceIdentification
-from pyModbusTCP.client import ModbusClient, DeviceIdentificationRequest
+from pyModbusTCP.client import ModbusClient, DeviceIdentificationResponse
 from pyModbusTCP.constants import SUPPORTED_FUNCTION_CODES, \
     EXP_NONE, EXP_ILLEGAL_FUNCTION, EXP_DATA_ADDRESS, EXP_DATA_VALUE, MB_NO_ERR, MB_EXCEPT_ERR
 
@@ -251,7 +251,7 @@ class TestClientServer(unittest.TestCase):
             self.fail('ModbusClient.read_device_identification() method failed unexpectedly')
         else:
             # return DeviceIdentificationRequest on success
-            self.assertEqual(isinstance(req, DeviceIdentificationRequest), True)
+            self.assertEqual(isinstance(req, DeviceIdentificationResponse), True)
             # check read data
             self.assertEqual(len(req.objs_by_id), 3)
             self.assertEqual(req.objs_by_id.get(0), name)
@@ -263,7 +263,7 @@ class TestClientServer(unittest.TestCase):
             self.fail('ModbusClient.read_device_identification() method failed unexpectedly')
         else:
             # return DeviceIdentificationRequest on success
-            self.assertEqual(isinstance(req, DeviceIdentificationRequest), True)
+            self.assertEqual(isinstance(req, DeviceIdentificationResponse), True)
             # check read data
             self.assertEqual(len(req.objs_by_id), 1)
             self.assertEqual(req.objs_by_id.get(3), url)
