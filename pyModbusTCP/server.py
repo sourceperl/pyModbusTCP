@@ -870,37 +870,33 @@ class ModbusServer:
         :param device_id: instance of DeviceIdentification class for read device identification request (optional)
         :type device_id: DeviceIdentification
         """
+        # check data_bank
+        if data_bank and not isinstance(data_bank, DataBank):
+            raise TypeError('data_bank is not a DataBank instance')
+        # check data_hdl
+        if data_hdl and not isinstance(data_hdl, DataHandler):
+            raise TypeError('data_hdl is not a DataHandler instance')
+        # data_hdl and data_bank can't be set at same time
+        if data_hdl and data_bank:
+            raise ValueError('when data_hdl is set, you must define data_bank in it')
+        # check ext_engine
+        if ext_engine and not callable(ext_engine):
+            raise TypeError('ext_engine must be callable')
+        # check device_id
+        if device_id and not isinstance(device_id, DeviceIdentification):
+            raise TypeError('device_id is not a DeviceIdentification instance')
         # public
         self.host = host
         self.port = port
         self.no_block = no_block
         self.ipv6 = ipv6
         self.ext_engine = ext_engine
-        self.data_hdl = None
-        self.data_bank = None
-        self.device_id = None
-        # if external engine is defined, ignore data_hdl and data_bank
-        if ext_engine:
-            if not callable(self.ext_engine):
-                raise TypeError('ext_engine must be callable')
-        else:
-            # default data handler is ModbusServerDataHandler or a child of it
-            if data_hdl is None:
-                self.data_hdl = DataHandler(data_bank=data_bank)
-            elif isinstance(data_hdl, DataHandler):
-                self.data_hdl = data_hdl
-                if data_bank:
-                    raise ValueError('when data_hdl is set, you must define data_bank in it')
-            else:
-                raise TypeError('data_hdl is not a ModbusServerDataHandler instance')
-            # data bank shortcut
-            self.data_bank = self.data_hdl.data_bank
-        # device_id (read device identification objects bank)
-        if device_id is not None:
-            if isinstance(device_id, DeviceIdentification):
-                self.device_id = device_id
-            else:
-                raise TypeError('device_id is not a DeviceIdentification instance')
+        # First, internal data_bank will be linked to an external data handler if defined.
+        # If not, an external or internal DataBank will be used instead.
+        # "virtual mode" will be set for save memory if an external engine is in use.
+        self.data_bank = data_hdl.data_bank if data_hdl else data_bank or DataBank(virtual_mode=bool(ext_engine))
+        self.data_hdl = data_hdl or DataHandler(data_bank=self.data_bank)
+        self.device_id = device_id
         # private
         self._evt_running = Event()
         self._service = None
