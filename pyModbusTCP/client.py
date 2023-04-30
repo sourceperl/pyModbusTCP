@@ -467,12 +467,12 @@ class ModbusClient:
     def read_device_identification(self, read_id=1, object_id=0):
         """Modbus function Read Device Identification (0x2B/0x0E).
 
-        :param read_id: register address (default is 1)
+        :param read_id: read device id code (valid from 1 to 4, default is 1)
         :type read_id: int
-        :param object_id: number of registers to read (default is 0)
+        :param object_id: object id (default is 0)
         :type object_id: int
-        :returns: a DeviceIdentificationRequest instance with data or None if fail
-        :rtype: DeviceIdentificationRequest or None
+        :returns: a DeviceIdentificationResponse instance with the data or None if the requests fails
+        :rtype: DeviceIdentificationResponse or None
         """
         # check params
         if not 1 <= int(read_id) <= 4:
