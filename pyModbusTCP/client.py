@@ -16,7 +16,17 @@ from typing import Dict
 
 @dataclass
 class DeviceIdentificationResponse:
-    """Modbus TCP client function read_device_identification() response struct."""
+    """Modbus TCP client function read_device_identification() response struct.
+    
+    :param conformity_level: this represents supported access and object type
+    :type conformity_level: int
+    :param more_follows: for stream request can be set to 0xff if other objects are available (0x00 in other cases)
+    :type more_follows: int
+    :param next_object_id: the next object id to be asked by following transaction
+    :type next_object_id: int
+    :param objs_by_id: a dictionary with requested object (dict keys are object id as int)
+    :type objs_by_id: dict
+    """
     conformity_level: int = 0
     more_follows: int = 0
     next_object_id: int = 0

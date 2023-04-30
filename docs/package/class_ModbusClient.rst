@@ -17,3 +17,4 @@ class DeviceIdentificationResponse
 
 .. autoclass:: DeviceIdentificationResponse
    :members:
+   :special-members: __init__
