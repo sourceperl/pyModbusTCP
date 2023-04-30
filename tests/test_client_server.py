@@ -246,27 +246,27 @@ class TestClientServer(unittest.TestCase):
         self.server.device_id = DeviceIdentification(vendor_name=name, product_code=p_code,
                                                      major_minor_revision=rev, vendor_url=url)
         # read_device_identification: read basic device identification (stream access)
-        req = self.client.read_device_identification()
-        if not req:
+        dev_id_resp = self.client.read_device_identification()
+        if not dev_id_resp:
             self.fail('ModbusClient.read_device_identification() method failed unexpectedly')
         else:
-            # return DeviceIdentificationRequest on success
-            self.assertEqual(isinstance(req, DeviceIdentificationResponse), True)
+            # return DeviceIdentificationResponse on success
+            self.assertEqual(isinstance(dev_id_resp, DeviceIdentificationResponse), True)
             # check read data
-            self.assertEqual(len(req.objs_by_id), 3)
-            self.assertEqual(req.objs_by_id.get(0), name)
-            self.assertEqual(req.objs_by_id.get(1), p_code)
-            self.assertEqual(req.objs_by_id.get(2), rev)
+            self.assertEqual(len(dev_id_resp.objs_by_id), 3)
+            self.assertEqual(dev_id_resp.objs_by_id.get(0), name)
+            self.assertEqual(dev_id_resp.objs_by_id.get(1), p_code)
+            self.assertEqual(dev_id_resp.objs_by_id.get(2), rev)
         # read_device_identification: read one specific identification object (individual access)
-        req = self.client.read_device_identification(read_id=4, object_id=3)
-        if not req:
+        dev_id_resp = self.client.read_device_identification(read_id=4, object_id=3)
+        if not dev_id_resp:
             self.fail('ModbusClient.read_device_identification() method failed unexpectedly')
         else:
-            # return DeviceIdentificationRequest on success
-            self.assertEqual(isinstance(req, DeviceIdentificationResponse), True)
+            # return DeviceIdentificationResponse on success
+            self.assertEqual(isinstance(dev_id_resp, DeviceIdentificationResponse), True)
             # check read data
-            self.assertEqual(len(req.objs_by_id), 1)
-            self.assertEqual(req.objs_by_id.get(3), url)
+            self.assertEqual(len(dev_id_resp.objs_by_id), 1)
+            self.assertEqual(dev_id_resp.objs_by_id.get(3), url)
         # restore default configuration
         self.server.device_id = None
 
