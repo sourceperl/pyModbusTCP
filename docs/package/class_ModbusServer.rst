@@ -26,3 +26,10 @@ class DataBank
 .. autoclass:: DataBank
    :members:
    :special-members: __init__
+
+class DeviceIdentification
+--------------------------
+
+.. autoclass:: DeviceIdentification
+   :members:
+   :special-members: __init__

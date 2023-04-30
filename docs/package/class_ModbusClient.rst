@@ -11,3 +11,9 @@ class ModbusClient
 .. autoclass:: ModbusClient
    :members:
    :special-members: __init__
+
+class DeviceIdentificationResponse
+----------------------------------
+
+.. autoclass:: DeviceIdentificationResponse
+   :members:
