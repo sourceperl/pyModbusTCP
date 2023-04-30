@@ -16,6 +16,7 @@ from typing import Dict
 
 @dataclass
 class DeviceIdentificationResponse:
+    """Modbus TCP client function read_device_identification() response struct."""
     conformity_level: int = 0
     more_follows: int = 0
     next_object_id: int = 0
@@ -23,7 +24,7 @@ class DeviceIdentificationResponse:
 
 
 class ModbusClient:
-    """Modbus TCP client"""
+    """Modbus TCP client."""
 
     class _InternalError(Exception):
         pass
@@ -464,24 +465,25 @@ class ModbusClient:
             self._req_except_handler(e)
             return None
 
-    def read_device_identification(self, read_id=1, object_id=0):
+    def read_device_identification(self, read_code=1, object_id=0):
         """Modbus function Read Device Identification (0x2B/0x0E).
 
-        :param read_id: read device id code (valid from 1 to 4, default is 1)
-        :type read_id: int
-        :param object_id: object id (default is 0)
+        :param read_code: read device id code, 1 to 3 for respectively: basic, regular and extended stream access,
+            4 for one specific identification object individual access (default is 1)
+        :type read_code: int
+        :param object_id: object id of the first object to obtain (default is 0)
         :type object_id: int
         :returns: a DeviceIdentificationResponse instance with the data or None if the requests fails
         :rtype: DeviceIdentificationResponse or None
         """
         # check params
-        if not 1 <= int(read_id) <= 4:
-            raise ValueError('read_id out of range (valid from 1 to 4)')
+        if not 1 <= int(read_code) <= 4:
+            raise ValueError('read_code out of range (valid from 1 to 4)')
         if not 0 <= int(object_id) <= 0xff:
             raise ValueError('object_id out of range (valid from 0 to 255)')
         # make request
         try:
-            tx_pdu = struct.pack('BBBB', ENCAPSULATED_INTERFACE_TRANSPORT, MEI_TYPE_READ_DEVICE_ID, read_id, object_id)
+            tx_pdu = struct.pack('BBBB', ENCAPSULATED_INTERFACE_TRANSPORT, MEI_TYPE_READ_DEVICE_ID, read_code, object_id)
             rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=7)
             # init response object for populate it
             response = DeviceIdentificationResponse()

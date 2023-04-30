@@ -258,7 +258,7 @@ class TestClientServer(unittest.TestCase):
             self.assertEqual(dev_id_resp.objs_by_id.get(1), p_code)
             self.assertEqual(dev_id_resp.objs_by_id.get(2), rev)
         # read_device_identification: read one specific identification object (individual access)
-        dev_id_resp = self.client.read_device_identification(read_id=4, object_id=3)
+        dev_id_resp = self.client.read_device_identification(read_code=4, object_id=3)
         if not dev_id_resp:
             self.fail('ModbusClient.read_device_identification() method failed unexpectedly')
         else:
