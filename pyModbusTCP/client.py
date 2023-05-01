@@ -24,13 +24,41 @@ class DeviceIdentificationResponse:
     :type more_follows: int
     :param next_object_id: the next object id to be asked by following transaction
     :type next_object_id: int
-    :param objs_by_id: a dictionary with requested object (dict keys are object id as int)
-    :type objs_by_id: dict
+    :param objects_by_id: a dictionary with requested object (dict keys are object id as int)
+    :type objects_by_id: dict
     """
     conformity_level: int = 0
     more_follows: int = 0
     next_object_id: int = 0
-    objs_by_id: Dict[int, bytes] = field(default_factory=lambda: {})
+    objects_by_id: Dict[int, bytes] = field(default_factory=lambda: {})
+
+    @property
+    def vendor_name(self):
+        return self.objects_by_id.get(0x00)
+
+    @property
+    def product_code(self):
+        return self.objects_by_id.get(0x01)
+
+    @property
+    def major_minor_revision(self):
+        return self.objects_by_id.get(0x02)
+
+    @property
+    def vendor_url(self):
+        return self.objects_by_id.get(0x03)
+
+    @property
+    def product_name(self):
+        return self.objects_by_id.get(0x04)
+
+    @property
+    def model_name(self):
+        return self.objects_by_id.get(0x05)
+
+    @property
+    def user_application_name(self):
+        return self.objects_by_id.get(0x06)
 
 
 class ModbusClient:
@@ -521,7 +549,7 @@ class ModbusClient:
                 # set offset to next object
                 pdu_offset += 2 + obj_len
                 # add result to request list
-                response.objs_by_id[obj_id] = obj_value
+                response.objects_by_id[obj_id] = obj_value
             return response
         # handle error during request
         except ModbusClient._InternalError as e:

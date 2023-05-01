@@ -239,12 +239,12 @@ class TestClientServer(unittest.TestCase):
 
     def test_client_read_identification(self):
         # configure server
-        name = ''.join(choice(ascii_letters) for _ in range(16)).encode()
-        p_code = ''.join(choice(ascii_letters) for _ in range(32)).encode()
-        rev = b'v2.0'
-        url = b'https://github.com/sourceperl/pyModbusTCP'
-        self.server.device_id = DeviceIdentification(vendor_name=name, product_code=p_code,
-                                                     major_minor_revision=rev, vendor_url=url)
+        vendor_name = ''.join(choice(ascii_letters) for _ in range(16)).encode()
+        product_code = ''.join(choice(ascii_letters) for _ in range(32)).encode()
+        maj_min_rev = b'v2.0'
+        vendor_url = b'https://github.com/sourceperl/pyModbusTCP'
+        self.server.device_id = DeviceIdentification(vendor_name=vendor_name, product_code=product_code,
+                                                     major_minor_revision=maj_min_rev, vendor_url=vendor_url)
         # read_device_identification: read basic device identification (stream access)
         dev_id_resp = self.client.read_device_identification()
         if not dev_id_resp:
@@ -253,10 +253,17 @@ class TestClientServer(unittest.TestCase):
             # return DeviceIdentificationResponse on success
             self.assertEqual(isinstance(dev_id_resp, DeviceIdentificationResponse), True)
             # check read data
-            self.assertEqual(len(dev_id_resp.objs_by_id), 3)
-            self.assertEqual(dev_id_resp.objs_by_id.get(0), name)
-            self.assertEqual(dev_id_resp.objs_by_id.get(1), p_code)
-            self.assertEqual(dev_id_resp.objs_by_id.get(2), rev)
+            self.assertEqual(len(dev_id_resp.objects_by_id), 3)
+            self.assertEqual(dev_id_resp.vendor_name, vendor_name)
+            self.assertEqual(dev_id_resp.objects_by_id.get(0), vendor_name)
+            self.assertEqual(dev_id_resp.product_code, product_code)
+            self.assertEqual(dev_id_resp.objects_by_id.get(1), product_code)
+            self.assertEqual(dev_id_resp.major_minor_revision, maj_min_rev)
+            self.assertEqual(dev_id_resp.objects_by_id.get(2), maj_min_rev)
+            self.assertEqual(dev_id_resp.vendor_url, None)
+            self.assertEqual(dev_id_resp.product_name, None)
+            self.assertEqual(dev_id_resp.model_name, None)
+            self.assertEqual(dev_id_resp.user_application_name, None)
         # read_device_identification: read one specific identification object (individual access)
         dev_id_resp = self.client.read_device_identification(read_code=4, object_id=3)
         if not dev_id_resp:
@@ -265,8 +272,9 @@ class TestClientServer(unittest.TestCase):
             # return DeviceIdentificationResponse on success
             self.assertEqual(isinstance(dev_id_resp, DeviceIdentificationResponse), True)
             # check read data
-            self.assertEqual(len(dev_id_resp.objs_by_id), 1)
-            self.assertEqual(dev_id_resp.objs_by_id.get(3), url)
+            self.assertEqual(len(dev_id_resp.objects_by_id), 1)
+            self.assertEqual(dev_id_resp.vendor_url, vendor_url)
+            self.assertEqual(dev_id_resp.objects_by_id.get(3), vendor_url)
         # restore default configuration
         self.server.device_id = None
 
