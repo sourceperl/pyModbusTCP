@@ -265,7 +265,7 @@ class DataBank:
         """
         # secure extract of data from list used by server thread
         with self._i_regs_lock:
-            if (address >= 0) and (address + number <= len(self._h_regs)):
+            if (address >= 0) and (address + number <= len(self._i_regs)):
                 return self._i_regs[address: number + address]
             else:
                 return None
@@ -285,7 +285,7 @@ class DataBank:
         word_list = [int(w) & 0xffff for w in word_list]
         # ensure atomic update of internal data
         with self._i_regs_lock:
-            if (address >= 0) and (address + len(word_list) <= len(self._h_regs)):
+            if (address >= 0) and (address + len(word_list) <= len(self._i_regs)):
                 for offset, c_value in enumerate(word_list):
                     c_address = address + offset
                     if self._i_regs[c_address] != c_value:
