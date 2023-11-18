@@ -2,10 +2,11 @@ Revision history for pyModbusTCP
 
 0.2.1.dev xxxx-xx-xx
 
+    - fix ModbusServer: wrong check of input registers length in DataBank (thanks to monsieurvor).
+    - improve hostname validation in utils (thanks to MCXIV and schmocker).
     - experimental add of read_device_identification() (over modbus encapsulated interface) to client and server.
     - experimental add of write_read_multiple_registers() function (code 0x17) to client and server (thanks to tanj).
     - updated compatibility test (python versions): remove 3.5/3.6, add 3.11.
-    - improve hostname validation in utils (thanks to MCXIV and schmocker).
 
 0.2.0 2022-06-05
 
