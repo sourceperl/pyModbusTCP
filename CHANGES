@@ -1,6 +1,6 @@
 Revision history for pyModbusTCP
 
-0.2.1.dev xxxx-xx-xx
+0.2.1.dev0 xxxx-xx-xx
 
     - fix ModbusServer: wrong check of input registers length in DataBank (thanks to monsieurvor).
     - improve hostname validation in utils (thanks to MCXIV and schmocker).
