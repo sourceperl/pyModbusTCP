@@ -3,24 +3,24 @@
 Here we use the twine tool to do the job, see [Twine setup](#twine-setup) to add and configure it.
 
 
-### build archive
+### build archive and wheel
 
 ```bash
-sudo python setup.py sdist
+python setup.py sdist bdist_wheel
 ```
 
-### upload archive to PyPi test server
+### upload archive and wheel to PyPi test server
 
 ```bash
-twine upload dist/pyModbusTCP-x.x.x.tar.gz -r pypitest
+twine upload dist/pyModbusTCP-x.x.x* -r pypitest
 ```
 
 Check result at https://test.pypi.org/project/pyModbusTCP/.
 
-### upload archive to PyPi server
+### upload archive and wheel to PyPi server
 
 ```bash
-twine upload dist/pyModbusTCP-x.x.x.tar.gz -r pypi
+twine upload dist/pyModbusTCP-x.x.x* -r pypi
 ```
 
 Check result at https://pypi.python.org/project/pyModbusTCP/.
