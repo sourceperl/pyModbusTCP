@@ -3,18 +3,19 @@
 *After set this, we can directly test effect of editing a package files
 without need to fully reinstall it.*
 
-Turn on develop mode (add current package files to python path):
+Turn on develop mode (add current package files to python path) in a virtual env:
 
 ```bash
-sudo python3 setup.py develop
+python -m venv venv && source venv/bin/activate
+pip install --editable .
 ```
 Turn off:
 
 ```bash
-sudo python3 setup.py develop --uninstall
+pip uninstall pyModbusTCP
 ```
 View the current python path:
 
 ```bash
-python3 -c 'import sys; print(sys.path)'
+python -c 'import sys; print(sys.path)'
 ```
