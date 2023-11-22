@@ -47,13 +47,13 @@ index-servers =
 
 [pypi]
 repository: https://upload.pypi.org/legacy/
-username: myname
-password: mypwd
+username: __token__
+password: mytoken
 
 [pypitest]
 repository: https://test.pypi.org/legacy/
-username: myname
-password: mypwd
+username: __token__
+password: mytoken
 EOT
 ```
 Update it with valid credentials.
