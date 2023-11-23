@@ -23,6 +23,6 @@ python:
 
 # Additional formats to be build (in addition to default HTML)
 formats:
-  - epud
+  - epub
   - htmlzip
   - pdf
