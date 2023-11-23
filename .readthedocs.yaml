@@ -20,3 +20,9 @@ sphinx:
 python:
   install:
   - requirements: docs/requirements.txt
+
+# Additional formats to be build (in addition to default HTML)
+formats:
+  - epud
+  - htmlzip
+  - pdf
