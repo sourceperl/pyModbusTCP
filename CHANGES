@@ -1,5 +1,8 @@
 Revision history for pyModbusTCP
 
+0.2.x xxxx-xx-xx
+    - updated compatibility test (python versions): add 3.12.
+
 0.2.1 2023-11-21
 
     - fix ModbusServer: wrong check of input registers length in DataBank (thanks to monsieurvor).

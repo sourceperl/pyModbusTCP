@@ -15,7 +15,7 @@ Since version 0.1.0, a server is also available for test purpose only (don't use
 Tests
 -----
 
-The module is currently test on Python 3.7, 3.8, 3.9, 3.10 and 3.11.
+The module is currently test on Python 3.7, 3.8, 3.9, 3.10, 3.11 and 3.12.
 
 For Linux, Mac OS and Windows.
 
