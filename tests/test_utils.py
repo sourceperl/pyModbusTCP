@@ -1,3 +1,5 @@
+""" Test of pyModbusTCP.utils """
+
 import unittest
 import math
 from pyModbusTCP.utils import \
@@ -7,8 +9,10 @@ from pyModbusTCP.utils import \
 
 
 class TestUtils(unittest.TestCase):
+    """ pyModbusTCP.utils function test class. """
+
     def test_get_bits_from_int(self):
-        # test get_bits_from_int() and short alias int2bits()
+        """Test function get_bits_from_int and it's short alias int2bits."""
         # default bits list size is 16
         self.assertEqual(len(get_bits_from_int(0)), 16)
         # for 8 size (positional arg)
@@ -22,6 +26,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(int2bits(6, 4), [False, True, True, False])
 
     def test_ieee(self):
+        """Test IEEE functions: decode_ieee and encode_ieee."""
         # test IEEE NaN
         self.assertTrue(math.isnan(decode_ieee(0x7fc00000)))
         self.assertEqual(encode_ieee(float('nan')), 0x7fc00000)
@@ -47,7 +52,7 @@ class TestUtils(unittest.TestCase):
         self.assertAlmostEqual(encode_ieee(planck, double=True), pla_64)
 
     def test_word_list_to_long(self):
-        # test word_list_to_long() and short alias words2longs()
+        """Test function word_list_to_long and it 's short alias words2longs."""
         # empty list, return empty list
         self.assertEqual(word_list_to_long([]), [])
         # if len of list is odd ignore last value
@@ -69,7 +74,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(words2longs(l2*2, **nobig64), [0xbeefcafefacefeed]*2)
 
     def test_long_list_to_word(self):
-        # test long_list_to_word() and short alias longs2words()
+        """Test function long_list_to_word and short alias longs2words."""
         # empty list, return empty list
         self.assertEqual(long_list_to_word([]), [])
         # test convert with big and little endian
@@ -98,7 +103,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(longs2words(l3*4, **nobig64), l3_nobig64*4)
 
     def test_get_2comp(self):
-        # test get_2comp() and short alias twos_c()
+        """Test function get_2comp and it's short alias twos_c."""
         # check if ValueError exception is raised
         self.assertRaises(ValueError, get_2comp, 0x10000)
         self.assertRaises(ValueError, get_2comp, -0x8001)
@@ -124,7 +129,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(twos_c(-89435, val_size=32), 0xfffea2a5)
 
     def test_get_list_2comp(self):
-        # test get_list_2comp() and short alias twos_c_l()
+        """Test get_list_2comp and it's short alias twos_c_l."""
         self.assertEqual(get_list_2comp([0x8000], 16), [-32768])
         in_l = [0x8000, 0xffff, 0x0042]
         out_l = [-0x8000, -0x0001, 0x42]

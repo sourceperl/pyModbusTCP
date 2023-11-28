@@ -1,3 +1,5 @@
+""" Test of pyModbusTCP client-server interaction """
+
 import unittest
 from random import randint, getrandbits, choice
 from string import ascii_letters
@@ -15,86 +17,11 @@ MAX_READABLE_BITS = 2000
 MAX_WRITABLE_BITS = 1968
 
 
-class TestModbusClient(unittest.TestCase):
-    def test_host(self):
-        # default value
-        self.assertEqual(ModbusClient().host, 'localhost')
-        # should raise ValueError for bad value
-        self.assertRaises(ValueError, ModbusClient, host='wrong@host')
-        self.assertRaises(ValueError, ModbusClient, host='::notip:1')
-        # shouldn't raise ValueError for valid value
-        try:
-            [ModbusClient(host=h) for h in ['CamelCaseHost', 'plc-1.net', 'my.good.host',
-                                            '_test.example.com', '42.example.com',
-                                            '127.0.0.1', '::1']]
-        except ValueError:
-            self.fail('ModbusClient.host property raised ValueError unexpectedly')
-
-    def test_port(self):
-        # default value
-        self.assertEqual(ModbusClient().port, 502)
-        # should raise an exception for bad value
-        self.assertRaises(TypeError, ModbusClient, port='amsterdam')
-        self.assertRaises(ValueError, ModbusClient, port=-1)
-        # shouldn't raise ValueError for valid value
-        try:
-            ModbusClient(port=5020)
-        except ValueError:
-            self.fail('ModbusClient.port property raised ValueError unexpectedly')
-
-    def test_unit_id(self):
-        # default value
-        self.assertEqual(ModbusClient().unit_id, 1)
-        # should raise an exception for bad unit_id
-        self.assertRaises(TypeError, ModbusClient, unit_id='@')
-        self.assertRaises(ValueError, ModbusClient, unit_id=420)
-        # shouldn't raise ValueError for valid value
-        try:
-            ModbusClient(port=5020)
-        except ValueError:
-            self.fail('ModbusClient.port property raised ValueError unexpectedly')
-
-    def test_misc(self):
-        # default values
-        self.assertEqual(ModbusClient().debug, False)
-        self.assertEqual(ModbusClient().auto_open, True)
-        self.assertEqual(ModbusClient().auto_close, False)
-
-
-class TestModbusServer(unittest.TestCase):
-    def test_modbus_server(self):
-        # should raise exception
-        self.assertRaises(TypeError, ModbusServer, device_id=object())
-        # shouldn't raise exception
-        try:
-            ModbusServer(device_id=DeviceIdentification())
-        except Exception as e:
-            self.fail('ModbusServer raised exception "%r" unexpectedly' % e)
-
-    def test_device_identification_class(self):
-        device_id = DeviceIdentification()
-        # should raise exception
-        with self.assertRaises(TypeError):
-            device_id['obj_name'] = 'anything'
-        with self.assertRaises(TypeError):
-            device_id[0] = 42
-        # shouldn't raise exception
-        try:
-            device_id.vendor_name = b'me'
-            device_id.user_application_name = b'unittest'
-            device_id[0x80] = b'feed'
-        except Exception as e:
-            self.fail('DeviceIdentification raised exception "%r" unexpectedly' % e)
-        # check access by shortcut name (str) or object id (int) return same value
-        self.assertEqual(device_id.vendor_name, device_id[0x00])
-        self.assertEqual(device_id.user_application_name, device_id[0x06])
-        # test __repr__
-        device_id = DeviceIdentification(product_name=b'server', objects_id={42: b'this'})
-        self.assertEqual(repr(device_id), "DeviceIdentification(product_name=b'server', objects_id={42: b'this'})")
-
-
 class TestClientServer(unittest.TestCase):
+    """ Client-server interaction test class. """
+
     def setUp(self):
+        """Init client-server for test_xxx methods."""
         # modbus server
         self.server = ModbusServer(port=5020, no_block=True)
         self.server.start()
@@ -103,11 +30,12 @@ class TestClientServer(unittest.TestCase):
         self.client.open()
 
     def tearDown(self):
+        """Cleanning after test."""
         self.client.close()
         self.server.stop()
 
     def test_default_startup_values(self):
-        # some read at random address to test startup values
+        """Some read at random address to test startup values."""
         for addr in [randint(0, 0xffff) for _ in range(100)]:
             self.assertEqual(self.client.read_coils(addr), [False])
             self.assertEqual(self.client.read_discrete_inputs(addr), [False])
@@ -115,6 +43,7 @@ class TestClientServer(unittest.TestCase):
             self.assertEqual(self.client.read_input_registers(addr), [0])
 
     def test_read_write_requests(self):
+        """Test standard modbus functions."""
         # coils
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_WRITABLE_BITS]:
             # coils space: single read/write
@@ -200,7 +129,7 @@ class TestClientServer(unittest.TestCase):
         self.assertRaises(ValueError, self.client.read_input_registers, 0xfff0, 17)
 
     def test_server_strength(self):
-        # test server responses to abnormal events
+        """Test server responses to abnormal events."""
         # unsupported function codes must return except EXP_ILLEGAL_FUNCTION
         for func_code in range(0x80):
             if func_code not in SUPPORTED_FUNCTION_CODES:
@@ -214,6 +143,7 @@ class TestClientServer(unittest.TestCase):
         self.assertEqual(self.client.last_except, EXP_NONE)
 
     def test_server_read_identification(self):
+        """Test server device indentification function."""
         # forge a basic read identification on unconfigured server (return a data address except)
         self.assertEqual(self.client.custom_request(b'\x2b\x0e\x01\x00'), None)
         self.assertEqual(self.client.last_error, MB_EXCEPT_ERR)
@@ -238,6 +168,7 @@ class TestClientServer(unittest.TestCase):
         self.server.device_id = None
 
     def test_client_read_identification(self):
+        """Test client device indentification function."""
         # configure server
         vendor_name = ''.join(choice(ascii_letters) for _ in range(16)).encode()
         product_code = ''.join(choice(ascii_letters) for _ in range(32)).encode()
