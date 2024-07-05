@@ -171,7 +171,7 @@ class DataBank:
         """
         # secure extract of data from list used by server thread
         with self._d_inputs_lock:
-            if (address >= 0) and (address + number <= len(self._coils)):
+            if (address >= 0) and (address + number <= len(self._d_inputs)):
                 return self._d_inputs[address: number + address]
             else:
                 return None
@@ -191,7 +191,7 @@ class DataBank:
         bit_list = [bool(b) for b in bit_list]
         # ensure atomic update of internal data
         with self._d_inputs_lock:
-            if (address >= 0) and (address + len(bit_list) <= len(self._coils)):
+            if (address >= 0) and (address + len(bit_list) <= len(self._d_inputs)):
                 for offset, b_value in enumerate(bit_list):
                     self._d_inputs[address + offset] = b_value
             else:
