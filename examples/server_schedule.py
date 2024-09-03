@@ -14,9 +14,11 @@ $ sudo ./server_schedule.py --host 0.0.0.0
 
 import argparse
 import time
-from pyModbusTCP.server import ModbusServer
+
 # need https://github.com/dbader/schedule
 import schedule
+
+from pyModbusTCP.server import ModbusServer
 
 
 def alive_word_job():

@@ -9,7 +9,8 @@ Exit with ctrl+c.
 """
 
 import time
-from threading import Thread, Lock
+from threading import Lock, Thread
+
 from pyModbusTCP.client import ModbusClient
 
 SERVER_HOST = "localhost"

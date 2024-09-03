@@ -1,5 +1,10 @@
 Revision history for pyModbusTCP
 
+0.3.0.dev0 xxxx-xx-xx
+
+    - pyModbusTCP.client: now use the standard logging method as in the server part.
+    - ModbusClient: debug flag is removed (see examples/client_debug.py).
+
 0.2.2 2024-07-31
 
     - fix ModbusServer: wrong check of discrete inputs length in DataBank (thanks to OTnetproj).

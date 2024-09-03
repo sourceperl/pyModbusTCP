@@ -3,10 +3,11 @@
 """Write 4 coils to True, wait 2s, write False and redo it."""
 
 import time
+
 from pyModbusTCP.client import ModbusClient
 
 # init
-c = ModbusClient(host='localhost', port=502, auto_open=True, debug=False)
+c = ModbusClient(host='localhost', port=502, auto_open=True)
 bit = True
 
 # main loop

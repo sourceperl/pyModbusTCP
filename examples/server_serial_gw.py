@@ -16,13 +16,16 @@ import argparse
 import logging
 import queue
 import struct
-from threading import Event
 from queue import Queue
-from pyModbusTCP.server import ModbusServer
-from pyModbusTCP.utils import crc16
-from pyModbusTCP.constants import EXP_GATEWAY_PATH_UNAVAILABLE, EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
+from threading import Event
+
 # need sudo pip install pyserial==3.4
 from serial import Serial, serialutil
+
+from pyModbusTCP.constants import (EXP_GATEWAY_PATH_UNAVAILABLE,
+                                   EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND)
+from pyModbusTCP.server import ModbusServer
+from pyModbusTCP.utils import crc16
 
 
 # some class

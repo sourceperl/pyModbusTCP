@@ -50,7 +50,6 @@ class TestModbusClient(unittest.TestCase):
 
     def test_misc(self):
         """Check of misc default values."""
-        self.assertEqual(ModbusClient().debug, False)
         self.assertEqual(ModbusClient().auto_open, True)
         self.assertEqual(ModbusClient().auto_close, False)
 

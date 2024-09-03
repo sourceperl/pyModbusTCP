@@ -3,8 +3,8 @@
 """ How-to add float support to ModbusClient. """
 
 from pyModbusTCP.client import ModbusClient
-from pyModbusTCP.utils import encode_ieee, decode_ieee, \
-                              long_list_to_word, word_list_to_long
+from pyModbusTCP.utils import (decode_ieee, encode_ieee, long_list_to_word,
+                               word_list_to_long)
 
 
 class FloatModbusClient(ModbusClient):

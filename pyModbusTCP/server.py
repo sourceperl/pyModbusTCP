@@ -1,19 +1,24 @@
 """ pyModbusTCP Server """
 
-from .constants import READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS, \
-    WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS, WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER, \
-    EXP_NONE, EXP_ILLEGAL_FUNCTION, EXP_DATA_ADDRESS, EXP_DATA_VALUE, WRITE_READ_MULTIPLE_REGISTERS, \
-    ENCAPSULATED_INTERFACE_TRANSPORT, MEI_TYPE_READ_DEVICE_ID, MAX_PDU_SIZE
-from .utils import test_bit, set_bit
 import logging
 import socket
-from socketserver import BaseRequestHandler, ThreadingTCPServer
 import struct
-from threading import Lock, Thread, Event
+from socketserver import BaseRequestHandler, ThreadingTCPServer
+from threading import Event, Lock, Thread
 from warnings import warn
 
+from .constants import (ENCAPSULATED_INTERFACE_TRANSPORT, EXP_DATA_ADDRESS,
+                        EXP_DATA_VALUE, EXP_ILLEGAL_FUNCTION, EXP_NONE,
+                        MAX_PDU_SIZE, MEI_TYPE_READ_DEVICE_ID, READ_COILS,
+                        READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS,
+                        READ_INPUT_REGISTERS, WRITE_MULTIPLE_COILS,
+                        WRITE_MULTIPLE_REGISTERS,
+                        WRITE_READ_MULTIPLE_REGISTERS, WRITE_SINGLE_COIL,
+                        WRITE_SINGLE_REGISTER)
+from .utils import set_bit, test_bit
+
 # add a logger for pyModbusTCP.server
-logger = logging.getLogger('pyModbusTCP.server')
+logger = logging.getLogger(__name__)
 
 
 class DataBank:
@@ -825,7 +830,7 @@ class ModbusServer:
             session_data = ModbusServer.SessionData()
             (session_data.client.address, session_data.client.port) = self.request.getpeername()
             # debug message
-            logger.debug('Accept new connection from %r', session_data.client)
+            logger.debug('accept new connection from %r', session_data.client)
             try:
                 # main processing loop
                 while True:

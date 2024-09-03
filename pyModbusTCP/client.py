@@ -1,23 +1,34 @@
 """ pyModbusTCP Client """
 
-from dataclasses import dataclass, field
-from .constants import READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS, \
-    WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS, WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER, \
-    WRITE_READ_MULTIPLE_REGISTERS, ENCAPSULATED_INTERFACE_TRANSPORT, MEI_TYPE_READ_DEVICE_ID, \
-    MB_ERR_TXT, MB_NO_ERR, MB_SEND_ERR, MB_RECV_ERR, MB_TIMEOUT_ERR, MB_EXCEPT_ERR, MB_CONNECT_ERR, \
-    EXP_TXT, EXP_DETAILS, EXP_NONE, MB_SOCK_CLOSE_ERR, VERSION
-from .utils import byte_length, set_bit, valid_host
+import logging
 import random
 import socket
-from socket import AF_UNSPEC, SOCK_STREAM
 import struct
+from binascii import hexlify
+from dataclasses import dataclass, field
+from socket import AF_UNSPEC, SOCK_STREAM
 from typing import Dict
+
+from .constants import (ENCAPSULATED_INTERFACE_TRANSPORT, EXP_DETAILS,
+                        EXP_NONE, EXP_TXT, MB_CONNECT_ERR, MB_ERR_TXT,
+                        MB_EXCEPT_ERR, MB_NO_ERR, MB_RECV_ERR, MB_SEND_ERR,
+                        MB_SOCK_CLOSE_ERR, MB_TIMEOUT_ERR,
+                        MEI_TYPE_READ_DEVICE_ID, READ_COILS,
+                        READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS,
+                        READ_INPUT_REGISTERS, VERSION, WRITE_MULTIPLE_COILS,
+                        WRITE_MULTIPLE_REGISTERS,
+                        WRITE_READ_MULTIPLE_REGISTERS, WRITE_SINGLE_COIL,
+                        WRITE_SINGLE_REGISTER)
+from .utils import byte_length, set_bit, valid_host
+
+# add a logger for pyModbusTCP.client
+logger = logging.getLogger(__name__)
 
 
 @dataclass
 class DeviceIdentificationResponse:
     """Modbus TCP client function read_device_identification() response struct.
-    
+
     :param conformity_level: this represents supported access and object type
     :type conformity_level: int
     :param more_follows: for stream request can be set to 0xff if other objects are available (0x00 in other cases)
@@ -76,8 +87,7 @@ class ModbusClient:
         def __init__(self, code):
             self.code = code
 
-    def __init__(self, host='localhost', port=502, unit_id=1, timeout=30.0,
-                 debug=False, auto_open=True, auto_close=False):
+    def __init__(self, host='localhost', port=502, unit_id=1, timeout=30.0, auto_open=True, auto_close=False):
         """Constructor.
 
         :param host: hostname or IPv4/IPv6 address server address
@@ -88,8 +98,6 @@ class ModbusClient:
         :type unit_id: int
         :param timeout: socket timeout in seconds
         :type timeout: float
-        :param debug: debug state
-        :type debug: bool
         :param auto_open: auto TCP connect
         :type auto_open: bool
         :param auto_close: auto TCP close)
@@ -103,7 +111,6 @@ class ModbusClient:
         self._port = None
         self._unit_id = None
         self._timeout = None
-        self._debug = None
         self._auto_open = None
         self._auto_close = None
         self._sock = socket.socket()
@@ -117,13 +124,12 @@ class ModbusClient:
         self.port = port
         self.unit_id = unit_id
         self.timeout = timeout
-        self.debug = debug
         self.auto_open = auto_open
         self.auto_close = auto_close
 
     def __repr__(self):
-        r_str = 'ModbusClient(host=\'%s\', port=%d, unit_id=%d, timeout=%.2f, debug=%s, auto_open=%s, auto_close=%s)'
-        r_str %= (self.host, self.port, self.unit_id, self.timeout, self.debug, self.auto_open, self.auto_close)
+        r_str = 'ModbusClient(host=\'%s\', port=%d, unit_id=%d, timeout=%.2f, auto_open=%s, auto_close=%s)'
+        r_str %= (self.host, self.port, self.unit_id, self.timeout, self.auto_open, self.auto_close)
         return r_str
 
     def __del__(self):
@@ -247,16 +253,6 @@ class ModbusClient:
             return
         # can't be set
         raise ValueError('timeout can\'t be set (valid between 0 and 3600)')
-
-    @property
-    def debug(self):
-        """Get or set the debug flag (True = turn on)."""
-        return self._debug
-
-    @debug.setter
-    def debug(self, value):
-        # enforce type
-        self._debug = bool(value)
 
     @property
     def auto_open(self):
@@ -521,7 +517,8 @@ class ModbusClient:
             raise ValueError('object_id out of range (valid from 0 to 255)')
         # make request
         try:
-            tx_pdu = struct.pack('BBBB', ENCAPSULATED_INTERFACE_TRANSPORT, MEI_TYPE_READ_DEVICE_ID, read_code, object_id)
+            tx_pdu = struct.pack('BBBB', ENCAPSULATED_INTERFACE_TRANSPORT,
+                                 MEI_TYPE_READ_DEVICE_ID, read_code, object_id)
             rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=7)
             # init response object for populate it
             response = DeviceIdentificationResponse()
@@ -800,7 +797,7 @@ class ModbusClient:
         # send frame with error check
         self._send(tx_frame)
         # debug
-        self._debug_dump('Tx', tx_frame)
+        self._on_tx_rx(frame=tx_frame, tx=True)
 
     def _recv(self, size):
         """Receive data over current socket.
@@ -856,7 +853,7 @@ class ModbusClient:
         # checking error status of fields
         if f_transaction_err or f_protocol_err or f_length_err or f_unit_id_err:
             self.close()
-            self._debug_dump('Rx', rx_mbap)
+            self._on_tx_rx(frame=rx_mbap, tx=False)
             raise ModbusClient._NetworkError(MB_RECV_ERR, 'MBAP checking error')
         # recv PDU
         rx_pdu = self._recv_all(f_length - 1)
@@ -864,7 +861,7 @@ class ModbusClient:
         if self.auto_close:
             self.close()
         # dump frame
-        self._debug_dump('Rx', rx_mbap + rx_pdu)
+        self._on_tx_rx(frame=rx_mbap + rx_pdu, tx=False)
         # body decode
         # check PDU length for global minimal frame (an except frame: func code + exp code)
         if len(rx_pdu) < 2:
@@ -929,45 +926,29 @@ class ModbusClient:
         if isinstance(_except, ModbusClient._ModbusExcept):
             self._last_error = MB_EXCEPT_ERR
             self._last_except = _except.code
-            self._debug_msg('modbus exception (code %d "%s")' % (self.last_except, self.last_except_as_txt))
+            self._debug_msg(f'modbus exception (code {self.last_except} "{self.last_error_as_txt}")')
 
-    def _debug_msg(self, msg):
-        """Print debug message if debug mode is on.
+    def _debug_msg(self, msg: str):
+        logger.debug(f'({self.host}:{self.port}:{self.unit_id}) {msg}')
 
-        :param msg: debug message
-        :type msg: str
-        """
-        if self.debug:
-            print(msg)
-
-    def _debug_dump(self, label, frame):
-        """Print debug dump if debug mode is on.
-
-        :param label: head label
-        :type label: str
-        :param frame: modbus frame
-        :type frame: bytes
-        """
-        if self.debug:
-            self._pretty_dump(label, frame)
-
-    @staticmethod
-    def _pretty_dump(label, frame):
+    def _on_tx_rx(self, frame: bytes, tx: bool):
         """Dump a modbus frame.
 
         modbus/TCP format: [MBAP] PDU
 
-        :param label: head label
-        :type label: str
         :param frame: modbus frame
         :type frame: bytes
+        :param tx: True on tx, False on rx
+        :type tx: bool
         """
-        # split data string items to a list of hex value
-        dump = ['%02X' % c for c in frame]
-        # format message
-        dump_mbap = ' '.join(dump[0:7])
-        dump_pdu = ' '.join(dump[7:])
-        msg = '[%s] %s' % (dump_mbap, dump_pdu)
-        # print result
-        print(label)
-        print(msg)
+        # format a log message
+        type_s = 'Tx' if tx else 'Rx'
+        mbap_s = hexlify(frame[0:7], sep=' ').upper().decode()
+        pdu_s = hexlify(frame[7:], sep=' ').upper().decode()
+        self._debug_msg(f'{type_s} [{mbap_s}] {pdu_s}')
+        # notify user
+        self.on_tx_rx(frame=frame, tx=tx)
+
+    def on_tx_rx(self, frame: bytes, tx: bool):
+        """Call for each Tx/Rx for user purposes."""
+        pass

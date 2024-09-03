@@ -129,30 +129,29 @@ See http://en.wikipedia.org/wiki/Modbus for full table.
 |            | Read Device Identification   | 43            | :py:meth:`~pyModbusTCP.client.ModbusClient.read_device_identification`   |
 +------------+------------------------------+---------------+--------------------------------------------------------------------------+
 
-ModbusClient: debug mode
-------------------------
+ModbusClient: how-to debug
+--------------------------
 
-If need, you can enable a debug mode for ModbusClient like this::
+If need, you can enable debug log for ModbusClient like this::
+
+    import logging
 
     from pyModbusTCP.client import ModbusClient
-    c = ModbusClient(host="localhost", port=502, debug=True)
 
-or::
+    # set debug level for pyModbusTCP.client to see frame exchanges
+    logging.basicConfig()
+    logging.getLogger('pyModbusTCP.client').setLevel(logging.DEBUG)
 
-    c.debug = True
+    c = ModbusClient(host="localhost", port=502)
 
-when debug is enable all debug message is print on console and you can see
-modbus frame::
+when debug level is set, all debug messages are displayed on the console::
 
-    c.read_holding_registers(0, 4)
+    c.read_coils(0)
 
-print::
+will give us the following result::
 
-    Tx
-    [E7 53 00 00 00 06 01] 03 00 00 00 04
-    Rx
-    [E7 53 00 00 00 0B 01] 03 08 00 00 00 6F 00 00 00 00
-    [0, 111, 0, 0]
+    DEBUG:pyModbusTCP.client:(localhost:502:1) Tx [8F 8A 00 00 00 06 01] 01 00 00 00 01
+    DEBUG:pyModbusTCP.client:(localhost:502:1) Rx [8F 8A 00 00 00 04 01] 01 01 00
 
 
 utils module: Modbus data mangling

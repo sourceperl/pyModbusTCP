@@ -13,11 +13,13 @@ $ ./client_serial_gw.py /dev/ttyUSB0 --baudrate 115200 --address 30
 import argparse
 import logging
 import struct
-from pyModbusTCP.client import ModbusClient
-from pyModbusTCP.utils import crc16
-from pyModbusTCP.constants import EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
+
 # need sudo pip3 install pyserial==3.4
 from serial import Serial, serialutil
+
+from pyModbusTCP.client import ModbusClient
+from pyModbusTCP.constants import EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
+from pyModbusTCP.utils import crc16
 
 
 # some class

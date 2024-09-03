@@ -3,10 +3,11 @@
 """ Read 10 coils and print result on stdout. """
 
 import time
+
 from pyModbusTCP.client import ModbusClient
 
 # init modbus client
-c = ModbusClient(host='localhost', port=502, auto_open=True, debug=False)
+c = ModbusClient(host='localhost', port=502, auto_open=True)
 
 # main read loop
 while True:

@@ -12,8 +12,9 @@ Run this as root to listen on TCP priviliged ports (<= 1024).
 """
 
 import argparse
-from pyModbusTCP.server import ModbusServer, DataBank
 from datetime import datetime
+
+from pyModbusTCP.server import DataBank, ModbusServer
 
 
 class MyDataBank(DataBank):

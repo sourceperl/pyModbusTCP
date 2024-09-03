@@ -3,11 +3,11 @@
 """ Read 10 holding registers and print result on stdout. """
 
 import time
+
 from pyModbusTCP.client import ModbusClient
 
-
 # init modbus client
-c = ModbusClient(debug=False, auto_open=True)
+c = ModbusClient(auto_open=True)
 
 # main read loop
 while True:

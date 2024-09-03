@@ -8,9 +8,9 @@ Run this as root to listen on TCP privileged ports (<= 1024).
 """
 
 import argparse
-from pyModbusTCP.server import ModbusServer, DataHandler
-from pyModbusTCP.constants import EXP_ILLEGAL_FUNCTION
 
+from pyModbusTCP.constants import EXP_ILLEGAL_FUNCTION
+from pyModbusTCP.server import DataHandler, ModbusServer
 
 # some const
 ALLOW_R_L = ['127.0.0.1', '192.168.0.10']

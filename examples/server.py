@@ -12,8 +12,8 @@ $ sudo ./server.py --host 0.0.0.0
 
 import argparse
 import logging
-from pyModbusTCP.server import ModbusServer
 
+from pyModbusTCP.server import ModbusServer
 
 # init logging
 logging.basicConfig()

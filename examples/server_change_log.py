@@ -8,7 +8,8 @@ Run this as root to listen on TCP privileged ports (<= 1024).
 
 import argparse
 import logging
-from pyModbusTCP.server import ModbusServer, DataBank
+
+from pyModbusTCP.server import DataBank, ModbusServer
 
 
 class MyDataBank(DataBank):
