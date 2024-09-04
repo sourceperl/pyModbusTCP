@@ -1,6 +1,6 @@
 Revision history for pyModbusTCP
 
-0.3.0.dev0 xxxx-xx-xx
+0.3.0 2024-09-04
 
     - pyModbusTCP.client: now use the standard logging method as in the server part.
     - ModbusClient: debug flag is removed (see examples/client_debug.py).
