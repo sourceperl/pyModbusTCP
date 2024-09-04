@@ -797,7 +797,7 @@ class ModbusClient:
         # send frame with error check
         self._send(tx_frame)
         # debug
-        self._on_tx_rx(frame=tx_frame, tx=True)
+        self._on_tx_rx(frame=tx_frame, is_tx=True)
 
     def _recv(self, size):
         """Receive data over current socket.
@@ -853,7 +853,7 @@ class ModbusClient:
         # checking error status of fields
         if f_transaction_err or f_protocol_err or f_length_err or f_unit_id_err:
             self.close()
-            self._on_tx_rx(frame=rx_mbap, tx=False)
+            self._on_tx_rx(frame=rx_mbap, is_tx=False)
             raise ModbusClient._NetworkError(MB_RECV_ERR, 'MBAP checking error')
         # recv PDU
         rx_pdu = self._recv_all(f_length - 1)
@@ -861,7 +861,7 @@ class ModbusClient:
         if self.auto_close:
             self.close()
         # dump frame
-        self._on_tx_rx(frame=rx_mbap + rx_pdu, tx=False)
+        self._on_tx_rx(frame=rx_mbap + rx_pdu, is_tx=False)
         # body decode
         # check PDU length for global minimal frame (an except frame: func code + exp code)
         if len(rx_pdu) < 2:
@@ -931,24 +931,16 @@ class ModbusClient:
     def _debug_msg(self, msg: str):
         logger.debug(f'({self.host}:{self.port}:{self.unit_id}) {msg}')
 
-    def _on_tx_rx(self, frame: bytes, tx: bool):
-        """Dump a modbus frame.
-
-        modbus/TCP format: [MBAP] PDU
-
-        :param frame: modbus frame
-        :type frame: bytes
-        :param tx: True on tx, False on rx
-        :type tx: bool
-        """
+    def _on_tx_rx(self, frame: bytes, is_tx: bool):
         # format a log message
-        type_s = 'Tx' if tx else 'Rx'
-        mbap_s = hexlify(frame[0:7], sep=' ').upper().decode()
-        pdu_s = hexlify(frame[7:], sep=' ').upper().decode()
-        self._debug_msg(f'{type_s} [{mbap_s}] {pdu_s}')
+        if logger.isEnabledFor(logging.DEBUG):
+            type_s = 'Tx' if is_tx else 'Rx'
+            mbap_s = hexlify(frame[0:7], sep=' ').upper().decode()
+            pdu_s = hexlify(frame[7:], sep=' ').upper().decode()
+            self._debug_msg(f'{type_s} [{mbap_s}] {pdu_s}')
         # notify user
-        self.on_tx_rx(frame=frame, tx=tx)
+        self.on_tx_rx(frame=frame, is_tx=is_tx)
 
-    def on_tx_rx(self, frame: bytes, tx: bool):
-        """Call for each Tx/Rx for user purposes."""
+    def on_tx_rx(self, frame: bytes, is_tx: bool):
+        """Call for each Tx/Rx (for user purposes)."""
         pass
