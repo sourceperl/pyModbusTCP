@@ -824,14 +824,14 @@ class ModbusServer:
             self.request.settimeout(1.0)
 
         def handle(self):
-            # try/except end current thread on ModbusServer._InternalError or socket.error
+            # try/except: end current thread on ModbusServer._InternalError, OSError or socket.error
             # this also close the current TCP session associated with it
-            # init and update server info structure
-            session_data = ModbusServer.SessionData()
-            (session_data.client.address, session_data.client.port) = self.request.getpeername()
-            # debug message
-            logger.debug('accept new connection from %r', session_data.client)
             try:
+                # init and update server info structure
+                session_data = ModbusServer.SessionData()
+                (session_data.client.address, session_data.client.port) = self.request.getpeername()
+                # debug message
+                logger.debug('accept new connection from %r', session_data.client)
                 # main processing loop
                 while True:
                     # init session data for new request
@@ -846,7 +846,7 @@ class ModbusServer:
                     self.server.engine(session_data)
                     # send the tx pdu with the last rx mbap (only length field change)
                     self._send_all(session_data.response.raw)
-            except (ModbusServer.Error, socket.error) as e:
+            except (ModbusServer.Error, OSError, socket.error) as e:
                 # debug message
                 logger.debug('Exception during request handling: %r', e)
                 # on main loop except: exit from it and cleanly close the current socket

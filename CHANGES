@@ -1,5 +1,9 @@
 Revision history for pyModbusTCP
 
+0.3.1.dev0 xxxx-xx-xx
+
+    - fix ModbusServer: debug messages now include OSError exceptions produced by getpeername (thanks to Pär Åhlund).
+
 0.3.0 2024-09-04
 
     - pyModbusTCP.client: now use the standard logging method as in the server part.
