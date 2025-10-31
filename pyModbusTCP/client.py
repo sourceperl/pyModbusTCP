@@ -87,7 +87,7 @@ class ModbusClient:
         def __init__(self, code):
             self.code = code
 
-    def __init__(self, host='localhost', port=502, unit_id=1, timeout=30.0, auto_open=True, auto_close=False):
+    def __init__(self, host='localhost', port=502, unit_id=1, timeout=30.0, auto_open=True, auto_close=False, is_internal=True):
         """Constructor.
 
         :param host: hostname or IPv4/IPv6 address server address
@@ -102,6 +102,8 @@ class ModbusClient:
         :type auto_open: bool
         :param auto_close: auto TCP close)
         :type auto_close: bool
+        :param is_internal: for socket connection
+        :type is_internal: bool
         :return: Object ModbusClient
         :rtype: ModbusClient
         """
@@ -113,6 +115,7 @@ class ModbusClient:
         self._timeout = None
         self._auto_open = None
         self._auto_close = None
+        self._is_internal = None
         self._sock = socket.socket()
         self._transaction_id = 0  # MBAP transaction ID
         self._version = VERSION  # this package version number
@@ -126,6 +129,7 @@ class ModbusClient:
         self.timeout = timeout
         self.auto_open = auto_open
         self.auto_close = auto_close
+        self.is_internal = is_internal
 
     def __repr__(self):
         r_str = 'ModbusClient(host=\'%s\', port=%d, unit_id=%d, timeout=%.2f, auto_open=%s, auto_close=%s)'
@@ -275,6 +279,15 @@ class ModbusClient:
         self._auto_close = bool(value)
 
     @property
+    def is_internal(self):
+        """Get or set whether the modbus connection is internal or external."""
+        return self._is_internal
+
+    @is_internal.setter
+    def is_internal(self, value):
+        self._is_internal = bool(value)
+
+    @property
     def is_open(self):
         """Get current status of the TCP connection (True = open)."""
         return self._sock.fileno() > 0
@@ -310,7 +323,10 @@ class ModbusClient:
                 continue
             try:
                 self._sock.settimeout(self.timeout)
-                self._sock.connect(sa)
+                if self.is_internal:
+                    self._sock.connect(sa)
+                else:
+                    self._sock.connect_ex(sa)
             except socket.error:
                 self._sock.close()
                 continue
