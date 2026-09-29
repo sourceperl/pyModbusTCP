@@ -20,7 +20,7 @@ logging.getLogger('pyModbusTCP.client').setLevel(logging.DEBUG)
 ModbusServer(host='localhost', port=5020, no_block=True).start()
 
 # this message is show
-logger.info(f'app startup')
+logger.info('app startup')
 
 # init modbus client to connect to localhost:5020
 c = ModbusClient(port=5020)
