@@ -775,7 +775,7 @@ class ModbusClient:
             raise ModbusClient._NetworkError(MB_SOCK_CLOSE_ERR, 'try to send on a close socket')
         # send
         try:
-            self._sock.send(frame)
+            self._sock.sendall(frame)
         except socket.timeout:
             self._sock.close()
             raise ModbusClient._NetworkError(MB_TIMEOUT_ERR, 'timeout error')

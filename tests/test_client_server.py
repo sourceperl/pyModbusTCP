@@ -1,12 +1,15 @@
 """ Test of pyModbusTCP client-server interaction """
 
+import socket
 import unittest
+from unittest.mock import Mock
 from random import randint, getrandbits, choice
 from string import ascii_letters
 from pyModbusTCP.server import ModbusServer, DeviceIdentification
 from pyModbusTCP.client import ModbusClient, DeviceIdentificationResponse
 from pyModbusTCP.constants import SUPPORTED_FUNCTION_CODES, \
-    EXP_NONE, EXP_ILLEGAL_FUNCTION, EXP_DATA_ADDRESS, EXP_DATA_VALUE, MB_NO_ERR, MB_EXCEPT_ERR
+    EXP_NONE, EXP_ILLEGAL_FUNCTION, EXP_DATA_ADDRESS, EXP_DATA_VALUE, MB_NO_ERR, MB_EXCEPT_ERR, \
+    MB_SEND_ERR, MB_TIMEOUT_ERR
 
 
 # some const
@@ -33,6 +36,32 @@ class TestClientServer(unittest.TestCase):
         """Cleanning after test."""
         self.client.close()
         self.server.stop()
+
+    def test_request_with_short_send(self):
+        """Complete requests when a socket send accepts only a prefix."""
+        self.client.timeout = 1.0
+        self.assertTrue(self.client.open())
+        sock = self.client._sock
+        self.client._sock = Mock(wraps=sock)
+        self.client._sock.send.side_effect = lambda data: sock.send(data[:3])
+        self.assertEqual(self.client.read_holding_registers(0), [0])
+        registers = list(range(MAX_WRITABLE_REGS))
+        self.assertTrue(self.client.write_multiple_registers(0, registers))
+        self.assertEqual(self.client.read_holding_registers(0, len(registers)), registers)
+
+    def test_request_send_errors(self):
+        """Send failures keep their error codes and close the connection."""
+        for error, code in [(socket.timeout(), MB_TIMEOUT_ERR), (OSError(), MB_SEND_ERR)]:
+            with self.subTest(error=type(error).__name__):
+                self.assertTrue(self.client.open())
+                sock = Mock(wraps=self.client._sock)
+                sock.send.side_effect = error
+                sock.sendall.side_effect = error
+                self.client._sock = sock
+                self.assertIsNone(self.client.read_holding_registers(0))
+                self.assertEqual(self.client.last_error, code)
+                self.assertFalse(self.client.is_open)
+                self.assertEqual(sock.send.call_count + sock.sendall.call_count, 1)
 
     def test_default_startup_values(self):
         """Some read at random address to test startup values."""
