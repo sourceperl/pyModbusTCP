@@ -25,7 +25,7 @@ regs_lock = Lock()
 
 def polling_thread():
     """Modbus polling thread."""
-    global regs, regs_lock
+    global regs
     c = ModbusClient(host=SERVER_HOST, port=SERVER_PORT, auto_open=True)
     # polling loop
     while True:
