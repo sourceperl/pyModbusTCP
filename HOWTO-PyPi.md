@@ -6,7 +6,8 @@ Here we use the twine tool to do the job, see [Twine setup](#twine-setup) to add
 ### build archive and wheel
 
 ```bash
-python setup.py sdist bdist_wheel
+pip install build
+python -m build
 ```
 
 ### upload archive and wheel to PyPi test server
@@ -31,7 +32,7 @@ Check result at https://pypi.python.org/project/pyModbusTCP/.
 ### install twine
 
 ```bash
-sudo pip install twine
+pip install twine
 ```
 
 ### create it's conf file

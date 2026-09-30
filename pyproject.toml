@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=84"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyModbusTCP"
+dynamic = ["version"]
+description = "A simple Modbus/TCP library for Python"
+readme = "README.rst"
+authors = [{ name = "Loic Lefebvre" }]
+license = "MIT"
+license-files = ["LICENSE*"]
+
+[project.urls]
+Source = "https://github.com/sourceperl/pyModbusTCP"
+Issues = "https://github.com/sourceperl/pyModbusTCP/issues"
+
+[tool.setuptools]
+packages = ["pyModbusTCP"]
+platforms = ["any"]
+
+[tool.setuptools.dynamic]
+version = { attr = "pyModbusTCP.constants.VERSION" }
