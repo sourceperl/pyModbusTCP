@@ -2,15 +2,23 @@
 
 import socket
 import unittest
-from unittest.mock import Mock
-from random import randint, getrandbits, choice
+from random import choice, getrandbits, randint
 from string import ascii_letters
-from pyModbusTCP.server import ModbusServer, DeviceIdentification
-from pyModbusTCP.client import ModbusClient, DeviceIdentificationResponse
-from pyModbusTCP.constants import SUPPORTED_FUNCTION_CODES, \
-    EXP_NONE, EXP_ILLEGAL_FUNCTION, EXP_DATA_ADDRESS, EXP_DATA_VALUE, MB_NO_ERR, MB_EXCEPT_ERR, \
-    MB_SEND_ERR, MB_TIMEOUT_ERR
+from unittest.mock import Mock
 
+from pyModbusTCP.client import DeviceIdentificationResponse, ModbusClient
+from pyModbusTCP.constants import (
+    EXP_DATA_ADDRESS,
+    EXP_DATA_VALUE,
+    EXP_ILLEGAL_FUNCTION,
+    EXP_NONE,
+    MB_EXCEPT_ERR,
+    MB_NO_ERR,
+    MB_SEND_ERR,
+    MB_TIMEOUT_ERR,
+    SUPPORTED_FUNCTION_CODES,
+)
+from pyModbusTCP.server import DeviceIdentification, ModbusServer
 
 # some const
 MAX_READABLE_REGS = 125
@@ -36,6 +44,23 @@ class TestClientServer(unittest.TestCase):
         """Cleanning after test."""
         self.client.close()
         self.server.stop()
+
+    def test_client_is_open(self):
+        """Test that the client's is_open property correctly reflects connection state."""
+        # initial state: socket should be open
+        self.assertTrue(self.client.is_open, "Client should be open at startup")
+        # test manual close
+        self.client.close()
+        self.assertFalse(self.client.is_open, "Client should be closed after manual close")
+        # test manual open
+        self.client.open()
+        self.assertTrue(self.client.is_open, "Client should be open after manual open")
+        # test server side close
+        self.server.stop()
+        self.assertTrue(self.client.is_open, "Client should still report as open until I/O operation")
+        # test I/O operation updates status
+        self.client.read_coils(0)
+        self.assertFalse(self.client.is_open,"Client should report as closed after I/O operation on closed server")
 
     def test_request_with_short_send(self):
         """Complete requests when a socket send accepts only a prefix."""

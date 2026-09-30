@@ -1,7 +1,8 @@
 """ Test of pyModbusTCP.ModbusClient """
 
+import random
 import unittest
-from pyModbusTCP.client import ModbusClient
+from pyModbusTCP.client import ModbusClient, _decode_bits, _decode_regs
 
 
 class TestModbusClient(unittest.TestCase):
@@ -52,6 +53,56 @@ class TestModbusClient(unittest.TestCase):
         """Check of misc default values."""
         self.assertEqual(ModbusClient().auto_open, True)
         self.assertEqual(ModbusClient().auto_close, False)
+
+    def test_is_open(self):
+        """Test of is_open property (no connection: must be closed)."""
+        c = ModbusClient()
+        self.assertFalse(c.is_open)
+        c.close()
+        self.assertFalse(c.is_open)
+
+    def test_params_type_check(self):
+        """Non-integer params must raise TypeError (not struct.error), bad ranges ValueError."""
+        c = ModbusClient()
+        calls = [lambda v: c.read_coils(v, 1),
+                 lambda v: c.read_coils(0, v),
+                 lambda v: c.read_discrete_inputs(v, 1),
+                 lambda v: c.read_holding_registers(v, 1),
+                 lambda v: c.read_holding_registers(0, v),
+                 lambda v: c.read_input_registers(v, 1),
+                 lambda v: c.read_device_identification(v),
+                 lambda v: c.read_device_identification(1, v),
+                 lambda v: c.write_single_coil(v, True),
+                 lambda v: c.write_single_register(v, 0),
+                 lambda v: c.write_single_register(0, v),
+                 lambda v: c.write_multiple_coils(v, [True]),
+                 lambda v: c.write_multiple_registers(v, [0]),
+                 lambda v: c.write_multiple_registers(0, [v]),
+                 lambda v: c.write_read_multiple_registers(v, [0], 0),
+                 lambda v: c.write_read_multiple_registers(0, [v], 0),
+                 lambda v: c.write_read_multiple_registers(0, [0], v)]
+        for call in calls:
+            for bad_value in (1.0, '1', None):
+                with self.assertRaises(TypeError):
+                    call(bad_value)
+        # out of range values still raise ValueError
+        self.assertRaises(ValueError, c.read_holding_registers, 0, 126)
+        self.assertRaises(ValueError, c.write_multiple_registers, 0, [0x10000])
+        self.assertRaises(ValueError, c.write_multiple_registers, 0xffff, [0, 0])
+        self.assertRaises(ValueError, c.write_read_multiple_registers, 0, [-1], 0)
+
+    def test_decode_helpers(self):
+        """Compare bits/regs decoding helpers with a naive reference implementation."""
+        rnd = random.Random(42)
+        for nb in list(range(1, 40)) + [125, 1999, 2000]:
+            # bits: rx frame can have more bytes than requested and unused bits set to 1
+            raw = bytes(rnd.randrange(256) for _ in range((nb + 7) // 8))
+            ref_bits = [bool((raw[i // 8] >> i % 8) & 0x01) for i in range(nb)]
+            self.assertEqual(_decode_bits(raw, nb), ref_bits)
+        for nb in list(range(1, 126)):
+            raw = bytes(rnd.randrange(256) for _ in range(2 * nb + 2))
+            ref_regs = [raw[2 * i] << 8 | raw[2 * i + 1] for i in range(nb)]
+            self.assertEqual(_decode_regs(raw, nb), ref_regs)
 
 
 if __name__ == '__main__':
