@@ -761,7 +761,7 @@ class ModbusServer:
         @property
         def is_valid(self):
             # PDU min length is 2 bytes
-            return self.__len__() < 2
+            return self.__len__() >= 2
 
         def clear(self):
             self.raw = b''
@@ -795,9 +795,10 @@ class ModbusServer:
         def _send_all(self, data):
             try:
                 self.request.sendall(data)
-                return True
             except socket.timeout:
-                return False
+                # sendall() may have sent only a part of the frame, the TCP stream is now out of sync:
+                # raise an error to close this session (see handle())
+                raise ModbusServer.NetworkError('timeout on send, close session')
 
         def _recv_all(self, size):
             data = b''

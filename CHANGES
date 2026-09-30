@@ -3,6 +3,8 @@ Revision history for pyModbusTCP
 0.3.2.dev0 xxxx-xx-xx
 
     - build: migrate from setup.py to pyproject.toml
+    - fix ModbusServer: close the session on send timeout (a partial send leaves the TCP stream out of sync).
+    - fix ModbusServer.PDU: is_valid property was inverted.
 
 0.3.1 2026-09-29
 
