@@ -61,7 +61,7 @@ class TestClientServer(unittest.TestCase):
         self.assertTrue(self.client.is_open, "Client should still report as open until I/O operation")
         # test I/O operation updates status
         self.client.read_coils(0)
-        self.assertFalse(self.client.is_open,"Client should report as closed after I/O operation on closed server")
+        self.assertFalse(self.client.is_open, "Client should report as closed after I/O operation on closed server")
 
     def test_user_callback_exception(self):
         """An exception raised by a user callback must not drop the session (and must not be masked)."""

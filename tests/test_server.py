@@ -69,6 +69,26 @@ class TestModbusServer(unittest.TestCase):
         except ModbusServer.NetworkError:
             self.fail("NetworkError was unexpectedly raised!")
 
+    def test_start_doesnt_alter_socketserver_classes(self):
+        """ModbusServer must not change class attributes of the stdlib socketserver classes."""
+        from socketserver import ThreadingTCPServer
+        server = ModbusServer(host='127.0.0.1', port=5021, no_block=True)
+        server.start()
+        try:
+            self.assertFalse(ThreadingTCPServer.daemon_threads)
+            self.assertEqual(ThreadingTCPServer.address_family, socket.AF_INET)
+        finally:
+            server.stop()
+
+    def test_failed_start_close_socket(self):
+        """A failed start (bind error) must not leave a listening socket open."""
+        # 192.0.2.1 is reserved for documentation (TEST-NET-1): not a local address, so bind() fails on all systems
+        server = ModbusServer(host='192.0.2.1', port=5022, no_block=True)
+        with self.assertRaises(ModbusServer.NetworkError):
+            server.start()
+        self.assertFalse(server.is_run)
+        self.assertEqual(server._service.socket.fileno(), -1)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -7,15 +7,25 @@ from socketserver import BaseRequestHandler, ThreadingTCPServer
 from threading import Event, Lock, Thread
 from warnings import warn
 
-from .constants import (ENCAPSULATED_INTERFACE_TRANSPORT, EXP_DATA_ADDRESS,
-                        EXP_DATA_VALUE, EXP_ILLEGAL_FUNCTION, EXP_NONE,
-                        EXP_SLAVE_DEVICE_FAILURE, MAX_PDU_SIZE,
-                        MEI_TYPE_READ_DEVICE_ID, READ_COILS,
-                        READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS,
-                        READ_INPUT_REGISTERS, WRITE_MULTIPLE_COILS,
-                        WRITE_MULTIPLE_REGISTERS,
-                        WRITE_READ_MULTIPLE_REGISTERS, WRITE_SINGLE_COIL,
-                        WRITE_SINGLE_REGISTER)
+from .constants import (
+    ENCAPSULATED_INTERFACE_TRANSPORT,
+    EXP_DATA_ADDRESS,
+    EXP_DATA_VALUE,
+    EXP_ILLEGAL_FUNCTION,
+    EXP_NONE,
+    EXP_SLAVE_DEVICE_FAILURE,
+    MAX_PDU_SIZE,
+    MEI_TYPE_READ_DEVICE_ID,
+    READ_COILS,
+    READ_DISCRETE_INPUTS,
+    READ_HOLDING_REGISTERS,
+    READ_INPUT_REGISTERS,
+    WRITE_MULTIPLE_COILS,
+    WRITE_MULTIPLE_REGISTERS,
+    WRITE_READ_MULTIPLE_REGISTERS,
+    WRITE_SINGLE_COIL,
+    WRITE_SINGLE_REGISTER,
+)
 from .utils import set_bit, test_bit
 
 # add a logger for pyModbusTCP.server
@@ -854,6 +864,14 @@ class ModbusServer:
                 # on main loop except: exit from it and cleanly close the current socket
                 self.request.close()
 
+    class CustomThreadingTCPServer(ThreadingTCPServer):
+        """IPv4 threaded TCP server."""
+        daemon_threads = True
+
+    class CustomThreadingTCPServerV6(CustomThreadingTCPServer):
+        """IPv6 threaded TCP server."""
+        address_family = socket.AF_INET6
+
     def __init__(self, host='localhost', port=502, no_block=False, ipv6=False,
                  data_bank=None, data_hdl=None, ext_engine=None, device_id=None):
         """Constructor
@@ -1262,33 +1280,35 @@ class ModbusServer:
         This function will block (or not if no_block flag is set).
         """
         # do nothing if server is already running
-        if not self.is_run:
-            # set class attribute
-            ThreadingTCPServer.address_family = socket.AF_INET6 if self.ipv6 else socket.AF_INET
-            ThreadingTCPServer.daemon_threads = True
-            # init server
-            self._service = ThreadingTCPServer((self.host, self.port), self.ModbusService, bind_and_activate=False)
-            # pass some things shared with server threads (access via self.server in ModbusService.handle())
-            self._service.evt_running = self._evt_running
-            self._service.engine = self._engine
-            # set socket options
-            self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-            # TODO test no_delay with bench
-            self._service.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            # bind and activate
-            try:
-                self._service.server_bind()
-                self._service.server_activate()
-            except OSError as e:
-                raise ModbusServer.NetworkError(e)
-            # serve request
-            if self.no_block:
-                self._serve_th = Thread(target=self._serve)
-                self._serve_th.daemon = True
-                self._serve_th.start()
-            else:
-                self._serve()
+        if self.is_run:
+            return
+        # init server (IPv4 or IPv6)
+        # here we subclass ThreadingTCPServer to don't alter the socketserver classes shared with other code
+        server_cls = ModbusServer.CustomThreadingTCPServerV6 if self.ipv6 else ModbusServer.CustomThreadingTCPServer
+        self._service = server_cls((self.host, self.port), self.ModbusService, bind_and_activate=False)
+        # pass some things shared with server threads (access via self.server in ModbusService.handle())
+        self._service.evt_running = self._evt_running
+        self._service.engine = self._engine
+        # set socket options
+        self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        # TODO test no_delay with bench
+        self._service.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        # bind and activate
+        try:
+            self._service.server_bind()
+            self._service.server_activate()
+        except OSError as e:
+            # don't keep the listening socket open after a failed start
+            self._service.server_close()
+            raise ModbusServer.NetworkError(e)
+        # serve request
+        if self.no_block:
+            self._serve_th = Thread(target=self._serve)
+            self._serve_th.daemon = True
+            self._serve_th.start()
+        else:
+            self._serve()
 
     def stop(self):
         """Stop the server."""

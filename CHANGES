@@ -10,6 +10,9 @@ Revision history for pyModbusTCP
     - fix ModbusServer.PDU: is_valid property was inverted.
     - fix ModbusServer: an unexpected exception during a request (like one raised by a user callback) is now logged and 
                         answered with a SLAVE_DEVICE_FAILURE (0x04) exception instead of dropping the TCP session.
+    - fix ModbusServer: start() no longer modifies class attributes of socketserver. Since ThreadingTCPServer can be 
+                        shared with the rest of the process.
+    - fix ModbusServer: close the listening socket when start() fails to bind.
     - improve ModbusClient: decode/encode registers and bits in one pass (faster reads and writes).
     - improve ModbusClient: add some python hints for better python type checking and IDE support.
 
