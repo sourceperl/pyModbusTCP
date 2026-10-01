@@ -359,7 +359,12 @@ class ModbusClient:
         # AF_xxx : AF_INET -> IPv4, AF_INET6 -> IPv6,
         #          AF_UNSPEC -> IPv6 (priority on some system) or 4
         # list available socket on target host
-        for res in socket.getaddrinfo(self.host, self.port, AF_UNSPEC, SOCK_STREAM):
+        try:
+            addr_infos = socket.getaddrinfo(self.host, self.port, AF_UNSPEC, SOCK_STREAM)
+        except socket.gaierror as e:
+            # name resolution failure: report it like any other connect error (no exception for the caller)
+            raise ModbusClient._NetworkError(MB_CONNECT_ERR, 'host name resolution error: %s' % e)
+        for res in addr_infos:
             af, sock_type, proto, canon_name, sa = res
             try:
                 self._sock = socket.socket(af, sock_type, proto)

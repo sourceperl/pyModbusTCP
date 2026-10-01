@@ -5,6 +5,7 @@ Revision history for pyModbusTCP
     - build: migrate from setup.py to pyproject.toml
     - fix ModbusClient: is_open is now False only for a closed socket (file descriptor 0 is valid).
     - fix ModbusClient: non-integer arguments (float, str...) now raise a TypeError instead of an uncaught struct.error.
+    - fix ModbusClient: treat socket.gaierror as MB_CONNECT_ERR (like any other connect error).
     - fix ModbusServer: close the session on send timeout (a partial send leaves the TCP stream out of sync).
     - fix ModbusServer.PDU: is_valid property was inverted.
     - improve ModbusClient: decode/encode registers and bits in one pass (faster reads and writes).

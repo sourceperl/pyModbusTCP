@@ -1,8 +1,12 @@
 """ Test of pyModbusTCP.ModbusClient """
 
 import random
+import socket
 import unittest
+from unittest import mock
+
 from pyModbusTCP.client import ModbusClient, _decode_bits, _decode_regs
+from pyModbusTCP.constants import MB_CONNECT_ERR
 
 
 class TestModbusClient(unittest.TestCase):
@@ -103,6 +107,16 @@ class TestModbusClient(unittest.TestCase):
             raw = bytes(rnd.randrange(256) for _ in range(2 * nb + 2))
             ref_regs = [raw[2 * i] << 8 | raw[2 * i + 1] for i in range(nb)]
             self.assertEqual(_decode_regs(raw, nb), ref_regs)
+
+    def test_host_resolution_error(self):
+        """A name resolution failure must be reported like any connect error (no socket.gaierror raised)."""
+        c = ModbusClient('localhost', 502, auto_open=True)
+        with mock.patch('socket.getaddrinfo', side_effect=socket.gaierror(-2, 'Name or service not known')):
+            self.assertFalse(c.open())
+            self.assertEqual(c.last_error, MB_CONNECT_ERR)
+            self.assertIsNone(c.read_coils(0))
+            self.assertEqual(c.last_error, MB_CONNECT_ERR)
+            self.assertFalse(c.is_open)
 
 
 if __name__ == '__main__':
