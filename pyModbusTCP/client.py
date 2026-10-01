@@ -5,6 +5,7 @@ import operator
 import random
 import socket
 import struct
+import time
 from binascii import hexlify
 from dataclasses import dataclass, field
 from socket import AF_UNSPEC, SOCK_STREAM
@@ -152,7 +153,7 @@ class ModbusClient:
         :type port: int
         :param unit_id: unit ID
         :type unit_id: int
-        :param timeout: socket timeout in seconds
+        :param timeout: timeout in seconds for a request (send + receive), not for each socket operation
         :type timeout: float
         :param auto_open: auto TCP connect
         :type auto_open: bool
@@ -171,6 +172,7 @@ class ModbusClient:
         self._auto_close: Optional[bool] = None
         # internal variables
         self._sock = socket.socket()
+        self._deadline = 0.0  # end of the current request (time.monotonic() value), see _send() and _recv()
         self._transaction_id = 0  # MBAP transaction ID
         self._version = VERSION  # this package version number
         self._last_error = MB_NO_ERR  # last error code
@@ -815,6 +817,19 @@ class ModbusClient:
             self._req_except_handler(e)
             return None
 
+    def _set_sock_timeout(self, timeout: float) -> None:
+        """Set the current socket timeout, but only if it differs by more than 10 ms from the current one.
+
+        Each settimeout() is a system call: in the usual case (response received at once) the timeout in place
+        is already (almost) the right one, so there is nothing to do.
+
+        :param timeout: socket timeout in seconds
+        :type timeout: float
+        """
+        current = self._sock.gettimeout()
+        if current is None or abs(current - timeout) > 0.01:
+            self._sock.settimeout(timeout)
+
     def _send(self, frame: bytes):
         """Send frame over current socket.
 
@@ -824,8 +839,13 @@ class ModbusClient:
         # check socket
         if not self.is_open:
             raise ModbusClient._NetworkError(MB_SOCK_CLOSE_ERR, 'try to send on a close socket')
+        # the timeout is a limit for the whole request (send + receive), not for each recv() call:
+        # a slow server sending its response byte by byte can't hold the client more than timeout seconds
+        self._deadline = time.monotonic() + self.timeout
         # send
         try:
+            # restore the full timeout (it's reduced by _recv() to the time remaining in the previous request)
+            self._set_sock_timeout(self.timeout)
             self._sock.sendall(frame)
         except socket.timeout:
             self._sock.close()
@@ -858,7 +878,13 @@ class ModbusClient:
         :returns: receive data or None if error
         :rtype: bytes
         """
+        # time remaining before the end of the request
+        remaining = self._deadline - time.monotonic()
+        if remaining <= 0:
+            self._sock.close()
+            raise ModbusClient._NetworkError(MB_TIMEOUT_ERR, 'timeout error')
         try:
+            self._set_sock_timeout(remaining)
             r_buffer = self._sock.recv(size)
         except socket.timeout:
             self._sock.close()

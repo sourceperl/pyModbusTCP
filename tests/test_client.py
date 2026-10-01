@@ -2,11 +2,13 @@
 
 import random
 import socket
+import threading
+import time
 import unittest
 from unittest import mock
 
 from pyModbusTCP.client import ModbusClient, _decode_bits, _decode_regs
-from pyModbusTCP.constants import MB_CONNECT_ERR
+from pyModbusTCP.constants import MB_CONNECT_ERR, MB_TIMEOUT_ERR
 
 
 class TestModbusClient(unittest.TestCase):
@@ -117,6 +119,52 @@ class TestModbusClient(unittest.TestCase):
             self.assertIsNone(c.read_coils(0))
             self.assertEqual(c.last_error, MB_CONNECT_ERR)
             self.assertFalse(c.is_open)
+
+    def _start_slow_server(self, byte_delay):
+        """Start a fake modbus server which answers "read 1 holding register" (value 42) one byte at a time."""
+        listener = socket.socket()
+        self.addCleanup(listener.close)
+        listener.bind(('127.0.0.1', 0))
+        listener.listen()
+
+        def serve():
+            try:
+                conn, _ = listener.accept()
+            except OSError:
+                return
+            with conn:
+                req = conn.recv(256)
+                resp = req[:2] + b'\x00\x00\x00\x05\x01\x03\x02\x00\x2a'
+                try:
+                    for byte in resp:
+                        time.sleep(byte_delay)
+                        conn.sendall(bytes([byte]))
+                except OSError:
+                    pass  # client has closed the connection (timeout)
+
+        thread = threading.Thread(target=serve, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 5.0)
+        return listener.getsockname()[1]
+
+    def test_timeout_is_for_the_whole_request(self):
+        """A server that sends its response byte by byte must not hold the client longer than timeout."""
+        port = self._start_slow_server(byte_delay=0.2)  # 11 bytes: 2.2 s for the complete response
+        c = ModbusClient('127.0.0.1', port, timeout=0.5)
+        self.addCleanup(c.close)
+        start = time.monotonic()
+        self.assertIsNone(c.read_holding_registers(0, 1))
+        elapsed = time.monotonic() - start
+        self.assertEqual(c.last_error, MB_TIMEOUT_ERR)
+        self.assertFalse(c.is_open)
+        self.assertLess(elapsed, 1.5, 'timeout is applied to each recv() instead of the whole request')
+
+    def test_split_response_within_timeout(self):
+        """A response split in many TCP segments is still accepted if the whole request fit in timeout."""
+        port = self._start_slow_server(byte_delay=0.02)  # 0.22 s for the complete response
+        c = ModbusClient('127.0.0.1', port, timeout=2.0)
+        self.addCleanup(c.close)
+        self.assertEqual(c.read_holding_registers(0, 1), [42])
 
 
 if __name__ == '__main__':
