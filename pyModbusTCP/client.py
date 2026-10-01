@@ -162,13 +162,14 @@ class ModbusClient:
         :rtype: ModbusClient
         """
         # private
+        # set by the property setters below, with the constructor arguments
+        self._host: Optional[str] = None
+        self._port: Optional[int] = None
+        self._unit_id: Optional[int] = None
+        self._timeout: Optional[float] = None
+        self._auto_open: Optional[bool] = None
+        self._auto_close: Optional[bool] = None
         # internal variables
-        self._host = None
-        self._port = None
-        self._unit_id = None
-        self._timeout = None
-        self._auto_open = None
-        self._auto_close = None
         self._sock = socket.socket()
         self._transaction_id = 0  # MBAP transaction ID
         self._version = VERSION  # this package version number
@@ -298,7 +299,7 @@ class ModbusClient:
         return self._timeout
 
     @timeout.setter
-    def timeout(self, value: float):
+    def timeout(self, value: float) -> None:
         # enforce type
         value = float(value)
         # check validity
@@ -316,7 +317,7 @@ class ModbusClient:
         return self._auto_open
 
     @auto_open.setter
-    def auto_open(self, value: bool):
+    def auto_open(self, value: bool) -> None:
         # enforce type
         self._auto_open = bool(value)
 
@@ -326,7 +327,7 @@ class ModbusClient:
         return self._auto_close
 
     @auto_close.setter
-    def auto_close(self, value: bool):
+    def auto_close(self, value: bool) -> None:
         # enforce type
         self._auto_close = bool(value)
 
@@ -349,7 +350,7 @@ class ModbusClient:
             self._req_except_handler(e)
             return False
 
-    def _open(self):
+    def _open(self) -> None:
         """Connect to modbus server (open TCP connection)."""
         # open an already open socket -> reset it
         if self.is_open:
@@ -381,7 +382,7 @@ class ModbusClient:
         if not self.is_open:
             raise ModbusClient._NetworkError(MB_CONNECT_ERR, 'connection refused')
 
-    def close(self):
+    def close(self) -> None:
         """Close current TCP connection."""
         self._sock.close()
 
@@ -709,7 +710,7 @@ class ModbusClient:
             # response decode
             resp_write_addr, resp_write_count = struct.unpack('>HH', rx_pdu[1:5])
             # check response fields
-            write_ok = resp_write_addr == bits_addr and resp_write_count == len(bits_value)
+            write_ok: bool = (resp_write_addr == bits_addr) and (resp_write_count == len(bits_value))
             return write_ok
         # handle error during request
         except ModbusClient._InternalError as e:
@@ -750,7 +751,7 @@ class ModbusClient:
             # response decode
             resp_write_addr, resp_write_count = struct.unpack('>HH', rx_pdu[1:5])
             # check response fields
-            write_ok = resp_write_addr == regs_addr and resp_write_count == len(regs_value)
+            write_ok: bool = (resp_write_addr == regs_addr) and (resp_write_count == len(regs_value))
             return write_ok
         # handle error during request
         except ModbusClient._InternalError as e:
@@ -812,7 +813,7 @@ class ModbusClient:
         # handle error during request
         except ModbusClient._InternalError as e:
             self._req_except_handler(e)
-            return
+            return None
 
     def _send(self, frame: bytes):
         """Send frame over current socket.
@@ -961,12 +962,12 @@ class ModbusClient:
         # return receive PDU
         return self._recv_pdu(min_len=rx_min_len)
 
-    def _req_init(self):
+    def _req_init(self) -> None:
         """Reset request status flags."""
         self._last_error = MB_NO_ERR
         self._last_except = EXP_NONE
 
-    def _req_except_handler(self, _except: Exception):
+    def _req_except_handler(self, _except: Exception) -> None:
         """Global handler for internal exceptions."""
         # on request network error
         if isinstance(_except, ModbusClient._NetworkError):
@@ -978,10 +979,10 @@ class ModbusClient:
             self._last_except = _except.code
             self._debug_msg(f'modbus exception (code {self.last_except} "{self.last_error_as_txt}")')
 
-    def _debug_msg(self, msg: str):
+    def _debug_msg(self, msg: str) -> None:
         logger.debug(f'({self.host}:{self.port}:{self.unit_id}) {msg}')
 
-    def _on_tx_rx(self, frame: bytes, is_tx: bool):
+    def _on_tx_rx(self, frame: bytes, is_tx: bool) -> None:
         # format a log message
         if logger.isEnabledFor(logging.DEBUG):
             type_s = 'Tx' if is_tx else 'Rx'
@@ -991,6 +992,6 @@ class ModbusClient:
         # notify user
         self.on_tx_rx(frame=frame, is_tx=is_tx)
 
-    def on_tx_rx(self, frame: bytes, is_tx: bool):
+    def on_tx_rx(self, frame: bytes, is_tx: bool) -> None:
         """Call for each Tx/Rx (for user purposes)."""
         pass
