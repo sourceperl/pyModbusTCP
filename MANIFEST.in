@@ -1,6 +1,0 @@
-include README.rst
-include setup.py
-include CHANGES
-include LICENSE
-
-recursive-include pyModbusTCP *.py
