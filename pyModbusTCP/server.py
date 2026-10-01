@@ -645,6 +645,9 @@ class DeviceIdentification:
 class ModbusServer:
     """ Modbus TCP server """
 
+    # interval (in s) at which the main server loop checks for a stop request: this is the max latency of stop()
+    _SERVE_POLL_INTERVAL = 0.05
+
     class Error(Exception):
         """ Base exception for ModbusServer related errors. """
         pass
@@ -1326,7 +1329,7 @@ class ModbusServer:
     def _serve(self):
         try:
             self._evt_running.set()
-            self._service.serve_forever()
+            self._service.serve_forever(poll_interval=self._SERVE_POLL_INTERVAL)
         except Exception:
             self._service.server_close()
             raise
