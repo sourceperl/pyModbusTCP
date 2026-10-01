@@ -918,6 +918,9 @@ class ModbusServer:
     class CustomThreadingTCPServer(ThreadingTCPServer):
         """IPv4 threaded TCP server."""
         daemon_threads = True
+        # listen backlog: the socketserver default (5) makes a burst of simultaneous connections wait for a TCP SYN
+        # retransmission (1 s or more) as soon as the accept loop is a bit late
+        request_queue_size = 128
         # these 3 settings are set by ModbusServer.start() (see ModbusServer.__init__() for a description)
         max_connections = None
         idle_timeout = None

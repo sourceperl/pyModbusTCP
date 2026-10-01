@@ -23,6 +23,8 @@ Revision history for pyModbusTCP
                             Set request_timeout=None to get the previous behavior.
     - improve ModbusServer: add idle_timeout (close a session without any request for this time) and max_connections
                             (reject connections over this limit), both are disabled by default.
+    - improve ModbusServer: increase the listen backlog from 5 to 128, a burst of simultaneous connections (like clients
+                            reconnecting together) no more wait for a TCP retransmission (1 s or more).
 
 0.3.1 2026-09-29
 

@@ -204,6 +204,14 @@ class TestModbusServerLimits(unittest.TestCase):
         resp = sock.recv(self.RESP_LEN)
         self.assertEqual(len(resp), self.RESP_LEN)
 
+    def test_connection_burst(self):
+        """A burst of simultaneous connections must not wait for a TCP SYN retransmission (listen backlog)."""
+        self._start_server(5038)
+        start = time.monotonic()
+        for _ in range(60):
+            self._connect(5038)
+        self.assertLess(time.monotonic() - start, 3.0)
+
     def test_no_idle_timeout_by_default(self):
         self._start_server(5034)
         sock = self._connect(5034)
