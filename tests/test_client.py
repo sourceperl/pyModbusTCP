@@ -1,5 +1,6 @@
 """ Test of pyModbusTCP.ModbusClient """
 
+import platform
 import random
 import socket
 import threading
@@ -165,6 +166,30 @@ class TestModbusClient(unittest.TestCase):
         c = ModbusClient('127.0.0.1', port, timeout=2.0)
         self.addCleanup(c.close)
         self.assertEqual(c.read_holding_registers(0, 1), [42])
+
+    def test_tcp_nodelay_sockopt(self):
+        """On a live connection, TCP_NODELAY must reflect the no_delay mode."""
+
+        # spawn a minimal TCP server to connect to
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        srv.bind(('127.0.0.1', 0))
+        srv.listen(1)
+        port = srv.getsockname()[1]
+        try:
+            for no_delay, expected in ((True, 1), (False, 0)):
+                c = ModbusClient(host='127.0.0.1', port=port, auto_open=False, no_delay=no_delay)
+                try:
+                    c.open()
+                except ModbusClient._NetworkError:
+                    self.skipTest('no local TCP server available')
+                self.assertTrue(c.is_open)
+                if platform.system() != 'Windows':
+                    # TCP_NODELAY is readable on POSIX platforms
+                    self.assertEqual(
+                        c._sock.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY), expected)
+                c.close()
+        finally:
+            srv.close()
 
 
 if __name__ == '__main__':

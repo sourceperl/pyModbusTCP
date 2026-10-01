@@ -8,7 +8,7 @@ import struct
 import time
 from binascii import hexlify
 from dataclasses import dataclass, field
-from socket import AF_UNSPEC, SOCK_STREAM
+from socket import AF_UNSPEC, IPPROTO_TCP, SOCK_STREAM, TCP_NODELAY
 from typing import Any, Dict, List, Optional, Sequence
 
 from .constants import (
@@ -144,7 +144,7 @@ class ModbusClient:
             self.code = code
 
     def __init__(self, host: str = 'localhost', port: int = 502, unit_id: int = 1, timeout: float = 30.0,
-                 auto_open: bool = True, auto_close: bool = False):
+                 auto_open: bool = True, auto_close: bool = False, no_delay: bool = True):
         """Constructor.
 
         :param host: hostname or IPv4/IPv6 address server address
@@ -157,8 +157,10 @@ class ModbusClient:
         :type timeout: float
         :param auto_open: auto TCP connect
         :type auto_open: bool
-        :param auto_close: auto TCP close)
+        :param auto_close: auto TCP close
         :type auto_close: bool
+        :param no_delay: disable Nagle's algorithm on TCP connection (True by default)
+        :type no_delay: bool
         :return: Object ModbusClient
         :rtype: ModbusClient
         """
@@ -170,6 +172,7 @@ class ModbusClient:
         self._timeout: Optional[float] = None
         self._auto_open: Optional[bool] = None
         self._auto_close: Optional[bool] = None
+        self._no_delay: Optional[bool] = None
         # internal variables
         self._sock = socket.socket()
         self._deadline = 0.0  # end of the current request (time.monotonic() value), see _send() and _recv()
@@ -185,6 +188,7 @@ class ModbusClient:
         self.timeout = timeout
         self.auto_open = auto_open
         self.auto_close = auto_close
+        self.no_delay = no_delay
 
     def __repr__(self):
         r_str = 'ModbusClient(host=\'%s\', port=%d, unit_id=%d, timeout=%.2f, auto_open=%s, auto_close=%s)'
@@ -334,6 +338,16 @@ class ModbusClient:
         self._auto_close = bool(value)
 
     @property
+    def no_delay(self) -> bool:
+        """Get or set TCP_NODELAY mode on connection (True = disable Nagle's algorithm, default)."""
+        return self._no_delay
+
+    @no_delay.setter
+    def no_delay(self, value: bool) -> None:
+        # enforce type
+        self._no_delay = bool(value)
+
+    @property
     def is_open(self) -> bool:
         """Get current status of the TCP connection (True = open)."""
         # fileno() return -1 on a closed socket (and 0 is a valid file descriptor)
@@ -376,6 +390,10 @@ class ModbusClient:
             try:
                 self._sock.settimeout(self.timeout)
                 self._sock.connect(sa)
+                # disable Nagle's algorithm: modbus requests are small frames
+                # that expect an immediate reply (request/response pattern)
+                if self._no_delay:
+                    self._sock.setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
             except socket.error:
                 self._sock.close()
                 continue
