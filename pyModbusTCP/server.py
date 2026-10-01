@@ -3,6 +3,7 @@
 import logging
 import socket
 import struct
+import time
 from socketserver import BaseRequestHandler, ThreadingTCPServer
 from threading import Event, Lock, Thread
 from warnings import warn
@@ -642,6 +643,17 @@ class DeviceIdentification:
         return items_l
 
 
+def _check_timeout(value, name):
+    """Check an optional timeout (None or a number of seconds > 0) and return it as a float (or None)."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError('%s must be a number or None' % name)
+    if value <= 0:
+        raise ValueError('%s must be greater than 0 (or None to disable it)' % name)
+    return float(value)
+
+
 class ModbusServer:
     """ Modbus TCP server """
 
@@ -801,6 +813,8 @@ class ModbusServer:
                 raise ModbusServer.DataFormatError(err_msg)
 
     class ModbusService(BaseRequestHandler):
+        # default socket timeout (in s) on blocking operations
+        _SOCKET_TIMEOUT = 1.0
 
         @property
         def server_running(self):
@@ -814,29 +828,56 @@ class ModbusServer:
                 # raise an error to close this session (see handle())
                 raise ModbusServer.NetworkError('timeout on send, close session')
 
-        def _recv_all(self, size):
+        def _recv_all(self, size, deadline=None, timeout_msg='recv timeout', request_timeout=None):
+            """Receive size bytes (loop until all bytes are received).
+
+            :param deadline: limit for the end of reception (a time.monotonic() value), None for no limit
+            :param timeout_msg: message of the error raised if the deadline is reached
+            :param request_timeout: if set, the deadline is replaced by "now + request_timeout" as soon as the first
+                data is received (used to wait for a new request, without limit or with an idle deadline, then limit
+                the time taken to receive it)
+            :raises ModbusServer.NetworkError: on deadline, on connection closed or if the main server is stopped
+            """
             data = b''
-            while len(data) < size:
-                try:
-                    # avoid keeping this TCP thread run after server.stop() on main server
-                    if not self.server_running:
-                        raise ModbusServer.NetworkError('main server is not running')
-                    # recv all data or a chunk of it
-                    data_chunk = self.request.recv(size - len(data))
-                    # check data chunk
-                    if data_chunk:
-                        data += data_chunk
-                    else:
-                        raise ModbusServer.NetworkError('recv return null')
-                except socket.timeout:
-                    # just redo main server run test and recv operations on timeout
-                    pass
+            sock_timeout_changed = False
+            try:
+                while len(data) < size:
+                    try:
+                        # avoid keeping this TCP thread run after server.stop() on main server
+                        if not self.server_running:
+                            raise ModbusServer.NetworkError('main server is not running')
+                        # check the deadline (on a system call is only needed when it is near)
+                        if deadline is not None:
+                            remaining = deadline - time.monotonic()
+                            if remaining <= 0:
+                                raise ModbusServer.NetworkError(timeout_msg)
+                            if remaining < self._SOCKET_TIMEOUT:
+                                self.request.settimeout(remaining)
+                                sock_timeout_changed = True
+                        # recv all data or a chunk of it
+                        data_chunk = self.request.recv(size - len(data))
+                        # check data chunk
+                        if data_chunk:
+                            if not data and request_timeout is not None:
+                                # the request is started, the idle wait is over
+                                deadline = time.monotonic() + request_timeout
+                                timeout_msg = 'request timeout'
+                            data += data_chunk
+                        else:
+                            raise ModbusServer.NetworkError('recv return null')
+                    except socket.timeout:
+                        # just redo main server run test, deadline test and recv operations on timeout
+                        pass
+            finally:
+                # restore the default timeout used by the other socket operations
+                if sock_timeout_changed:
+                    self.request.settimeout(self._SOCKET_TIMEOUT)
             return data
 
         def setup(self):
             # set a socket timeout of 1s on blocking operations (like send/recv)
             # this avoids hang thread deletion when main server exit (see _recv_all method)
-            self.request.settimeout(1.0)
+            self.request.settimeout(self._SOCKET_TIMEOUT)
 
         def handle(self):
             # try/except: end current thread on ModbusServer._InternalError, OSError or socket.error
@@ -851,10 +892,17 @@ class ModbusServer:
                 while True:
                     # init session data for new request
                     session_data.new_request()
-                    # receive mbap from client
-                    session_data.request.mbap.raw = self._recv_all(7)
-                    # receive pdu from client
-                    session_data.request.pdu.raw = self._recv_all(session_data.request.mbap.length - 1)
+                    # receive mbap from client:
+                    # - wait for a new request, the session is closed after idle_timeout without data (if set)
+                    # - then the rest of the header must come in request_timeout (avoid a stalled request)
+                    idle_timeout = self.server.idle_timeout
+                    request_timeout = self.server.request_timeout
+                    idle_deadline = None if idle_timeout is None else time.monotonic() + idle_timeout
+                    session_data.request.mbap.raw = self._recv_all(7, idle_deadline, 'idle timeout', request_timeout)
+                    # receive pdu from client (same limit)
+                    req_deadline = None if request_timeout is None else time.monotonic() + request_timeout
+                    session_data.request.pdu.raw = self._recv_all(session_data.request.mbap.length - 1, req_deadline,
+                                                                  'request timeout')
                     # update response MBAP fields with request data
                     session_data.set_response_mbap()
                     # pass the current session data to request engine
@@ -863,20 +911,66 @@ class ModbusServer:
                     self._send_all(session_data.response.raw)
             except (ModbusServer.Error, OSError, socket.error) as e:
                 # debug message
-                logger.debug('Exception during request handling: %r', e)
+                logger.debug('exception %r for %r', e, session_data.client)
                 # on main loop except: exit from it and cleanly close the current socket
                 self.request.close()
 
     class CustomThreadingTCPServer(ThreadingTCPServer):
         """IPv4 threaded TCP server."""
         daemon_threads = True
+        # these 3 settings are set by ModbusServer.start() (see ModbusServer.__init__() for a description)
+        max_connections = None
+        idle_timeout = None
+        request_timeout = None
+
+        def __init__(self, *args, **kwargs):
+            # number of active sessions (a session = a client TCP connection with its thread)
+            self._sessions = 0
+            self._sessions_lock = Lock()
+            # connections rejected since the last warning in the log (don't flood the log on a connection flood)
+            self._rejected = 0
+            self._rejected_log_time = None
+            super().__init__(*args, **kwargs)
+
+        def verify_request(self, request, client_address):
+            # called by the main server thread, the only one that add sessions (so this check is safe)
+            if self.max_connections is not None and self._sessions >= self.max_connections:
+                self._rejected += 1
+                # log the first rejection at once, then one message per 10 s at most
+                now = time.monotonic()
+                if self._rejected_log_time is None or now - self._rejected_log_time >= 10.0:
+                    logger.warning('maximum number of connections (%d) reached: %d connection(s) rejected '
+                                   '(last from %r)', self.max_connections, self._rejected, client_address)
+                    self._rejected = 0
+                    self._rejected_log_time = now
+                return False
+            return True
+
+        def process_request(self, request, client_address):
+            with self._sessions_lock:
+                self._sessions += 1
+            try:
+                super().process_request(request, client_address)
+            except BaseException:
+                # the session thread can't start: no session
+                with self._sessions_lock:
+                    self._sessions -= 1
+                raise
+
+        def process_request_thread(self, request, client_address):
+            try:
+                super().process_request_thread(request, client_address)
+            finally:
+                with self._sessions_lock:
+                    self._sessions -= 1
 
     class CustomThreadingTCPServerV6(CustomThreadingTCPServer):
         """IPv6 threaded TCP server."""
         address_family = socket.AF_INET6
 
     def __init__(self, host='localhost', port=502, no_block=False, ipv6=False,
-                 data_bank=None, data_hdl=None, ext_engine=None, device_id=None):
+                 data_bank=None, data_hdl=None, ext_engine=None, device_id=None,
+                 request_timeout=30.0, idle_timeout=None, max_connections=None):
         """Constructor
 
         Modbus server constructor.
@@ -897,6 +991,15 @@ class ModbusServer:
         :type ext_engine: callable
         :param device_id: instance of DeviceIdentification class for read device identification request (optional)
         :type device_id: DeviceIdentification
+        :param request_timeout: max time in seconds to receive a request once it has started (the MBAP header, then\
+            the PDU: a stalled request), on expiry the client session is closed, None to disable (default is 30.0)
+        :type request_timeout: float or None
+        :param idle_timeout: max time in seconds without any request from a client before closing its session,\
+            None to disable (default)
+        :type idle_timeout: float or None
+        :param max_connections: max number of simultaneous client connections, the next ones are closed immediately,\
+            None for no limit (default)
+        :type max_connections: int or None
         """
         # check data_bank
         if data_bank and not isinstance(data_bank, DataBank):
@@ -913,10 +1016,21 @@ class ModbusServer:
         # check device_id
         if device_id and not isinstance(device_id, DeviceIdentification):
             raise TypeError('device_id is not a DeviceIdentification instance')
+        # check timeouts and connections limit
+        request_timeout = _check_timeout(request_timeout, 'request_timeout')
+        idle_timeout = _check_timeout(idle_timeout, 'idle_timeout')
+        if max_connections is not None:
+            if isinstance(max_connections, bool) or not isinstance(max_connections, int):
+                raise TypeError('max_connections must be an int or None')
+            if max_connections < 1:
+                raise ValueError('max_connections must be at least 1 (or None for no limit)')
         # public
         self.host = host
         self.port = port
         self.no_block = no_block
+        self.request_timeout = request_timeout
+        self.idle_timeout = idle_timeout
+        self.max_connections = max_connections
         self.ipv6 = ipv6
         self.ext_engine = ext_engine
         # First, internal data_bank will be linked to an external data handler if defined.
@@ -1292,6 +1406,9 @@ class ModbusServer:
         # pass some things shared with server threads (access via self.server in ModbusService.handle())
         self._service.evt_running = self._evt_running
         self._service.engine = self._engine
+        self._service.request_timeout = self.request_timeout
+        self._service.idle_timeout = self.idle_timeout
+        self._service.max_connections = self.max_connections
         # set socket options
         self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
