@@ -12,6 +12,7 @@ from pyModbusTCP.constants import (
     EXP_DATA_VALUE,
     EXP_ILLEGAL_FUNCTION,
     EXP_NONE,
+    EXP_SLAVE_DEVICE_FAILURE,
     MB_EXCEPT_ERR,
     MB_NO_ERR,
     MB_SEND_ERR,
@@ -61,6 +62,27 @@ class TestClientServer(unittest.TestCase):
         # test I/O operation updates status
         self.client.read_coils(0)
         self.assertFalse(self.client.is_open,"Client should report as closed after I/O operation on closed server")
+
+    def test_user_callback_exception(self):
+        """An exception raised by a user callback must not drop the session (and must not be masked)."""
+        for value, exc in enumerate((RuntimeError('boom'), KeyError('key'), TypeError('type')), start=1):
+            self.server.data_bank.on_holding_registers_change = Mock(side_effect=exc)
+            # use a new value at each loop: the change callback is only called when the value change
+            with self.assertLogs('pyModbusTCP.server', level='ERROR'):
+                self.assertFalse(self.client.write_single_register(0, value))
+            self.assertEqual(self.client.last_error, MB_EXCEPT_ERR)
+            self.assertEqual(self.client.last_except, EXP_SLAVE_DEVICE_FAILURE)
+            self.assertTrue(self.client.is_open, 'session must stay open after a device failure')
+        # same session is still usable once the callback is fixed
+        del self.server.data_bank.on_holding_registers_change
+        self.assertTrue(self.client.write_single_register(0, 10))
+        self.assertEqual(self.client.read_holding_registers(0), [10])
+
+    def test_unknown_function_still_illegal(self):
+        """A function code without handler still gives an ILLEGAL_FUNCTION exception."""
+        self.assertIsNone(self.client.custom_request(b'\x55\x00'))
+        self.assertEqual(self.client.last_except, EXP_ILLEGAL_FUNCTION)
+        self.assertTrue(self.client.is_open)
 
     def test_request_with_short_send(self):
         """Complete requests when a socket send accepts only a prefix."""

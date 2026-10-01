@@ -9,7 +9,8 @@ from warnings import warn
 
 from .constants import (ENCAPSULATED_INTERFACE_TRANSPORT, EXP_DATA_ADDRESS,
                         EXP_DATA_VALUE, EXP_ILLEGAL_FUNCTION, EXP_NONE,
-                        MAX_PDU_SIZE, MEI_TYPE_READ_DEVICE_ID, READ_COILS,
+                        EXP_SLAVE_DEVICE_FAILURE, MAX_PDU_SIZE,
+                        MEI_TYPE_READ_DEVICE_ID, READ_COILS,
                         READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS,
                         READ_INPUT_REGISTERS, WRITE_MULTIPLE_COILS,
                         WRITE_MULTIPLE_REGISTERS,
@@ -943,16 +944,23 @@ class ModbusServer:
 
         :type session_data: ModbusServer.SessionData
         """
+        func_code = session_data.request.pdu.func_code
+        # get the ad-hoc function, if none exists (or is disabled with None), send an "illegal function" exception
+        func = self._func_map.get(func_code)
+        if not callable(func):
+            session_data.response.pdu.build_except(func_code, EXP_ILLEGAL_FUNCTION)
+            return
+        # call ad-hoc func
         try:
-            # call the ad-hoc function, if none exists, send an "illegal function" exception
-            func = self._func_map[session_data.request.pdu.func_code]
-            # check function found is callable
-            if not callable(func):
-                raise TypeError
-            # call ad-hoc func
             func(session_data)
-        except (TypeError, KeyError):
-            session_data.response.pdu.build_except(session_data.request.pdu.func_code, EXP_ILLEGAL_FUNCTION)
+        except ModbusServer.Error:
+            # malformed frame or network error: let the session handler close the connection
+            raise
+        except Exception:
+            # unexpected error (like an exception raised by a user callback): log it and keep the session alive
+            # (this keeps the TCP session synchronized and tells the client that the request has failed)
+            logger.exception('unexpected error during processing of function 0x%02X', func_code)
+            session_data.response.pdu.build_except(func_code, EXP_SLAVE_DEVICE_FAILURE)
 
     def _read_bits(self, session_data):
         """

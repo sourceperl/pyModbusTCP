@@ -8,6 +8,8 @@ Revision history for pyModbusTCP
     - fix ModbusClient: treat socket.gaierror as MB_CONNECT_ERR (like any other connect error).
     - fix ModbusServer: close the session on send timeout (a partial send leaves the TCP stream out of sync).
     - fix ModbusServer.PDU: is_valid property was inverted.
+    - fix ModbusServer: an unexpected exception during a request (like one raised by a user callback) is now logged and 
+                        answered with a SLAVE_DEVICE_FAILURE (0x04) exception instead of dropping the TCP session.
     - improve ModbusClient: decode/encode registers and bits in one pass (faster reads and writes).
     - improve ModbusClient: add some python hints for better python type checking and IDE support.
 
