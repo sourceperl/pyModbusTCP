@@ -191,8 +191,8 @@ class ModbusClient:
         self.no_delay = no_delay
 
     def __repr__(self):
-        r_str = 'ModbusClient(host=\'%s\', port=%d, unit_id=%d, timeout=%.2f, auto_open=%s, auto_close=%s)'
-        r_str %= (self.host, self.port, self.unit_id, self.timeout, self.auto_open, self.auto_close)
+        r_str = 'ModbusClient(host=\'%s\', port=%d, unit_id=%d, timeout=%.2f, auto_open=%s, auto_close=%s, no_delay=%s)'
+        r_str %= (self.host, self.port, self.unit_id, self.timeout, self.auto_open, self.auto_close, self.no_delay)
         return r_str
 
     def __del__(self):
@@ -346,6 +346,12 @@ class ModbusClient:
     def no_delay(self, value: bool) -> None:
         # enforce type
         self._no_delay = bool(value)
+        # apply it at once on an open connection (like for the other settings, no need to reconnect)
+        if self.is_open:
+            try:
+                self._sock.setsockopt(IPPROTO_TCP, TCP_NODELAY, int(self._no_delay))
+            except socket.error as e:
+                logger.debug('unable to change TCP_NODELAY on the open connection: %r', e)
 
     @property
     def is_open(self) -> bool:
@@ -389,11 +395,10 @@ class ModbusClient:
                 continue
             try:
                 self._sock.settimeout(self.timeout)
-                self._sock.connect(sa)
                 # disable Nagle's algorithm: modbus requests are small frames
                 # that expect an immediate reply (request/response pattern)
-                if self._no_delay:
-                    self._sock.setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
+                self._sock.setsockopt(IPPROTO_TCP, TCP_NODELAY, int(self._no_delay))
+                self._sock.connect(sa)
             except socket.error:
                 self._sock.close()
                 continue

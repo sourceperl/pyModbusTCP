@@ -1,6 +1,5 @@
 """ Test of pyModbusTCP client-server interaction """
 
-import platform
 import socket
 import unittest
 from random import choice, getrandbits, randint
@@ -67,15 +66,12 @@ class TestClientServer(unittest.TestCase):
 
     def test_tcp_nodelay_sockopt(self):
         """On socket TCP_NODELAY option must reflect the no_delay mode."""
-        # TCP_NODELAY is readable on POSIX platforms only
-        if platform.system() == 'Windows':
-            return
         # configure no_delay on and off and check getsockopt status
         for no_delay, expected_status in ((True, 1), (False, 0)):
             self.client.no_delay = no_delay
             # restart socket and apply no_delay
             self.client.open()
-            no_delay_status = self.client._sock.getsockopt(IPPROTO_TCP, TCP_NODELAY)
+            no_delay_status = bool(self.client._sock.getsockopt(IPPROTO_TCP, TCP_NODELAY))
             self.assertEqual(no_delay_status, expected_status)
             self.client.close()
 
