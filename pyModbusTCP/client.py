@@ -165,30 +165,21 @@ class ModbusClient:
         :rtype: ModbusClient
         """
         # private
-        # set by the property setters below, with the constructor arguments
-        self._host: Optional[str] = None
-        self._port: Optional[int] = None
-        self._unit_id: Optional[int] = None
-        self._timeout: Optional[float] = None
-        self._auto_open: Optional[bool] = None
-        self._auto_close: Optional[bool] = None
-        self._no_delay: Optional[bool] = None
         # internal variables
-        self._sock = socket.socket()
+        self._sock: Optional[socket.socket] = None
         self._deadline = 0.0  # end of the current request (time.monotonic() value), see _send() and _recv()
         self._transaction_id = 0  # MBAP transaction ID
         self._version = VERSION  # this package version number
         self._last_error = MB_NO_ERR  # last error code
         self._last_except = EXP_NONE  # last except code
-        # public
-        # constructor arguments: validate them with property setters
-        self.host = host
-        self.port = port
-        self.unit_id = unit_id
-        self.timeout = timeout
-        self.auto_open = auto_open
-        self.auto_close = auto_close
-        self.no_delay = no_delay
+        # constructor arguments: validate them (! keep this after self._sock declaration)
+        self._host = self._validate_host(host)
+        self._port = self._validate_port(port)
+        self._unit_id = self._validate_unit_id(unit_id)
+        self._timeout = self._validate_timeout(timeout)
+        self._auto_open = _to_bool(auto_open, 'auto_open')
+        self._auto_close = _to_bool(auto_close, 'auto_close')
+        self._no_delay = _to_bool(no_delay, 'no_delay')
 
     def __repr__(self):
         r_str = 'ModbusClient(host=\'%s\', port=%d, unit_id=%d, timeout=%.2f, auto_open=%s, auto_close=%s, no_delay=%s)'
@@ -197,6 +188,173 @@ class ModbusClient:
 
     def __del__(self):
         self.close()
+
+    @property
+    def host(self):
+        """Get or set the server to connect to.
+
+        This can be any string with a valid IPv4 / IPv6 address or hostname.
+        Setting host to a new value will close the current socket.
+        """
+        return self._host
+
+    @host.setter
+    def host(self, value: str):
+        # validate
+        value = self._validate_host(value)
+        value_change = self._host != value
+        self._host = value
+        # on change handler
+        if value_change:
+            self._on_change_host()
+
+    def _validate_host(self, value: object) -> str:
+        if not isinstance(value, str):
+            raise TypeError('host must be a str')
+        if not valid_host(value):
+            raise ValueError('host can\'t be set (not a valid IP address or hostname)')
+        return value
+
+    def _on_change_host(self):
+        self.close()
+
+    @property
+    def port(self):
+        """Get or set the current TCP port (default is 502).
+
+        Setting port to a new value will close the current socket.
+        """
+        return self._port
+
+    @port.setter
+    def port(self, value: int):
+        # validate
+        value = self._validate_port(value)
+        value_change = value != self._port
+        self._port = value
+        # on change handler
+        if value_change:
+            self._on_change_port()
+
+    def _validate_port(self, value: object) -> int:
+        if not isinstance(value, int):
+            raise TypeError('port must be a int')
+        if not 0 < value < 65536:
+            raise ValueError('port can\'t be set (valid if 0 < port < 65536)')
+        return value
+
+    def _on_change_port(self):
+        self.close()
+
+    @property
+    def unit_id(self):
+        """Get or set the modbus unit identifier (default is 1).
+
+        Any int from 0 to 255 is valid.
+        """
+        return self._unit_id
+
+    @unit_id.setter
+    def unit_id(self, value: int):
+        # validate
+        value = self._validate_unit_id(value)
+        value_change = value != self._unit_id
+        self._unit_id = value
+        # on change handler
+        if value_change:
+            self._on_change_unit_id()
+
+    def _validate_unit_id(self, value: object) -> int:
+        if not isinstance(value, int):
+            raise TypeError('unit_id must be a int')
+        if not 0 <= value <= 255:
+            raise ValueError('unit_id can\'t be set (valid from 0 to 255)')
+        return value
+
+    def _on_change_unit_id(self):
+        pass
+
+    @property
+    def timeout(self):
+        """Get or set requests timeout (default is 30 seconds).
+
+        The argument may be a floating point number for sub-second precision.
+        Setting timeout to a new value will close the current socket.
+        """
+        return self._timeout
+
+    @timeout.setter
+    def timeout(self, value: float) -> None:
+        # validate
+        value = self._validate_timeout(value)
+        value_change = value != self._timeout
+        self._timeout = value
+        # on change handler
+        if value_change:
+            self._on_change_timeout()
+
+    def _validate_timeout(self, value: object) -> float:
+        if not isinstance(value, (float, int)):
+            raise TypeError('unit_id must be a float')
+        if not 0.0 < value < 3600.0:
+            raise ValueError('timeout can\'t be set (valid between 0 and 3600)')
+        return float(value)
+
+    def _on_change_timeout(self):
+        pass
+
+    @property
+    def auto_open(self) -> bool:
+        """Get or set automatic TCP connect mode (True = turn on)."""
+        return self._auto_open
+
+    @auto_open.setter
+    def auto_open(self, value: bool) -> None:
+        self._auto_open = _to_bool(value, 'auto_open')
+
+    @property
+    def auto_close(self) -> bool:
+        """Get or set automatic TCP close after each request mode (True = turn on)."""
+        return self._auto_close
+
+    @auto_close.setter
+    def auto_close(self, value: bool) -> None:
+        self._auto_close = _to_bool(value, 'auto_close')
+
+    @property
+    def no_delay(self) -> bool:
+        """Get or set TCP_NODELAY mode on connection (True = disable Nagle's algorithm, default)."""
+        return self._no_delay
+
+    @no_delay.setter
+    def no_delay(self, value: bool) -> None:
+        self._no_delay = _to_bool(value, 'no_delay')
+        # apply it at once on an open connection (like for the other settings, no need to reconnect)
+        if self.is_open:
+            self._set_sock_tcp_no_delay(value=self.no_delay)
+
+    @property
+    def is_open(self) -> bool:
+        """Get current status of the TCP connection (True = open)."""
+        if self._sock is None:
+            return False
+        try:
+            return self._sock.fileno() >= 0
+        except (AttributeError, OSError):
+            return False
+
+    def open(self) -> bool:
+        """Connect to modbus server (open TCP connection).
+
+        :returns: connect status (True on success)
+        :rtype: bool
+        """
+        try:
+            self._open()
+            return True
+        except ModbusClient._NetworkError as e:
+            self._req_except_handler(e)
+            return False
 
     @property
     def version(self):
@@ -230,148 +388,6 @@ class ModbusClient:
         default_str = 'unreferenced exception 0x%X' % self._last_except
         return EXP_DETAILS.get(self._last_except, default_str)
 
-    @property
-    def host(self):
-        """Get or set the server to connect to.
-
-        This can be any string with a valid IPv4 / IPv6 address or hostname.
-        Setting host to a new value will close the current socket.
-        """
-        return self._host
-
-    @host.setter
-    def host(self, value: str):
-        # check type
-        if type(value) is not str:
-            raise TypeError('host must be a str')
-        # check value
-        if valid_host(value):
-            if self._host != value:
-                self.close()
-                self._host = value
-            return
-        # can't be set
-        raise ValueError('host can\'t be set (not a valid IP address or hostname)')
-
-    @property
-    def port(self):
-        """Get or set the current TCP port (default is 502).
-
-        Setting port to a new value will close the current socket.
-        """
-        return self._port
-
-    @port.setter
-    def port(self, value: int):
-        # check type
-        if type(value) is not int:
-            raise TypeError('port must be an int')
-        # check validity
-        if 0 < value < 65536:
-            if self._port != value:
-                self.close()
-                self._port = value
-            return
-        # can't be set
-        raise ValueError('port can\'t be set (valid if 0 < port < 65536)')
-
-    @property
-    def unit_id(self):
-        """Get or set the modbus unit identifier (default is 1).
-
-        Any int from 0 to 255 is valid.
-        """
-        return self._unit_id
-
-    @unit_id.setter
-    def unit_id(self, value: int):
-        # check type
-        if type(value) is not int:
-            raise TypeError('unit_id must be an int')
-        # check validity
-        if 0 <= value <= 255:
-            self._unit_id = value
-            return
-        # can't be set
-        raise ValueError('unit_id can\'t be set (valid from 0 to 255)')
-
-    @property
-    def timeout(self):
-        """Get or set requests timeout (default is 30 seconds).
-
-        The argument may be a floating point number for sub-second precision.
-        Setting timeout to a new value will close the current socket.
-        """
-        return self._timeout
-
-    @timeout.setter
-    def timeout(self, value: float) -> None:
-        # enforce type
-        value = float(value)
-        # check validity
-        if 0 < value < 3600:
-            if self._timeout != value:
-                self.close()
-                self._timeout = value
-            return
-        # can't be set
-        raise ValueError('timeout can\'t be set (valid between 0 and 3600)')
-
-    @property
-    def auto_open(self):
-        """Get or set automatic TCP connect mode (True = turn on)."""
-        return self._auto_open
-
-    @auto_open.setter
-    def auto_open(self, value: bool) -> None:
-        # enforce type
-        self._auto_open = bool(value)
-
-    @property
-    def auto_close(self):
-        """Get or set automatic TCP close after each request mode (True = turn on)."""
-        return self._auto_close
-
-    @auto_close.setter
-    def auto_close(self, value: bool) -> None:
-        # enforce type
-        self._auto_close = bool(value)
-
-    @property
-    def no_delay(self) -> bool:
-        """Get or set TCP_NODELAY mode on connection (True = disable Nagle's algorithm, default)."""
-        return self._no_delay
-
-    @no_delay.setter
-    def no_delay(self, value: bool) -> None:
-        # enforce type
-        self._no_delay = bool(value)
-        # apply it at once on an open connection (like for the other settings, no need to reconnect)
-        if self.is_open:
-            try:
-                self._sock.setsockopt(IPPROTO_TCP, TCP_NODELAY, int(self._no_delay))
-            except socket.error as e:
-                logger.debug('unable to change TCP_NODELAY on the open connection: %r', e)
-
-    @property
-    def is_open(self) -> bool:
-        """Get current status of the TCP connection (True = open)."""
-        # fileno() return -1 on a closed socket (and 0 is a valid file descriptor)
-        return self._sock.fileno() >= 0
-
-    def open(self) -> bool:
-        """Connect to modbus server (open TCP connection).
-
-        :returns: connect status (True on success)
-        :rtype: bool
-        """
-        try:
-            self._open()
-            return True
-        except ModbusClient._NetworkError as e:
-            self._req_except_handler(e)
-            return False
-
     def _open(self) -> None:
         """Connect to modbus server (open TCP connection)."""
         # open an already open socket -> reset it
@@ -397,10 +413,10 @@ class ModbusClient:
                 self._sock.settimeout(self.timeout)
                 # disable Nagle's algorithm: modbus requests are small frames
                 # that expect an immediate reply (request/response pattern)
-                self._sock.setsockopt(IPPROTO_TCP, TCP_NODELAY, int(self._no_delay))
+                self._set_sock_tcp_no_delay(self._no_delay)
                 self._sock.connect(sa)
             except socket.error:
-                self._sock.close()
+                self.close()
                 continue
             break
         # check connect status
@@ -409,7 +425,13 @@ class ModbusClient:
 
     def close(self) -> None:
         """Close current TCP connection."""
-        self._sock.close()
+        if self._sock is not None:
+            try:
+                self._sock.close()
+            except OSError:
+                pass
+            finally:
+                self._sock = None
 
     def custom_request(self, pdu: bytes) -> Optional[bytes]:
         """Send a custom modbus request.
@@ -840,7 +862,7 @@ class ModbusClient:
             self._req_except_handler(e)
             return None
 
-    def _set_sock_timeout(self, timeout: float) -> None:
+    def _set_sock_timeout(self, value: float) -> None:
         """Set the current socket timeout, but only if it differs by more than 10 ms from the current one.
 
         Each settimeout() is a system call: in the usual case (response received at once) the timeout in place
@@ -849,9 +871,23 @@ class ModbusClient:
         :param timeout: socket timeout in seconds
         :type timeout: float
         """
+        # skip for unset socket
+        if self._sock is None:
+            return
+        # apply timeout if diff is great than 10ms
         current = self._sock.gettimeout()
-        if current is None or abs(current - timeout) > 0.01:
-            self._sock.settimeout(timeout)
+        if current is None or abs(current - value) > 0.01:
+            self._sock.settimeout(value)
+
+    def _set_sock_tcp_no_delay(self, value: bool) -> None:
+        # skip for unset socket
+        if self._sock is None:
+            return
+        # apply tcp_nodelay value
+        try:
+            self._sock.setsockopt(IPPROTO_TCP, TCP_NODELAY, int(value))
+        except socket.error as e:
+            logger.debug('unable to change TCP_NODELAY on the open connection: %r', e)
 
     def _send(self, frame: bytes):
         """Send frame over current socket.
@@ -859,8 +895,8 @@ class ModbusClient:
         :param frame: modbus frame to send (MBAP + PDU)
         :type frame: bytes
         """
-        # check socket
-        if not self.is_open:
+        # check socket status
+        if self._sock is None or not self.is_open:
             raise ModbusClient._NetworkError(MB_SOCK_CLOSE_ERR, 'try to send on a close socket')
         # the timeout is a limit for the whole request (send + receive), not for each recv() call:
         # a slow server sending its response byte by byte can't hold the client more than timeout seconds
@@ -871,10 +907,10 @@ class ModbusClient:
             self._set_sock_timeout(self.timeout)
             self._sock.sendall(frame)
         except socket.timeout:
-            self._sock.close()
+            self.close()
             raise ModbusClient._NetworkError(MB_TIMEOUT_ERR, 'timeout error')
         except socket.error:
-            self._sock.close()
+            self.close()
             raise ModbusClient._NetworkError(MB_SEND_ERR, 'send error')
 
     def _send_pdu(self, pdu: bytes):
@@ -901,22 +937,25 @@ class ModbusClient:
         :returns: receive data or None if error
         :rtype: bytes
         """
+        # check socket status
+        if self._sock is None or not self.is_open:
+            raise ModbusClient._NetworkError(MB_SOCK_CLOSE_ERR, 'try to recv on a close socket')
         # time remaining before the end of the request
         remaining = self._deadline - time.monotonic()
         if remaining <= 0:
-            self._sock.close()
+            self.close()
             raise ModbusClient._NetworkError(MB_TIMEOUT_ERR, 'timeout error')
         try:
             self._set_sock_timeout(remaining)
             r_buffer = self._sock.recv(size)
         except socket.timeout:
-            self._sock.close()
+            self.close()
             raise ModbusClient._NetworkError(MB_TIMEOUT_ERR, 'timeout error')
         except socket.error:
             r_buffer = b''
         # handle recv error
         if not r_buffer:
-            self._sock.close()
+            self.close()
             raise ModbusClient._NetworkError(MB_RECV_ERR, 'recv error')
         return r_buffer
 

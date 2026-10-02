@@ -19,6 +19,7 @@ Revision history for pyModbusTCP
     - improve ModbusClient: add some python hints for better python type checking and IDE support.
     - improve ModbusClient: set TCP_NODELAY on connect (new no_delay argument, on by default) to reduce latency on small
                             request/response frames.
+    - improve ModbusClient: improve socket lifecycle, parameter validation, and timeout safety.
     - improve ModbusServer: stop() is now faster, the main loop polls the stop request every 50 ms instead of 500 ms.
     - improve ModbusServer: add request_timeout (default 30 s): a client session with a stalled request (incomplete MBAP
                             header or PDU) is now closed, it was kept (with its thread) until the client closed it.

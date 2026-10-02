@@ -71,6 +71,7 @@ class TestClientServer(unittest.TestCase):
             self.client.no_delay = no_delay
             # restart socket and apply no_delay
             self.client.open()
+            # enforce bool: macOS can return non-zero values other than 1 (e.g., 4) when enabled
             no_delay_status = bool(self.client._sock.getsockopt(IPPROTO_TCP, TCP_NODELAY))
             self.assertEqual(no_delay_status, expected_status)
             self.client.close()
