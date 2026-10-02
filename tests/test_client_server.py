@@ -1,8 +1,10 @@
 """ Test of pyModbusTCP client-server interaction """
 
+import platform
 import socket
 import unittest
 from random import choice, getrandbits, randint
+from socket import IPPROTO_TCP, TCP_NODELAY
 from string import ascii_letters
 from unittest.mock import Mock
 
@@ -62,6 +64,20 @@ class TestClientServer(unittest.TestCase):
         # test I/O operation updates status
         self.client.read_coils(0)
         self.assertFalse(self.client.is_open, "Client should report as closed after I/O operation on closed server")
+
+    def test_tcp_nodelay_sockopt(self):
+        """On socket TCP_NODELAY option must reflect the no_delay mode."""
+        # TCP_NODELAY is readable on POSIX platforms only
+        if platform.system() == 'Windows':
+            return
+        # configure no_delay on and off and check getsockopt status
+        for no_delay, expected_status in ((True, 1), (False, 0)):
+            self.client.no_delay = no_delay
+            # restart socket and apply no_delay
+            self.client.open()
+            no_delay_status = self.client._sock.getsockopt(IPPROTO_TCP, TCP_NODELAY)
+            self.assertEqual(no_delay_status, expected_status)
+            self.client.close()
 
     def test_user_callback_exception(self):
         """An exception raised by a user callback must not drop the session (and must not be masked)."""
