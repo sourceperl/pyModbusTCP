@@ -71,6 +71,9 @@ class TestClientServer(unittest.TestCase):
             self.client.no_delay = no_delay
             # restart socket and apply no_delay
             self.client.open()
+            # check _sock type
+            if not isinstance(self.client._sock, socket.socket):
+                raise TypeError("Expected self.client._sock to be socket")
             # enforce bool: macOS can return non-zero values other than 1 (e.g., 4) when enabled
             no_delay_status = bool(self.client._sock.getsockopt(IPPROTO_TCP, TCP_NODELAY))
             self.assertEqual(no_delay_status, expected_status)
@@ -101,6 +104,9 @@ class TestClientServer(unittest.TestCase):
         """Complete requests when a socket send accepts only a prefix."""
         self.client.timeout = 1.0
         self.assertTrue(self.client.open())
+        # check _sock type
+        if not isinstance(self.client._sock, socket.socket):
+            raise TypeError("Expected self.client._sock to be socket")
         sock = self.client._sock
         self.client._sock = Mock(wraps=sock)
         self.client._sock.send.side_effect = lambda data: sock.send(data[:3])

@@ -2,13 +2,15 @@
 
 import random
 import socket
+import struct
 import threading
 import time
 import unittest
 from unittest import mock
 
-from pyModbusTCP.client import ModbusClient, _decode_bits, _decode_regs
+from pyModbusTCP.client import ModbusClient, _decode_regs
 from pyModbusTCP.constants import MB_CONNECT_ERR, MB_TIMEOUT_ERR
+from pyModbusTCP.utils import _unpack_bits, set_bit
 
 
 class TestModbusClient(unittest.TestCase):
@@ -104,7 +106,7 @@ class TestModbusClient(unittest.TestCase):
             # bits: rx frame can have more bytes than requested and unused bits set to 1
             raw = bytes(rnd.randrange(256) for _ in range((nb + 7) // 8))
             ref_bits = [bool((raw[i // 8] >> i % 8) & 0x01) for i in range(nb)]
-            self.assertEqual(_decode_bits(raw, nb), ref_bits)
+            self.assertEqual(_unpack_bits(raw, nb), ref_bits)
         for nb in list(range(1, 126)):
             raw = bytes(rnd.randrange(256) for _ in range(2 * nb + 2))
             ref_regs = [raw[2 * i] << 8 | raw[2 * i + 1] for i in range(nb)]
@@ -165,6 +167,45 @@ class TestModbusClient(unittest.TestCase):
         c = ModbusClient('127.0.0.1', port, timeout=2.0)
         self.addCleanup(c.close)
         self.assertEqual(c.read_holding_registers(0, 1), [42])
+
+    def test_write_multiple_pdu(self):
+        """The PDU sent by write_multiple_coils()/write_multiple_registers() must keep the modbus format."""
+        rnd = random.Random(99)
+        c = ModbusClient()
+        sent = []
+
+        def fake_req_pdu(tx_pdu, rx_min_len):
+            sent.append(tx_pdu)
+            # echo address and quantity (the response of write multiple coils/registers)
+            return struct.pack('>BHH', tx_pdu[0], *struct.unpack('>HH', tx_pdu[1:5]))
+
+        with mock.patch.object(c, '_req_pdu', side_effect=fake_req_pdu):
+            for nb in (1, 2, 7, 8, 9, 16, 17, 100, 1968):
+                bits = [rnd.random() < 0.5 for _ in range(nb)]
+                self.assertTrue(c.write_multiple_coils(10, bits))
+                ref = bytearray((nb + 7) // 8)
+                for i, bit in enumerate(bits):
+                    if bit:
+                        ref[i // 8] = set_bit(ref[i // 8], i % 8)
+                self.assertEqual(sent[-1], struct.pack('>BHHB', 0x0f, 10, nb, len(ref)) + bytes(ref))
+            for nb in (1, 2, 50, 123):
+                regs = [rnd.randrange(0x10000) for _ in range(nb)]
+                self.assertTrue(c.write_multiple_registers(20, regs))
+                self.assertEqual(sent[-1], struct.pack('>BHHB', 0x10, 20, nb, 2 * nb) + struct.pack('>%dH' % nb, *regs))
+            # int-like items (bool) and edge values are accepted
+            self.assertTrue(c.write_multiple_registers(0, [0, 0xffff, True, False]))
+            self.assertEqual(sent[-1][6:], struct.pack('>4H', 0, 0xffff, 1, 0))
+            # a tuple is a valid sequence too
+            self.assertTrue(c.write_multiple_coils(0, (True, False, True)))
+            self.assertEqual(sent[-1][-1:], b'\x05')
+        # invalid items never reach the network
+        with mock.patch.object(c, '_req_pdu', side_effect=AssertionError('no request expected')):
+            self.assertRaises(ValueError, c.write_multiple_registers, 0, [1, -1])
+            self.assertRaises(ValueError, c.write_multiple_registers, 0, [1, 0x10000])
+            self.assertRaises(TypeError, c.write_multiple_registers, 0, [1, 2.0])
+            self.assertRaises(TypeError, c.write_multiple_registers, 0, [1, '2'])
+            self.assertRaises(TypeError, c.write_read_multiple_registers, 0, [1, None], 0)
+            self.assertRaises(ValueError, c.write_read_multiple_registers, 0, [1, -1], 0)
 
 
 if __name__ == '__main__':

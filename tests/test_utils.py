@@ -1,11 +1,30 @@
 """ Test of pyModbusTCP.utils """
 
-import unittest
 import math
-from pyModbusTCP.utils import \
-    get_bits_from_int, int2bits, decode_ieee, encode_ieee, \
-    word_list_to_long, words2longs, long_list_to_word, longs2words, \
-    get_2comp, twos_c, get_list_2comp, twos_c_l
+import random
+import unittest
+
+from pyModbusTCP.utils import (
+    _pack_bits,
+    _unpack_bits,
+    byte_length,
+    decode_ieee,
+    encode_ieee,
+    get_2comp,
+    get_bits_from_int,
+    get_list_2comp,
+    int2bits,
+    long_list_to_word,
+    longs2words,
+    set_bit,
+)
+from pyModbusTCP.utils import test_bit as get_bit
+from pyModbusTCP.utils import (
+    twos_c,
+    twos_c_l,
+    word_list_to_long,
+    words2longs,
+)
 
 
 class TestUtils(unittest.TestCase):
@@ -137,6 +156,47 @@ class TestUtils(unittest.TestCase):
         in_l = [0x8000, 0xffffffff, 0xfffea2a5]
         out_l = [0x8000, -0x0001, -89435]
         self.assertEqual(twos_c_l(in_l, val_size=32), out_l)
+
+    def test_pack_unpack_bits(self):
+        """Bits codec (private helpers of client and server) must give the same result as a loop with set_bit()."""
+        def ref_pack(bits):
+            byte_l = [0] * byte_length(len(bits))
+            for i, item in enumerate(bits):
+                if item:
+                    byte_l[i // 8] = set_bit(byte_l[i // 8], i % 8)
+            return bytes(byte_l)
+
+        rnd = random.Random(1234)
+        for nb in list(range(1, 70)) + [125, 1968, 1999, 2000]:
+            for _ in range(10):
+                bits = [rnd.random() < 0.5 for _ in range(nb)]
+                packed = _pack_bits(bits)
+                self.assertEqual(packed, ref_pack(bits))
+                self.assertEqual(_unpack_bits(packed, nb), bits)
+                # unpack: more bytes than needed and unused bits set to 1 in the last byte
+                raw = bytes(rnd.randrange(256) for _ in range(byte_length(nb) + rnd.randrange(3)))
+                self.assertEqual(_unpack_bits(raw, nb), [get_bit(raw[i // 8], i % 8) for i in range(nb)])
+        # items are evaluated as bool, like in a loop with 'if item'
+        mixed = [1, 0, 'x', None, 5, 0.0, [], [0]]
+        self.assertEqual(_pack_bits(mixed), ref_pack(mixed))
+        # no bits, no bytes
+        self.assertEqual(_pack_bits([]), b'')
+        self.assertEqual(_unpack_bits(b'', 0), [])
+
+    def test_pack_bits_not_a_sequence(self):
+        """A sized iterable that can't be reversed (no __reversed__ nor indexing) is still accepted."""
+        class IterOnly:
+            def __init__(self, items: list):
+                self._items = items
+
+            def __len__(self):
+                return len(self._items)
+
+            def __iter__(self):
+                return iter(self._items)
+
+        bits = [True, False, True, True, False, False, False, False, True]
+        self.assertEqual(_pack_bits(IterOnly(bits)), _pack_bits(bits)) # type: ignore
 
 
 if __name__ == '__main__':

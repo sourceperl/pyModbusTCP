@@ -36,13 +36,10 @@ from .constants import (
     WRITE_SINGLE_COIL,
     WRITE_SINGLE_REGISTER,
 )
-from .utils import byte_length, set_bit, valid_host
+from .utils import _pack_bits, _unpack_bits, byte_length, valid_host
 
 # add a logger for pyModbusTCP.client
 logger = logging.getLogger(__name__)
-
-# lookup table: expand a byte to its 8 bits (LSB first), used to decode coils/discrete inputs frames
-_BYTE_TO_BITS = tuple(tuple(bool(byte >> bit & 1) for bit in range(8)) for byte in range(256))
 
 
 def _to_bool(value: Any, name: str) -> bool:
@@ -68,12 +65,15 @@ def _to_int(value: Any, name: str) -> int:
         raise TypeError(f"{name} must be an int") from None
 
 
-def _decode_bits(data: bytes, bit_nb: int) -> List[bool]:
-    """Decode the first bit_nb bits of a modbus bits field (LSB first) as a list of bool."""
-    bits: List[bool] = []
-    for byte in data[:byte_length(bit_nb)]:
-        bits.extend(_BYTE_TO_BITS[byte])
-    return bits[:bit_nb]
+def _to_int_list(values: Sequence[Any], name: str) -> List[int]:
+    """Return values as a list of int, accept only int-like items (int, bool, numpy ints...).
+
+    :raises TypeError: if an item can't be used as an integer (str, float...)
+    """
+    try:
+        return list(map(operator.index, values))
+    except TypeError:
+        raise TypeError(f"{name} items must be an int") from None
 
 
 def _decode_regs(data: bytes, reg_nb: int) -> List[int]:
@@ -482,7 +482,7 @@ class ModbusClient:
             if byte_count < byte_length(bit_nb) or byte_count != len(rx_pdu_coils):
                 raise ModbusClient._NetworkError(MB_RECV_ERR, 'rx byte count mismatch')
             # return read coils
-            return _decode_bits(rx_pdu_coils, bit_nb)
+            return _unpack_bits(rx_pdu_coils, bit_nb)
         # handle error during request
         except ModbusClient._InternalError as e:
             self._req_except_handler(e)
@@ -519,7 +519,7 @@ class ModbusClient:
             if byte_count < byte_length(bit_nb) or byte_count != len(rx_pdu_d_inputs):
                 raise ModbusClient._NetworkError(MB_RECV_ERR, 'rx byte count mismatch')
             # return bits list
-            return _decode_bits(rx_pdu_d_inputs, bit_nb)
+            return _unpack_bits(rx_pdu_d_inputs, bit_nb)
         # handle error during request
         except ModbusClient._InternalError as e:
             self._req_except_handler(e)
@@ -742,15 +742,8 @@ class ModbusClient:
             raise ValueError('write after end of modbus address space')
         # make request
         try:
-            # build PDU coils part
-            # allocate a list of bytes
-            byte_l = [0] * byte_length(len(bits_value))
-            # populate byte list with coils values
-            for i, item in enumerate(bits_value):
-                if item:
-                    byte_l[i // 8] = set_bit(byte_l[i // 8], i % 8)
-            # format PDU coils part with byte list
-            pdu_coils_part = struct.pack('%dB' % len(byte_l), *byte_l)
+            # build PDU coils part: pack all the bits in bytes at once
+            pdu_coils_part = _pack_bits(bits_value)
             # concatenate PDU parts
             tx_pdu = struct.pack('>BHHB', WRITE_MULTIPLE_COILS, bits_addr, len(bits_value), len(pdu_coils_part))
             tx_pdu += pdu_coils_part
@@ -784,8 +777,8 @@ class ModbusClient:
             raise ValueError('number of registers out of range (valid from 1 to 123)')
         if regs_addr + len(regs_value) > 0x10000:
             raise ValueError('write after end of modbus address space')
-        regs_value = [_to_int(reg, 'regs_value item') for reg in regs_value]
-        if not all(0 <= reg <= 0xffff for reg in regs_value):
+        regs_value = _to_int_list(regs_value, 'regs_value')
+        if min(regs_value) < 0 or max(regs_value) > 0xffff:
             raise ValueError('regs_value list contains out of range values')
         # make request
         try:
@@ -835,8 +828,8 @@ class ModbusClient:
         for err, msg in check_l:
             if err:
                 raise ValueError(msg)
-        write_values = [_to_int(reg, 'write_values item') for reg in write_values]
-        if not all(0 <= reg <= 0xffff for reg in write_values):
+        write_values = _to_int_list(write_values, 'write_values')
+        if min(write_values) < 0 or max(write_values) > 0xffff:
             raise ValueError('write_values list contains out of range values')
         # make request
         try:

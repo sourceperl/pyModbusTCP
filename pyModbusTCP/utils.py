@@ -3,6 +3,7 @@
 import re
 import socket
 import struct
+from typing import Any, List, Sequence
 
 
 ###############
@@ -97,6 +98,48 @@ def toggle_bit(value, offset):
     """
     mask = 1 << offset
     return int(value ^ mask)
+
+
+# a byte -> its 8 bits as bool (LSB first)
+_BYTE_TO_BITS = tuple(tuple(bool(byte >> bit & 1) for bit in range(8)) for byte in range(256))
+# translation table for _pack_bits: '\x00'/'\x01' bytes -> '0'/'1' ascii digits
+_BITS_TO_DIGITS = bytes.maketrans(b'\x00\x01', b'01')
+
+
+def _pack_bits(bits: Sequence[Any]) -> bytes:
+    """Pack a sequence of bits in bytes, with the modbus order (LSB first in each byte).
+
+    Each item is evaluated as a bool (truthiness). Same result as a loop with set_bit(), but about 5x faster.
+
+    :param bits: bits to pack
+    :type bits: sequence
+    :returns: bits packed in bytes (the last byte is padded with zeros)
+    :rtype: bytes
+    """
+    try:
+        bits_rev = reversed(bits)
+    except TypeError:
+        # a sized iterable that isn't a sequence (like a set)
+        bits_rev = reversed(list(bits))
+    # bit i of the integer is bits[i]: build its binary string from the last bit to the first one
+    digits = bytes(map(bool, bits_rev)).translate(_BITS_TO_DIGITS)
+    return int(digits, 2).to_bytes(byte_length(len(digits)), 'little') if digits else b''
+
+
+def _unpack_bits(data: bytes, bit_nb: int) -> List[bool]:
+    """Unpack the first bit_nb bits of bytes (modbus order: LSB first in each byte) as a list of bool.
+
+    :param data: bytes with the bits (can be longer than needed)
+    :type data: bytes
+    :param bit_nb: number of bits to unpack
+    :type bit_nb: int
+    :returns: list of bit_nb bool
+    :rtype: list
+    """
+    bits: List[bool] = []
+    for byte in data[:byte_length(bit_nb)]:
+        bits.extend(_BYTE_TO_BITS[byte])
+    return bits[:bit_nb]
 
 
 ########################
