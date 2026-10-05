@@ -181,18 +181,18 @@ class ModbusClient:
         self._last_error = MB_NO_ERR  # last error code
         self._last_except = EXP_NONE  # last except code
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         r_str = 'ModbusClient(host=\'%s\', port=%d, unit_id=%d, timeout=%.2f, auto_open=%s, auto_close=%s, no_delay=%s)'
         r_str %= (self.host, self.port, self.unit_id, self.timeout, self.auto_open, self.auto_close, self.no_delay)
         return r_str
 
-    def __del__(self):
+    def __del__(self) -> None:
         # don't call close() if __init__() failed before _sock is set
         if hasattr(self, '_sock'):
             self.close()
 
     @property
-    def host(self):
+    def host(self) -> str:
         """Get or set the server to connect to.
 
         This can be any string with a valid IPv4 / IPv6 address or hostname.
@@ -201,7 +201,7 @@ class ModbusClient:
         return self._host
 
     @host.setter
-    def host(self, value: str):
+    def host(self, value: str) -> None:
         # validate
         value = self._validate_host(value)
         value_change = self._host != value
@@ -217,11 +217,11 @@ class ModbusClient:
             raise ValueError('host can\'t be set (not a valid IP address or hostname)')
         return value
 
-    def _on_change_host(self):
+    def _on_change_host(self) -> None:
         self.close()
 
     @property
-    def port(self):
+    def port(self) -> int:
         """Get or set the current TCP port (default is 502).
 
         Setting port to a new value will close the current socket.
@@ -229,7 +229,7 @@ class ModbusClient:
         return self._port
 
     @port.setter
-    def port(self, value: int):
+    def port(self, value: int) -> None:
         # validate
         value = self._validate_port(value)
         value_change = value != self._port
@@ -245,11 +245,11 @@ class ModbusClient:
             raise ValueError('port can\'t be set (valid if 0 < port < 65536)')
         return value
 
-    def _on_change_port(self):
+    def _on_change_port(self) -> None:
         self.close()
 
     @property
-    def unit_id(self):
+    def unit_id(self) -> int:
         """Get or set the modbus unit identifier (default is 1).
 
         Any int from 0 to 255 is valid.
@@ -257,7 +257,7 @@ class ModbusClient:
         return self._unit_id
 
     @unit_id.setter
-    def unit_id(self, value: int):
+    def unit_id(self, value: int) -> None:
         # validate
         value = self._validate_unit_id(value)
         value_change = value != self._unit_id
@@ -273,11 +273,11 @@ class ModbusClient:
             raise ValueError('unit_id can\'t be set (valid from 0 to 255)')
         return value
 
-    def _on_change_unit_id(self):
+    def _on_change_unit_id(self) -> None:
         pass
 
     @property
-    def timeout(self):
+    def timeout(self) -> float:
         """Get or set requests timeout (default is 30 seconds).
 
         The argument may be a floating point number for sub-second precision.
@@ -302,7 +302,7 @@ class ModbusClient:
             raise ValueError('timeout can\'t be set (valid between 0 and 3600)')
         return float(value)
 
-    def _on_change_timeout(self):
+    def _on_change_timeout(self) -> None:
         pass
 
     @property
@@ -359,33 +359,33 @@ class ModbusClient:
             return False
 
     @property
-    def version(self):
+    def version(self) -> str:
         """Return the current package version as a str."""
         return self._version
 
     @property
-    def last_error(self):
+    def last_error(self) -> int:
         """Last error code."""
         return self._last_error
 
     @property
-    def last_error_as_txt(self):
+    def last_error_as_txt(self) -> str:
         """Human-readable text that describe last error."""
         return MB_ERR_TXT.get(self._last_error, 'unknown error')
 
     @property
-    def last_except(self):
+    def last_except(self) -> int:
         """Return the last modbus exception code."""
         return self._last_except
 
     @property
-    def last_except_as_txt(self):
+    def last_except_as_txt(self) -> str:
         """Short human-readable text that describe last modbus exception."""
         default_str = 'unreferenced exception 0x%X' % self._last_except
         return EXP_TXT.get(self._last_except, default_str)
 
     @property
-    def last_except_as_full_txt(self):
+    def last_except_as_full_txt(self) -> str:
         """Verbose human-readable text that describe last modbus exception."""
         default_str = 'unreferenced exception 0x%X' % self._last_except
         return EXP_DETAILS.get(self._last_except, default_str)
@@ -884,7 +884,7 @@ class ModbusClient:
         except socket.error as e:
             logger.debug('unable to change TCP_NODELAY on the open connection: %r', e)
 
-    def _send(self, frame: bytes):
+    def _send(self, frame: bytes) -> None:
         """Send frame over current socket.
 
         :param frame: modbus frame to send (MBAP + PDU)
@@ -908,7 +908,7 @@ class ModbusClient:
             self.close()
             raise ModbusClient._NetworkError(MB_SEND_ERR, 'send error')
 
-    def _send_pdu(self, pdu: bytes):
+    def _send_pdu(self, pdu: bytes) -> None:
         """Convert modbus PDU to frame and send it.
 
         :param pdu: modbus frame PDU

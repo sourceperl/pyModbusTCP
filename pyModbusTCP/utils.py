@@ -9,7 +9,7 @@ from typing import Any, List, Sequence
 ###############
 # bits function
 ###############
-def get_bits_from_int(val_int, val_size=16):
+def get_bits_from_int(val_int: int, val_size: int = 16) -> List[bool]:
     """Get the list of bits of val_int integer (default size is 16 bits).
 
     Return bits list, the least significant bit first. Use list.reverse() for msb first.
@@ -33,7 +33,7 @@ def get_bits_from_int(val_int, val_size=16):
 int2bits = get_bits_from_int
 
 
-def byte_length(bit_length):
+def byte_length(bit_length: int) -> int:
     """Return the number of bytes needs to contain a bit_length structure.
 
     :param bit_length: the number of bits
@@ -44,7 +44,7 @@ def byte_length(bit_length):
     return (bit_length + 7) // 8
 
 
-def test_bit(value, offset):
+def test_bit(value: int, offset: int) -> bool:
     """Test a bit at offset position.
 
     :param value: value of integer to test
@@ -58,7 +58,7 @@ def test_bit(value, offset):
     return bool(value & mask)
 
 
-def set_bit(value, offset):
+def set_bit(value: int, offset: int) -> int:
     """Set a bit at offset position.
 
     :param value: value of integer where set the bit
@@ -72,7 +72,7 @@ def set_bit(value, offset):
     return int(value | mask)
 
 
-def reset_bit(value, offset):
+def reset_bit(value: int, offset: int) -> int:
     """Reset a bit at offset position.
 
     :param value: value of integer where reset the bit
@@ -86,7 +86,7 @@ def reset_bit(value, offset):
     return int(value & mask)
 
 
-def toggle_bit(value, offset):
+def toggle_bit(value: int, offset: int) -> int:
     """Return an integer with the bit at offset position inverted.
 
     :param value: value of integer where invert the bit
@@ -145,7 +145,7 @@ def _unpack_bits(data: bytes, bit_nb: int) -> List[bool]:
 ########################
 # Word convert functions
 ########################
-def word_list_to_long(val_list, big_endian=True, long_long=False):
+def word_list_to_long(val_list: List[int], big_endian: bool = True, long_long: bool = False) -> List[int]:
     """Word list (16 bits) to long (32 bits) or long long (64 bits) list.
 
     By default, word_list_to_long() use big endian order. For use little endian, set
@@ -186,7 +186,7 @@ def word_list_to_long(val_list, big_endian=True, long_long=False):
 words2longs = word_list_to_long
 
 
-def long_list_to_word(val_list, big_endian=True, long_long=False):
+def long_list_to_word(val_list: List[int], big_endian: bool = True, long_long: bool = False) -> List[int]:
     """Long (32 bits) or long long (64 bits) list to word (16 bits) list.
 
     By default long_list_to_word() use big endian order. For use little endian, set
@@ -223,7 +223,7 @@ longs2words = long_list_to_word
 ##########################
 # 2's complement functions
 ##########################
-def get_2comp(val_int, val_size=16):
+def get_2comp(val_int: int, val_size: int = 16) -> int:
     """Get the 2's complement of Python int val_int.
 
     :param val_int: int value to apply 2's complement
@@ -252,7 +252,7 @@ def get_2comp(val_int, val_size=16):
 twos_c = get_2comp
 
 
-def get_list_2comp(val_list, val_size=16):
+def get_list_2comp(val_list: List[int], val_size: int = 16) -> List[int]:
     """Get the 2's complement of Python list val_list.
 
     :param val_list: list of int value to apply 2's complement
@@ -272,7 +272,7 @@ twos_c_l = get_list_2comp
 ###############################
 # IEEE floating-point functions
 ###############################
-def decode_ieee(val_int, double=False):
+def decode_ieee(val_int: int, double: bool = False) -> float:
     """Decode Python int (32 bits integer) as an IEEE single or double precision format.
 
     Support NaN.
@@ -286,12 +286,12 @@ def decode_ieee(val_int, double=False):
     :rtype: float
     """
     if double:
-        return struct.unpack("d", struct.pack("Q", val_int))[0]
+        return float(struct.unpack("d", struct.pack("Q", val_int))[0])
     else:
-        return struct.unpack("f", struct.pack("I", val_int))[0]
+        return float(struct.unpack("f", struct.pack("I", val_int))[0])
 
 
-def encode_ieee(val_float, double=False):
+def encode_ieee(val_float: float, double: bool = False) -> int:
     """Encode Python float to int (32 bits integer) as an IEEE single or double precision format.
 
     Support NaN.
@@ -305,15 +305,15 @@ def encode_ieee(val_float, double=False):
     :rtype: int
     """
     if double:
-        return struct.unpack("Q", struct.pack("d", val_float))[0]
+        return int(struct.unpack("Q", struct.pack("d", val_float))[0])
     else:
-        return struct.unpack("I", struct.pack("f", val_float))[0]
+        return int(struct.unpack("I", struct.pack("f", val_float))[0])
 
 
 ################
 # misc functions
 ################
-def crc16(frame):
+def crc16(frame: bytes) -> int:
     """Compute CRC16.
 
     :param frame: frame
@@ -333,7 +333,7 @@ def crc16(frame):
     return crc
 
 
-def valid_host(host_str):
+def valid_host(host_str: str) -> bool:
     """Validate a host string.
 
     Can be an IPv4/6 address or a valid hostname.

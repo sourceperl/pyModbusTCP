@@ -23,7 +23,4 @@ platforms = ["any"]
 version = { attr = "pyModbusTCP.constants.VERSION" }
 
 [tool.mypy]
-check_untyped_defs = false
-disallow_untyped_defs = false
-warn_return_any = true
-no_implicit_optional = true
+strict = true

@@ -1,11 +1,14 @@
 """ pyModbusTCP Server """
 
+from __future__ import annotations
+
 import logging
 import socket
 import struct
 import time
 from socketserver import BaseRequestHandler, ThreadingTCPServer
 from threading import Event, Lock, Thread
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from warnings import warn
 
 from .constants import (
@@ -39,30 +42,30 @@ class DataBank:
     _DEPR_MSG = 'This class method is deprecated. Use DataBank instance method instead: '
 
     @classmethod
-    def get_bits(cls, *_args, **_kwargs):
+    def get_bits(cls, *_args: Any, **_kwargs: Any) -> None:
         msg = DataBank._DEPR_MSG + 'server.data_bank.get_coils() or get_discrete_inputs()'
         warn(msg, DeprecationWarning, stacklevel=2)
 
     @classmethod
-    def set_bits(cls, *_args, **_kwargs):
+    def set_bits(cls, *_args: Any, **_kwargs: Any) -> None:
         msg = DataBank._DEPR_MSG + 'server.data_bank.set_coils() or set_discrete_inputs()'
         warn(msg, DeprecationWarning, stacklevel=2)
 
     @classmethod
-    def get_words(cls, *_args, **_kwargs):
+    def get_words(cls, *_args: Any, **_kwargs: Any) -> None:
         msg = DataBank._DEPR_MSG + 'server.data_bank.get_holding_registers() or get_input_registers()'
         warn(msg, DeprecationWarning, stacklevel=2)
 
     @classmethod
-    def set_words(cls, *_args, **_kwargs):
+    def set_words(cls, *_args: Any, **_kwargs: Any) -> None:
         msg = DataBank._DEPR_MSG + 'server.data_bank.set_holding_registers() or set_input_registers()'
         warn(msg, DeprecationWarning, stacklevel=2)
 
-    def __init__(self, coils_size=0x10000, coils_default_value=False,
-                 d_inputs_size=0x10000, d_inputs_default_value=False,
-                 h_regs_size=0x10000, h_regs_default_value=0,
-                 i_regs_size=0x10000, i_regs_default_value=0,
-                 virtual_mode=False):
+    def __init__(self, coils_size: int = 0x10000, coils_default_value: bool = False,
+                 d_inputs_size: int = 0x10000, d_inputs_default_value: bool = False,
+                 h_regs_size: int = 0x10000, h_regs_default_value: int = 0,
+                 i_regs_size: int = 0x10000, i_regs_default_value: int = 0,
+                 virtual_mode: bool = False) -> None:
         """Constructor
 
         Modbus server data bank constructor.
@@ -112,7 +115,7 @@ class DataBank:
         self._i_regs_lock = Lock()
         self._i_regs = [self.i_regs_default_value] * self.i_regs_size
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         attrs_str = ''
         for attr_name in self.__dict__:
             if isinstance(attr_name, str) and not attr_name.startswith('_'):
@@ -121,7 +124,7 @@ class DataBank:
                 attrs_str += '%s=%r' % (attr_name, self.__dict__[attr_name])
         return 'DataBank(%s)' % attrs_str
 
-    def get_coils(self, address, number=1, srv_info=None):
+    def get_coils(self, address: int, number: int = 1, srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[List[bool]]:
         """Read data on server coils space
 
         :param address: start address
@@ -140,7 +143,7 @@ class DataBank:
             else:
                 return None
 
-    def set_coils(self, address, bit_list, srv_info=None):
+    def set_coils(self, address: int, bit_list: List[bool], srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[bool]:
         """Write data to server coils space
 
         :param address: start address
@@ -174,7 +177,7 @@ class DataBank:
                 self.on_coils_change(address, from_value, to_value, srv_info)
         return True
 
-    def get_discrete_inputs(self, address, number=1, srv_info=None):
+    def get_discrete_inputs(self, address: int, number: int = 1, srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[List[bool]]:
         """Read data on server discrete inputs space
 
         :param address: start address
@@ -193,7 +196,7 @@ class DataBank:
             else:
                 return None
 
-    def set_discrete_inputs(self, address, bit_list):
+    def set_discrete_inputs(self, address: int, bit_list: List[bool]) -> Optional[bool]:
         """Write data to server discrete inputs space
 
         :param address: start address
@@ -215,7 +218,7 @@ class DataBank:
                 return None
         return True
 
-    def get_holding_registers(self, address, number=1, srv_info=None):
+    def get_holding_registers(self, address: int, number: int = 1, srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[List[int]]:
         """Read data on server holding registers space
 
         :param address: start address
@@ -234,7 +237,7 @@ class DataBank:
             else:
                 return None
 
-    def set_holding_registers(self, address, word_list, srv_info=None):
+    def set_holding_registers(self, address: int, word_list: List[int], srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[bool]:
         """Write data to server holding registers space
 
         :param address: start address
@@ -268,7 +271,7 @@ class DataBank:
                 self.on_holding_registers_change(address, from_value, to_value, srv_info=srv_info)
         return True
 
-    def get_input_registers(self, address, number=1, srv_info=None):
+    def get_input_registers(self, address: int, number: int = 1, srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[List[int]]:
         """Read data on server input registers space
 
         :param address: start address
@@ -287,7 +290,7 @@ class DataBank:
             else:
                 return None
 
-    def set_input_registers(self, address, word_list):
+    def set_input_registers(self, address: int, word_list: List[int]) -> Optional[bool]:
         """Write data to server input registers space
 
         :param address: start address
@@ -311,7 +314,7 @@ class DataBank:
                 return None
         return True
 
-    def on_coils_change(self, address, from_value, to_value, srv_info):
+    def on_coils_change(self, address: int, from_value: bool, to_value: bool, srv_info: ModbusServer.ServerInfo) -> None:
         """Call by server when a value change occur in coils space
 
         This method is provided to be overridden with user code to catch changes
@@ -327,7 +330,7 @@ class DataBank:
         """
         pass
 
-    def on_holding_registers_change(self, address, from_value, to_value, srv_info):
+    def on_holding_registers_change(self, address: int, from_value: int, to_value: int, srv_info: ModbusServer.ServerInfo) -> None:
         """Call by server when a value change occur in holding registers space
 
         This method is provided to be overridden with user code to catch changes
@@ -351,15 +354,15 @@ class DataHandler:
     """
 
     class Return:
-        def __init__(self, exp_code, data=None):
+        def __init__(self, exp_code: int, data: Optional[List[Any]] = None) -> None:
             self.exp_code = exp_code
             self.data = data
 
         @property
-        def ok(self):
+        def ok(self) -> bool:
             return self.exp_code == EXP_NONE
 
-    def __init__(self, data_bank=None):
+    def __init__(self, data_bank: Optional[DataBank] = None) -> None:
         """Constructor
 
         Modbus server data handler constructor.
@@ -373,10 +376,10 @@ class DataHandler:
         # public
         self.data_bank = data_bank or DataBank()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return 'ModbusServerDataHandler(data_bank=%s)' % self.data_bank
 
-    def read_coils(self, address, count, srv_info):
+    def read_coils(self, address: int, count: int, srv_info: ModbusServer.ServerInfo) -> DataHandler.Return:
         """Call by server for reading in coils space
 
         :param address: start address
@@ -395,7 +398,7 @@ class DataHandler:
         else:
             return DataHandler.Return(exp_code=EXP_DATA_ADDRESS)
 
-    def write_coils(self, address, bits_l, srv_info):
+    def write_coils(self, address: int, bits_l: List[bool], srv_info: ModbusServer.ServerInfo) -> DataHandler.Return:
         """Call by server for writing in the coils space
 
         :param address: start address
@@ -414,7 +417,7 @@ class DataHandler:
         else:
             return DataHandler.Return(exp_code=EXP_DATA_ADDRESS)
 
-    def read_d_inputs(self, address, count, srv_info):
+    def read_d_inputs(self, address: int, count: int, srv_info: ModbusServer.ServerInfo) -> DataHandler.Return:
         """Call by server for reading in the discrete inputs space
 
         :param address: start address
@@ -433,7 +436,7 @@ class DataHandler:
         else:
             return DataHandler.Return(exp_code=EXP_DATA_ADDRESS)
 
-    def read_h_regs(self, address, count, srv_info):
+    def read_h_regs(self, address: int, count: int, srv_info: ModbusServer.ServerInfo) -> DataHandler.Return:
         """Call by server for reading in the holding registers space
 
         :param address: start address
@@ -452,7 +455,7 @@ class DataHandler:
         else:
             return DataHandler.Return(exp_code=EXP_DATA_ADDRESS)
 
-    def write_h_regs(self, address, words_l, srv_info):
+    def write_h_regs(self, address: int, words_l: List[int], srv_info: ModbusServer.ServerInfo) -> DataHandler.Return:
         """Call by server for writing in the holding registers space
 
         :param address: start address
@@ -471,7 +474,7 @@ class DataHandler:
         else:
             return DataHandler.Return(exp_code=EXP_DATA_ADDRESS)
 
-    def read_i_regs(self, address, count, srv_info):
+    def read_i_regs(self, address: int, count: int, srv_info: ModbusServer.ServerInfo) -> DataHandler.Return:
         """Call by server for reading in the input registers space
 
         :param address: start address
@@ -494,8 +497,8 @@ class DataHandler:
 class DeviceIdentification:
     """ Container class for device identification objects (MEI type 0x0E) return by function 0x2B. """
 
-    def __init__(self, vendor_name=b'', product_code=b'', major_minor_revision=b'', vendor_url=b'',
-                 product_name=b'', model_name=b'', user_application_name=b'', objects_id=None):
+    def __init__(self, vendor_name: bytes = b'', product_code: bytes = b'', major_minor_revision: bytes = b'', vendor_url: bytes = b'',
+                 product_name: bytes = b'', model_name: bytes = b'', user_application_name: bytes = b'', objects_id: Optional[Dict[int, bytes]] = None) -> None:
         """
         Constructor
 
@@ -517,7 +520,7 @@ class DeviceIdentification:
         :type objects_id: dict
         """
         # private
-        self._objs_d = {}
+        self._objs_d: Dict[int, bytes] = {}
         self._objs_lock = Lock()
         # default values
         self.vendor_name = vendor_name
@@ -532,13 +535,13 @@ class DeviceIdentification:
             for key, value in objects_id.items():
                 self[key] = value
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: int) -> bytes:
         if not isinstance(key, int):
             raise TypeError('key must be an int')
         with self._objs_lock:
             return self._objs_d[key]
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: int, value: bytes) -> None:
         if not isinstance(key, int):
             raise TypeError('key must be an int')
         if 0xff >= key >= 0x00:
@@ -549,7 +552,7 @@ class DeviceIdentification:
         else:
             raise ValueError('key not in valid range (0 to 255)')
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         named_params = ''
         # add named parameters
         for prop_name in ('vendor_name', 'product_code', 'major_minor_revision', 'vendor_url',
@@ -578,62 +581,62 @@ class DeviceIdentification:
         return '%s(%s)' % (self.__class__.__name__, class_args)
 
     @property
-    def vendor_name(self):
+    def vendor_name(self) -> bytes:
         return self[0]
 
     @vendor_name.setter
-    def vendor_name(self, value):
+    def vendor_name(self, value: bytes) -> None:
         self[0] = value
 
     @property
-    def product_code(self):
+    def product_code(self) -> bytes:
         return self[1]
 
     @product_code.setter
-    def product_code(self, value):
+    def product_code(self, value: bytes) -> None:
         self[1] = value
 
     @property
-    def major_minor_revision(self):
+    def major_minor_revision(self) -> bytes:
         return self[2]
 
     @major_minor_revision.setter
-    def major_minor_revision(self, value):
+    def major_minor_revision(self, value: bytes) -> None:
         self[2] = value
 
     @property
-    def vendor_url(self):
+    def vendor_url(self) -> bytes:
         return self[3]
 
     @vendor_url.setter
-    def vendor_url(self, value):
+    def vendor_url(self, value: bytes) -> None:
         self[3] = value
 
     @property
-    def product_name(self):
+    def product_name(self) -> bytes:
         return self[4]
 
     @product_name.setter
-    def product_name(self, value):
+    def product_name(self, value: bytes) -> None:
         self[4] = value
 
     @property
-    def model_name(self):
+    def model_name(self) -> bytes:
         return self[5]
 
     @model_name.setter
-    def model_name(self, value):
+    def model_name(self, value: bytes) -> None:
         self[5] = value
 
     @property
-    def user_application_name(self):
+    def user_application_name(self) -> bytes:
         return self[6]
 
     @user_application_name.setter
-    def user_application_name(self, value):
+    def user_application_name(self, value: bytes) -> None:
         self[6] = value
 
-    def items(self, start=0x00, end=0xff):
+    def items(self, start: int = 0x00, end: int = 0xff) -> List[Tuple[int, bytes]]:
         items_l = []
         for obj_id in range(start, end + 1):
             try:
@@ -643,7 +646,7 @@ class DeviceIdentification:
         return items_l
 
 
-def _check_timeout(value, name):
+def _check_timeout(value: Optional[Union[int, float]], name: str) -> Optional[float]:
     """Check an optional timeout (None or a number of seconds > 0) and return it as a float (or None)."""
     if value is None:
         return None
@@ -658,7 +661,7 @@ class ModbusServer:
     """ Modbus TCP server """
 
     # interval (in s) at which the main server loop checks for a stop request: this is the max latency of stop()
-    _SERVE_POLL_INTERVAL = 0.05
+    _SERVE_POLL_INTERVAL: float = 0.05
 
     class Error(Exception):
         """ Base exception for ModbusServer related errors. """
@@ -675,59 +678,59 @@ class ModbusServer:
     class ClientInfo:
         """ Container class for client information """
 
-        def __init__(self, address='', port=0):
+        def __init__(self, address: str = '', port: int = 0) -> None:
             self.address = address
             self.port = port
 
-        def __repr__(self):
+        def __repr__(self) -> str:
             return 'ClientInfo(address=%r, port=%r)' % (self.address, self.port)
 
     class ServerInfo:
         """ Container class for server information """
 
-        def __init__(self):
+        def __init__(self) -> None:
             self.client = ModbusServer.ClientInfo()
             self.recv_frame = ModbusServer.Frame()
 
     class SessionData:
         """ Container class for server session data. """
 
-        def __init__(self):
+        def __init__(self) -> None:
             self.client = ModbusServer.ClientInfo()
             self.request = ModbusServer.Frame()
             self.response = ModbusServer.Frame()
 
         @property
-        def srv_info(self):
+        def srv_info(self) -> ModbusServer.ServerInfo:
             info = ModbusServer.ServerInfo()
             info.client = self.client
             info.recv_frame = self.request
             return info
 
-        def new_request(self):
+        def new_request(self) -> None:
             self.request = ModbusServer.Frame()
             self.response = ModbusServer.Frame()
 
-        def set_response_mbap(self):
+        def set_response_mbap(self) -> None:
             self.response.mbap.transaction_id = self.request.mbap.transaction_id
             self.response.mbap.protocol_id = self.request.mbap.protocol_id
             self.response.mbap.unit_id = self.request.mbap.unit_id
 
     class Frame:
-        def __init__(self):
+        def __init__(self) -> None:
             """ Modbus Frame container. """
             self.mbap = ModbusServer.MBAP()
             self.pdu = ModbusServer.PDU()
 
         @property
-        def raw(self):
+        def raw(self) -> bytes:
             self.mbap.length = len(self.pdu) + 1
             return self.mbap.raw + self.pdu.raw
 
     class MBAP:
         """ MBAP (Modbus Application Protocol) container class. """
 
-        def __init__(self, transaction_id=0, protocol_id=0, length=0, unit_id=0):
+        def __init__(self, transaction_id: int = 0, protocol_id: int = 0, length: int = 0, unit_id: int = 0) -> None:
             # public
             self.transaction_id = transaction_id
             self.protocol_id = protocol_id
@@ -735,7 +738,7 @@ class ModbusServer:
             self.unit_id = unit_id
 
         @property
-        def raw(self):
+        def raw(self) -> bytes:
             try:
                 return struct.pack('>HHHB', self.transaction_id,
                                    self.protocol_id, self.length,
@@ -744,7 +747,7 @@ class ModbusServer:
                 raise ModbusServer.DataFormatError('MBAP raw encode pack error: %s' % e)
 
         @raw.setter
-        def raw(self, value):
+        def raw(self, value: bytes) -> None:
             # close connection if no standard 7 bytes mbap header
             if not (value and len(value) == 7):
                 raise ModbusServer.DataFormatError('MBAP must have a length of 7 bytes')
@@ -760,7 +763,7 @@ class ModbusServer:
     class PDU:
         """ PDU (Protocol Data Unit) container class. """
 
-        def __init__(self, raw=b''):
+        def __init__(self, raw: bytes = b'') -> None:
             """
             Constructor
 
@@ -769,58 +772,117 @@ class ModbusServer:
             """
             self.raw = raw
 
-        def __len__(self):
+        def __len__(self) -> int:
             return len(self.raw)
 
         @property
-        def func_code(self):
+        def func_code(self) -> int:
             return self.raw[0]
 
         @property
-        def except_code(self):
+        def except_code(self) -> int:
             return self.raw[1]
 
         @property
-        def is_except(self):
+        def is_except(self) -> bool:
             return self.func_code > 0x7F
 
         @property
-        def is_valid(self):
+        def is_valid(self) -> bool:
             # PDU min length is 2 bytes
             return self.__len__() >= 2
 
-        def clear(self):
+        def clear(self) -> None:
             self.raw = b''
 
-        def build_except(self, func_code, exp_status):
+        def build_except(self, func_code: int, exp_status: int) -> ModbusServer.PDU:
             self.clear()
             self.add_pack('BB', func_code + 0x80, exp_status)
             return self
 
-        def add_pack(self, fmt, *args):
+        def add_pack(self, fmt: str, *args: Any) -> None:
             try:
                 self.raw += struct.pack(fmt, *args)
             except struct.error:
                 err_msg = 'unable to format PDU message (fmt: %s, values: %s)' % (fmt, args)
                 raise ModbusServer.DataFormatError(err_msg)
 
-        def unpack(self, fmt, from_byte=None, to_byte=None):
+        def unpack(self, fmt: str, from_byte: Optional[int] = None, to_byte: Optional[int] = None) -> Tuple[Any, ...]:
             raw_section = self.raw[from_byte:to_byte]
             try:
                 return struct.unpack(fmt, raw_section)
             except struct.error:
-                err_msg = 'unable to decode PDU message  (fmt: %s, values: %s)' % (fmt, raw_section)
+                err_msg = 'unable to decode PDU message  (fmt: %s, values: %r)' % (fmt, raw_section)
                 raise ModbusServer.DataFormatError(err_msg)
+
+    class CustomThreadingTCPServer(ThreadingTCPServer):
+        """IPv4 threaded TCP server."""
+        daemon_threads: bool = True
+        # listen backlog: the socketserver default (5) makes a burst of simultaneous connections wait for a TCP SYN
+        # retransmission (1 s or more) as soon as the accept loop is a bit late
+        request_queue_size: int = 128
+        # these 3 settings are set by ModbusServer.start() (see ModbusServer.__init__() for a description)
+        max_connections: Optional[int] = None
+        idle_timeout: Optional[float] = None
+        request_timeout: Optional[float] = None
+        evt_running: Event
+        engine: Callable[[ModbusServer.SessionData], None]
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            # number of active sessions (a session = a client TCP connection with its thread)
+            self._sessions = 0
+            self._sessions_lock = Lock()
+            # connections rejected since the last warning in the log (don't flood the log on a connection flood)
+            self._rejected = 0
+            self._rejected_log_time: Optional[float] = None
+            super().__init__(*args, **kwargs)
+
+        def verify_request(self, request: Any, client_address: Any) -> bool:
+            # called by the main server thread, the only one that add sessions (so this check is safe)
+            if self.max_connections is not None and self._sessions >= self.max_connections:
+                self._rejected += 1
+                # log the first rejection at once, then one message per 10 s at most
+                now = time.monotonic()
+                if self._rejected_log_time is None or now - self._rejected_log_time >= 10.0:
+                    logger.warning('maximum number of connections (%d) reached: %d connection(s) rejected '
+                                   '(last from %r)', self.max_connections, self._rejected, client_address)
+                    self._rejected = 0
+                    self._rejected_log_time = now
+                return False
+            return True
+
+        def process_request(self, request: Any, client_address: Any) -> None:
+            with self._sessions_lock:
+                self._sessions += 1
+            try:
+                super().process_request(request, client_address)
+            except BaseException:
+                # the session thread can't start: no session
+                with self._sessions_lock:
+                    self._sessions -= 1
+                raise
+
+        def process_request_thread(self, request: Any, client_address: Any) -> None:
+            try:
+                super().process_request_thread(request, client_address)
+            finally:
+                with self._sessions_lock:
+                    self._sessions -= 1
+
+    class CustomThreadingTCPServerV6(CustomThreadingTCPServer):
+        """IPv6 threaded TCP server."""
+        address_family = socket.AF_INET6
 
     class ModbusService(BaseRequestHandler):
         # default socket timeout (in s) on blocking operations
-        _SOCKET_TIMEOUT = 1.0
+        _SOCKET_TIMEOUT: float = 1.0
+        server: ModbusServer.CustomThreadingTCPServer
 
         @property
-        def server_running(self):
-            return self.server.evt_running.is_set()
+        def server_running(self) -> bool:
+            return bool(self.server.evt_running.is_set())
 
-        def _send_all(self, data):
+        def _send_all(self, data: bytes) -> None:
             try:
                 self.request.sendall(data)
             except socket.timeout:
@@ -828,7 +890,7 @@ class ModbusServer:
                 # raise an error to close this session (see handle())
                 raise ModbusServer.NetworkError('timeout on send, close session')
 
-        def _recv_all(self, size, deadline=None, timeout_msg='recv timeout', request_timeout=None):
+        def _recv_all(self, size: int, deadline: Optional[float] = None, timeout_msg: str = 'recv timeout', request_timeout: Optional[float] = None) -> bytes:
             """Receive size bytes (loop until all bytes are received).
 
             :param deadline: limit for the end of reception (a time.monotonic() value), None for no limit
@@ -874,12 +936,12 @@ class ModbusServer:
                     self.request.settimeout(self._SOCKET_TIMEOUT)
             return data
 
-        def setup(self):
+        def setup(self) -> None:
             # set a socket timeout of 1s on blocking operations (like send/recv)
             # this avoids hang thread deletion when main server exit (see _recv_all method)
             self.request.settimeout(self._SOCKET_TIMEOUT)
 
-        def handle(self):
+        def handle(self) -> None:
             # try/except: end current thread on ModbusServer._InternalError, OSError or socket.error
             # this also close the current TCP session associated with it
             try:
@@ -915,65 +977,12 @@ class ModbusServer:
                 # on main loop except: exit from it and cleanly close the current socket
                 self.request.close()
 
-    class CustomThreadingTCPServer(ThreadingTCPServer):
-        """IPv4 threaded TCP server."""
-        daemon_threads = True
-        # listen backlog: the socketserver default (5) makes a burst of simultaneous connections wait for a TCP SYN
-        # retransmission (1 s or more) as soon as the accept loop is a bit late
-        request_queue_size = 128
-        # these 3 settings are set by ModbusServer.start() (see ModbusServer.__init__() for a description)
-        max_connections = None
-        idle_timeout = None
-        request_timeout = None
-
-        def __init__(self, *args, **kwargs):
-            # number of active sessions (a session = a client TCP connection with its thread)
-            self._sessions = 0
-            self._sessions_lock = Lock()
-            # connections rejected since the last warning in the log (don't flood the log on a connection flood)
-            self._rejected = 0
-            self._rejected_log_time = None
-            super().__init__(*args, **kwargs)
-
-        def verify_request(self, request, client_address):
-            # called by the main server thread, the only one that add sessions (so this check is safe)
-            if self.max_connections is not None and self._sessions >= self.max_connections:
-                self._rejected += 1
-                # log the first rejection at once, then one message per 10 s at most
-                now = time.monotonic()
-                if self._rejected_log_time is None or now - self._rejected_log_time >= 10.0:
-                    logger.warning('maximum number of connections (%d) reached: %d connection(s) rejected '
-                                   '(last from %r)', self.max_connections, self._rejected, client_address)
-                    self._rejected = 0
-                    self._rejected_log_time = now
-                return False
-            return True
-
-        def process_request(self, request, client_address):
-            with self._sessions_lock:
-                self._sessions += 1
-            try:
-                super().process_request(request, client_address)
-            except BaseException:
-                # the session thread can't start: no session
-                with self._sessions_lock:
-                    self._sessions -= 1
-                raise
-
-        def process_request_thread(self, request, client_address):
-            try:
-                super().process_request_thread(request, client_address)
-            finally:
-                with self._sessions_lock:
-                    self._sessions -= 1
-
-    class CustomThreadingTCPServerV6(CustomThreadingTCPServer):
-        """IPv6 threaded TCP server."""
-        address_family = socket.AF_INET6
-
-    def __init__(self, host='localhost', port=502, no_block=False, ipv6=False,
-                 data_bank=None, data_hdl=None, ext_engine=None, device_id=None,
-                 request_timeout=30.0, idle_timeout=None, max_connections=None):
+    def __init__(self, host: str = 'localhost', port: int = 502, no_block: bool = False, ipv6: bool = False,
+                 data_bank: Optional[DataBank] = None, data_hdl: Optional[DataHandler] = None,
+                 ext_engine: Optional[Callable[[ModbusServer.SessionData], None]] = None,
+                 device_id: Optional[DeviceIdentification] = None,
+                 request_timeout: Optional[float] = 30.0, idle_timeout: Optional[float] = None,
+                 max_connections: Optional[int] = None) -> None:
         """Constructor
 
         Modbus server constructor.
@@ -1044,26 +1053,28 @@ class ModbusServer:
         self.device_id = device_id
         # private
         self._evt_running = Event()
-        self._service = None
-        self._serve_th = None
+        self._service: Optional[Union[ModbusServer.CustomThreadingTCPServer, ModbusServer.CustomThreadingTCPServerV6]] = None
+        self._serve_th: Optional[Thread] = None
         # modbus default functions map
-        self._func_map = {READ_COILS: self._read_bits,
-                          READ_DISCRETE_INPUTS: self._read_bits,
-                          READ_HOLDING_REGISTERS: self._read_words,
-                          READ_INPUT_REGISTERS: self._read_words,
-                          WRITE_SINGLE_COIL: self._write_single_coil,
-                          WRITE_SINGLE_REGISTER: self._write_single_register,
-                          WRITE_MULTIPLE_COILS: self._write_multiple_coils,
-                          WRITE_MULTIPLE_REGISTERS: self._write_multiple_registers,
-                          WRITE_READ_MULTIPLE_REGISTERS: self._write_read_multiple_registers,
-                          ENCAPSULATED_INTERFACE_TRANSPORT: self._encapsulated_interface_transport}
+        self._func_map: Dict[int, Callable[[ModbusServer.SessionData], None]] = {
+            READ_COILS: self._read_bits,
+            READ_DISCRETE_INPUTS: self._read_bits,
+            READ_HOLDING_REGISTERS: self._read_words,
+            READ_INPUT_REGISTERS: self._read_words,
+            WRITE_SINGLE_COIL: self._write_single_coil,
+            WRITE_SINGLE_REGISTER: self._write_single_register,
+            WRITE_MULTIPLE_COILS: self._write_multiple_coils,
+            WRITE_MULTIPLE_REGISTERS: self._write_multiple_registers,
+            WRITE_READ_MULTIPLE_REGISTERS: self._write_read_multiple_registers,
+            ENCAPSULATED_INTERFACE_TRANSPORT: self._encapsulated_interface_transport
+        }
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         r_str = 'ModbusServer(host=\'%s\', port=%d, no_block=%s, ipv6=%s, data_bank=%s, data_hdl=%s, ext_engine=%s)'
         r_str %= (self.host, self.port, self.no_block, self.ipv6, self.data_bank, self.data_hdl, self.ext_engine)
         return r_str
 
-    def _engine(self, session_data):
+    def _engine(self, session_data: ModbusServer.SessionData) -> None:
         """Main request processing engine.
 
         :type session_data: ModbusServer.SessionData
@@ -1077,7 +1088,7 @@ class ModbusServer:
         else:
             self._internal_engine(session_data)
 
-    def _internal_engine(self, session_data):
+    def _internal_engine(self, session_data: ModbusServer.SessionData) -> None:
         """Default internal processing engine: call default modbus func.
 
         :type session_data: ModbusServer.SessionData
@@ -1100,7 +1111,7 @@ class ModbusServer:
             logger.exception('unexpected error during processing of function 0x%02X', func_code)
             session_data.response.pdu.build_except(func_code, EXP_SLAVE_DEVICE_FAILURE)
 
-    def _read_bits(self, session_data):
+    def _read_bits(self, session_data: ModbusServer.SessionData) -> None:
         """
         Functions Read Coils (0x01) or Read Discrete Inputs (0x02).
 
@@ -1120,7 +1131,7 @@ class ModbusServer:
             else:
                 ret_hdl = self.data_hdl.read_d_inputs(start_address, quantity_bits, session_data.srv_info)
             # format regular or except response
-            if ret_hdl.ok:
+            if ret_hdl.ok and ret_hdl.data is not None:
                 # allocate bytes list
                 b_size = (quantity_bits + 7) // 8
                 bytes_l = [0] * b_size
@@ -1136,7 +1147,7 @@ class ModbusServer:
         else:
             send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
 
-    def _read_words(self, session_data):
+    def _read_words(self, session_data: ModbusServer.SessionData) -> None:
         """
         Functions Read Holding Registers (0x03) or Read Input Registers (0x04).
 
@@ -1156,7 +1167,7 @@ class ModbusServer:
             else:
                 ret_hdl = self.data_hdl.read_i_regs(start_addr, quantity_regs, session_data.srv_info)
             # format regular or except response
-            if ret_hdl.ok:
+            if ret_hdl.ok and ret_hdl.data is not None:
                 # build pdu
                 send_pdu.add_pack('BB', recv_pdu.func_code, quantity_regs * 2)
                 # add_pack requested words
@@ -1166,7 +1177,7 @@ class ModbusServer:
         else:
             send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
 
-    def _write_single_coil(self, session_data):
+    def _write_single_coil(self, session_data: ModbusServer.SessionData) -> None:
         """
         Function Write Single Coil (0x05).
 
@@ -1188,7 +1199,7 @@ class ModbusServer:
         else:
             send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
 
-    def _write_single_register(self, session_data):
+    def _write_single_register(self, session_data: ModbusServer.SessionData) -> None:
         """
         Functions Write Single Register (0x06).
 
@@ -1208,7 +1219,7 @@ class ModbusServer:
         else:
             send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
 
-    def _write_multiple_coils(self, session_data):
+    def _write_multiple_coils(self, session_data: ModbusServer.SessionData) -> None:
         """
         Function Write Multiple Coils (0x0F).
 
@@ -1242,7 +1253,7 @@ class ModbusServer:
         else:
             send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
 
-    def _write_multiple_registers(self, session_data):
+    def _write_multiple_registers(self, session_data: ModbusServer.SessionData) -> None:
         """
         Function Write Multiple Registers (0x10).
 
@@ -1276,7 +1287,7 @@ class ModbusServer:
         else:
             send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
 
-    def _write_read_multiple_registers(self, session_data):
+    def _write_read_multiple_registers(self, session_data: ModbusServer.SessionData) -> None:
         """
         Function Write Read Multiple Registers (0x17).
 
@@ -1310,7 +1321,7 @@ class ModbusServer:
             # format regular or except response
             if ret_hdl.ok:
                 ret_hdl = self.data_hdl.read_h_regs(read_start_addr, read_quantity_regs, session_data.srv_info)
-                if ret_hdl.ok:
+                if ret_hdl.ok and ret_hdl.data is not None:
                     # build pdu
                     send_pdu.add_pack('BB', recv_pdu.func_code, read_quantity_regs * 2)
                     # add_pack requested words
@@ -1322,7 +1333,7 @@ class ModbusServer:
         else:
             send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
 
-    def _encapsulated_interface_transport(self, session_data):
+    def _encapsulated_interface_transport(self, session_data: ModbusServer.SessionData) -> None:
         """
         Modbus Encapsulated Interface transport (MEI) endpoint (0x2B).
 
@@ -1342,7 +1353,7 @@ class ModbusServer:
                 send_pdu.build_except(recv_pdu.func_code, EXP_DATA_ADDRESS)
                 return
             # list of requested objects
-            req_objects_l = list()
+            req_objects_l: List[Tuple[int, bytes]] = list()
             (device_id_code, object_id) = recv_pdu.unpack('BB', from_byte=2, to_byte=4)
             # get basic device id (object id from 0x00 to 0x02)
             if device_id_code == 1:
@@ -1373,7 +1384,7 @@ class ModbusServer:
             # format objects data part = [[obj id, obj len, obj val], ...]
             obj_data_part = b''
             for req_obj_id, req_obj_value in req_objects_l:
-                fmt_obj_blk = 'BB%ss' % len(req_obj_value)
+                fmt_obj_blk = 'BB%ds' % len(req_obj_value)
                 # skip if the next add to data part will exceed max PDU size of modbus frame
                 if struct.calcsize(fmt_pdu_head) + len(obj_data_part) + struct.calcsize(fmt_obj_blk) > MAX_PDU_SIZE:
                     # turn on "more follow" field and set "next object id" field with next object id to ask
@@ -1394,7 +1405,7 @@ class ModbusServer:
             # return except 2 for an unknown MEI type
             send_pdu.build_except(recv_pdu.func_code, EXP_DATA_ADDRESS)
 
-    def start(self):
+    def start(self) -> None:
         """Start the server.
 
         This function will block (or not if no_block flag is set).
@@ -1433,20 +1444,22 @@ class ModbusServer:
         else:
             self._serve()
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop the server."""
-        if self.is_run:
+        if self.is_run and self._service is not None:
             self._service.shutdown()
             self._service.server_close()
 
     @property
-    def is_run(self):
+    def is_run(self) -> bool:
         """Return True if server running.
 
         """
         return self._evt_running.is_set()
 
-    def _serve(self):
+    def _serve(self) -> None:
+        if self._service is None:
+            return
         try:
             self._evt_running.set()
             self._service.serve_forever(poll_interval=self._SERVE_POLL_INTERVAL)
