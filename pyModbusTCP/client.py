@@ -165,14 +165,7 @@ class ModbusClient:
         :rtype: ModbusClient
         """
         # private
-        # internal variables
-        self._sock: Optional[socket.socket] = None
-        self._deadline = 0.0  # end of the current request (time.monotonic() value), see _send() and _recv()
-        self._transaction_id = 0  # MBAP transaction ID
-        self._version = VERSION  # this package version number
-        self._last_error = MB_NO_ERR  # last error code
-        self._last_except = EXP_NONE  # last except code
-        # constructor arguments: validate them (! keep this after self._sock declaration)
+        # constructor arguments: validate them
         self._host = self._validate_host(host)
         self._port = self._validate_port(port)
         self._unit_id = self._validate_unit_id(unit_id)
@@ -180,6 +173,13 @@ class ModbusClient:
         self._auto_open = _to_bool(auto_open, 'auto_open')
         self._auto_close = _to_bool(auto_close, 'auto_close')
         self._no_delay = _to_bool(no_delay, 'no_delay')
+        # internal variables
+        self._sock: Optional[socket.socket] = None
+        self._deadline = 0.0  # end of the current request (time.monotonic() value), see _send() and _recv()
+        self._transaction_id = 0  # MBAP transaction ID
+        self._version = VERSION  # this package version number
+        self._last_error = MB_NO_ERR  # last error code
+        self._last_except = EXP_NONE  # last except code
 
     def __repr__(self):
         r_str = 'ModbusClient(host=\'%s\', port=%d, unit_id=%d, timeout=%.2f, auto_open=%s, auto_close=%s, no_delay=%s)'
@@ -187,7 +187,9 @@ class ModbusClient:
         return r_str
 
     def __del__(self):
-        self.close()
+        # don't call close() if __init__() failed before _sock is set
+        if hasattr(self, '_sock'):
+            self.close()
 
     @property
     def host(self):
