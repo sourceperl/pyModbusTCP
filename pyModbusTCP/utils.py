@@ -1,5 +1,6 @@
 """ pyModbusTCP utils functions """
 
+import operator
 import re
 import socket
 import struct
@@ -98,48 +99,6 @@ def toggle_bit(value: int, offset: int) -> int:
     """
     mask = 1 << offset
     return int(value ^ mask)
-
-
-# a byte -> its 8 bits as bool (LSB first)
-_BYTE_TO_BITS = tuple(tuple(bool(byte >> bit & 1) for bit in range(8)) for byte in range(256))
-# translation table for _pack_bits: '\x00'/'\x01' bytes -> '0'/'1' ascii digits
-_BITS_TO_DIGITS = bytes.maketrans(b'\x00\x01', b'01')
-
-
-def _pack_bits(bits: Sequence[Any]) -> bytes:
-    """Pack a sequence of bits in bytes, with the modbus order (LSB first in each byte).
-
-    Each item is evaluated as a bool (truthiness). Same result as a loop with set_bit(), but about 5x faster.
-
-    :param bits: bits to pack
-    :type bits: sequence
-    :returns: bits packed in bytes (the last byte is padded with zeros)
-    :rtype: bytes
-    """
-    try:
-        bits_rev = reversed(bits)
-    except TypeError:
-        # a sized iterable that isn't a sequence (like a set)
-        bits_rev = reversed(list(bits))
-    # bit i of the integer is bits[i]: build its binary string from the last bit to the first one
-    digits = bytes(map(bool, bits_rev)).translate(_BITS_TO_DIGITS)
-    return int(digits, 2).to_bytes(byte_length(len(digits)), 'little') if digits else b''
-
-
-def _unpack_bits(data: bytes, bit_nb: int) -> List[bool]:
-    """Unpack the first bit_nb bits of bytes (modbus order: LSB first in each byte) as a list of bool.
-
-    :param data: bytes with the bits (can be longer than needed)
-    :type data: bytes
-    :param bit_nb: number of bits to unpack
-    :type bit_nb: int
-    :returns: list of bit_nb bool
-    :rtype: list
-    """
-    bits: List[bool] = []
-    for byte in data[:byte_length(bit_nb)]:
-        bits.extend(_BYTE_TO_BITS[byte])
-    return bits[:bit_nb]
 
 
 ########################
@@ -364,3 +323,117 @@ def valid_host(host_str: str) -> bool:
     # validate each part of the hostname (part_1.part_2.part_3)
     re_part_ok = re.compile('(?!-)[a-z0-9-_]{1,63}(?<!-)$', re.IGNORECASE)
     return all(re_part_ok.match(part) for part in host_str.split('.'))
+
+
+####################
+# internal functions
+####################
+
+# a byte -> its 8 bits as bool (LSB first)
+_BYTE_TO_BITS = tuple(tuple(bool(byte >> bit & 1) for bit in range(8)) for byte in range(256))
+# translation table for _pack_bits: '\x00'/'\x01' bytes -> '0'/'1' ascii digits
+_BITS_TO_DIGITS = bytes.maketrans(b'\x00\x01', b'01')
+
+
+def _pack_bits(bits: Sequence[Any]) -> bytes:
+    """Pack a sequence of bits in bytes, with the modbus order (LSB first in each byte).
+
+    Each item is evaluated as a bool (truthiness). Same result as a loop with set_bit(), but about 5x faster.
+
+    :param bits: bits to pack
+    :type bits: sequence
+    :returns: bits packed in bytes (the last byte is padded with zeros)
+    :rtype: bytes
+    """
+    try:
+        bits_rev = reversed(bits)
+    except TypeError:
+        # a sized iterable that isn't a sequence (like a set)
+        bits_rev = reversed(list(bits))
+    # bit i of the integer is bits[i]: build its binary string from the last bit to the first one
+    digits = bytes(map(bool, bits_rev)).translate(_BITS_TO_DIGITS)
+    return int(digits, 2).to_bytes(byte_length(len(digits)), 'little') if digits else b''
+
+
+def _unpack_bits(data: bytes, bit_nb: int) -> List[bool]:
+    """Unpack the first bit_nb bits of bytes (modbus order: LSB first in each byte) as a list of bool.
+
+    :param data: bytes with the bits (can be longer than needed)
+    :type data: bytes
+    :param bit_nb: number of bits to unpack
+    :type bit_nb: int
+    :returns: list of bit_nb bool
+    :rtype: list
+    """
+    bits: List[bool] = []
+    for byte in data[:byte_length(bit_nb)]:
+        bits.extend(_BYTE_TO_BITS[byte])
+    return bits[:bit_nb]
+
+
+def _is_np_bool(value: Any) -> bool:
+    """Return True for a numpy boolean scalar (numpy.bool_), without importing numpy."""
+    return getattr(getattr(value, 'dtype', None), 'kind', None) == 'b'
+
+
+def _is_index(value: Any) -> bool:
+    """Return True if value can be used as an integer (implements __index__)."""
+    try:
+        operator.index(value)
+    except TypeError:
+        return False
+    return True
+
+
+def _to_bool(value: Any, name: str) -> bool:
+    """Return value as bool from a boolean-like integer.
+
+    :raises TypeError: if value cannot be interpreted as a boolean
+    """
+    try:
+        operator.index(value)
+    except TypeError:
+        # numpy booleans don't implement __index__ but are valid bool-like values
+        if not _is_np_bool(value):
+            raise TypeError(f"{name} must be a bool or an integer") from None
+    return bool(value)
+
+
+def _to_int(value: Any, name: str) -> int:
+    """Return value as an int, accept only int-like objects (int, bool, numpy ints...).
+
+    :raises TypeError: if value can't be used as an integer (str, float...)
+    """
+    try:
+        return operator.index(value)
+    except TypeError:
+        raise TypeError(f"{name} must be an int") from None
+
+
+def _to_bool_list(values: Sequence[Any], name: str) -> List[bool]:
+    """Return values as a list of bool from boolean-like integers.
+
+    :raises TypeError: if an item cannot be interpreted as a boolean
+    """
+    # materialize one-shot iterators, so the fallback below can safely scan values again
+    if not isinstance(values, (list, tuple)):
+        values = list(values)
+    try:
+        return [bool(operator.index(val)) for val in values]
+    except TypeError:
+        pass
+    # slow path: also accept numpy booleans (no __index__), reject everything else
+    if all(isinstance(val, bool) or _is_np_bool(val) or _is_index(val) for val in values):
+        return [bool(val) for val in values]
+    raise TypeError(f"{name} items must be a bool or an integer")
+
+
+def _to_int_list(values: Sequence[Any], name: str) -> List[int]:
+    """Return values as a list of int, accept only int-like items (int, bool, numpy ints...).
+
+    :raises TypeError: if an item can't be used as an integer (str, float...)
+    """
+    try:
+        return list(map(operator.index, values))
+    except TypeError:
+        raise TypeError(f"{name} items must be an int") from None

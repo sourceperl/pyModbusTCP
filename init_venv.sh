@@ -18,7 +18,7 @@ VENV_DIR="venv"
 RECREATE=0
 
 # test and build tools
-DEV_PACKAGES=(build twine pytest mypy)
+DEV_PACKAGES=(build twine pytest mypy numpy)
 
 usage() {
     sed -n '3,12p' "$0" | sed 's/^# \{0,1\}//'

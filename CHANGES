@@ -10,16 +10,22 @@ Revision history for pyModbusTCP
                         server sending its response byte by byte could hold the client much longer than timeout.
     - fix ModbusServer: close the session on send timeout (a partial send leaves the TCP stream out of sync).
     - fix ModbusServer.PDU: is_valid property was inverted.
-    - fix ModbusServer: an unexpected exception during a request (like one raised by a user callback) is now logged and 
+    - fix ModbusServer: an unexpected exception during a request (like one raised by a user callback) is now logged and
                         answered with a SLAVE_DEVICE_FAILURE (0x04) exception instead of dropping the TCP session.
-    - fix ModbusServer: start() no longer modifies class attributes of socketserver. Since ThreadingTCPServer can be 
+    - fix ModbusServer: start() no longer modifies class attributes of socketserver, since ThreadingTCPServer can be
                         shared with the rest of the process.
     - fix ModbusServer: close the listening socket when start() fails to bind.
+    - fix DataBank: set_coils(), set_discrete_inputs(), set_holding_registers() and set_input_registers() now check
+                    their input. Non-integer items (float, str, None...) raise a TypeError (numpy integers and
+                    booleans are accepted), and register values out of the 0-65535 range raise a ValueError.
+                    Before, they were silently converted (a value like 70000 or -1 was truncated to 16 bits).
     - improve ModbusClient: decode/encode registers and bits in one pass (faster reads and writes).
     - improve ModbusClient: add some python hints for better python type checking and IDE support.
     - improve ModbusClient: set TCP_NODELAY on connect (new no_delay argument, on by default) to reduce latency on small
                             request/response frames.
     - improve ModbusClient: improve socket lifecycle, parameter validation, and timeout safety.
+    - improve ModbusServer: decode/encode registers and bits in one pass for requests 0x01, 0x02, 0x0F, 0x10 and 0x17
+                            (like the client), instead of one Python loop iteration per bit or register.
     - improve ModbusServer: stop() is now faster, the main loop polls the stop request every 50 ms instead of 500 ms.
     - improve ModbusServer: add request_timeout (default 30 s): a client session with a stalled request (incomplete MBAP
                             header or PDU) is now closed, it was kept (with its thread) until the client closed it.
@@ -27,7 +33,10 @@ Revision history for pyModbusTCP
     - improve ModbusServer: add idle_timeout (close a session without any request for this time) and max_connections
                             (reject connections over this limit), both are disabled by default.
     - improve ModbusServer: increase the listen backlog from 5 to 128, a burst of simultaneous connections (like clients
-                            reconnecting together) no more wait for a TCP retransmission (1 s or more).
+                            reconnecting together) no longer waits for a TCP retransmission (1 s or more).
+    - improve DataBank: set_coils() and set_holding_registers() now compare the whole slice before writing, and
+                        only build the list of changes when a server request needs it for the on_*_change()
+                        callbacks. Writing unchanged values is much faster.
 
 0.3.1 2026-09-29
 

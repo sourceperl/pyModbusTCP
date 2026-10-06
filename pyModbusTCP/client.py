@@ -1,7 +1,6 @@
 """ pyModbusTCP Client """
 
 import logging
-import operator
 import random
 import socket
 import struct
@@ -36,44 +35,18 @@ from .constants import (
     WRITE_SINGLE_COIL,
     WRITE_SINGLE_REGISTER,
 )
-from .utils import _pack_bits, _unpack_bits, byte_length, valid_host
+from .utils import (
+    _pack_bits,
+    _to_bool,
+    _to_int,
+    _to_int_list,
+    _unpack_bits,
+    byte_length,
+    valid_host,
+)
 
 # add a logger for pyModbusTCP.client
 logger = logging.getLogger(__name__)
-
-
-def _to_bool(value: Any, name: str) -> bool:
-    """Return value as bool from a boolean-like integer.
-
-    :raises TypeError: if value cannot be interpreted as a boolean
-    """
-    try:
-        operator.index(value)
-    except TypeError:
-        raise TypeError(f"{name} must be a bool or an integer") from None
-    return bool(value)
-
-
-def _to_int(value: Any, name: str) -> int:
-    """Return value as an int, accept only int-like objects (int, bool, numpy ints...).
-
-    :raises TypeError: if value can't be used as an integer (str, float...)
-    """
-    try:
-        return operator.index(value)
-    except TypeError:
-        raise TypeError(f"{name} must be an int") from None
-
-
-def _to_int_list(values: Sequence[Any], name: str) -> List[int]:
-    """Return values as a list of int, accept only int-like items (int, bool, numpy ints...).
-
-    :raises TypeError: if an item can't be used as an integer (str, float...)
-    """
-    try:
-        return list(map(operator.index, values))
-    except TypeError:
-        raise TypeError(f"{name} items must be an int") from None
 
 
 def _decode_regs(data: bytes, reg_nb: int) -> List[int]:

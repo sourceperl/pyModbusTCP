@@ -30,7 +30,7 @@ from .constants import (
     WRITE_SINGLE_COIL,
     WRITE_SINGLE_REGISTER,
 )
-from .utils import set_bit, test_bit
+from .utils import _pack_bits, _to_bool_list, _to_int_list, _unpack_bits
 
 # add a logger for pyModbusTCP.server
 logger = logging.getLogger(__name__)
@@ -124,7 +124,8 @@ class DataBank:
                 attrs_str += '%s=%r' % (attr_name, self.__dict__[attr_name])
         return 'DataBank(%s)' % attrs_str
 
-    def get_coils(self, address: int, number: int = 1, srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[List[bool]]:
+    def get_coils(self, address: int, number: int = 1,
+                  srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[List[bool]]:
         """Read data on server coils space
 
         :param address: start address
@@ -143,7 +144,8 @@ class DataBank:
             else:
                 return None
 
-    def set_coils(self, address: int, bit_list: List[bool], srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[bool]:
+    def set_coils(self, address: int, bit_list: List[bool],
+                  srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[bool]:
         """Write data to server coils space
 
         :param address: start address
@@ -154,20 +156,24 @@ class DataBank:
         :type srv_info: ModbusServerInfo
         :returns: True if success or None if error
         :rtype: bool or None
-        :raises ValueError: if bit_list members cannot be converted to bool
+        :raises TypeError: if bit_list members are not booleans or integers
         """
         # ensure bit_list values are bool
-        bit_list = [bool(b) for b in bit_list]
+        bit_list = _to_bool_list(bit_list, 'bit_list')
         # keep trace of any changes
         changes_list = []
         # ensure atomic update of internal data
         with self._coils_lock:
-            if (address >= 0) and (address + len(bit_list) <= len(self._coils)):
-                for offset, c_value in enumerate(bit_list):
-                    c_address = address + offset
-                    if self._coils[c_address] != c_value:
-                        changes_list.append((c_address, self._coils[c_address], c_value))
-                        self._coils[c_address] = c_value
+            end = address + len(bit_list)
+            if (address >= 0) and (end <= len(self._coils)):
+                # compare the whole slice at C speed: skip everything if nothing changes
+                old_values = self._coils[address:end]
+                if old_values != bit_list:
+                    # changes are only listed when a callback will use them (server request)
+                    if srv_info:
+                        changes_list = [(address + i, old, new) for i, (old, new)
+                                        in enumerate(zip(old_values, bit_list)) if old != new]
+                    self._coils[address:end] = bit_list
             else:
                 return None
         # on server update
@@ -177,7 +183,8 @@ class DataBank:
                 self.on_coils_change(address, from_value, to_value, srv_info)
         return True
 
-    def get_discrete_inputs(self, address: int, number: int = 1, srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[List[bool]]:
+    def get_discrete_inputs(self, address: int, number: int = 1,
+                            srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[List[bool]]:
         """Read data on server discrete inputs space
 
         :param address: start address
@@ -190,8 +197,9 @@ class DataBank:
         :rtype: list or None
         """
         # secure extract of data from list used by server thread
+        end = address + number
         with self._d_inputs_lock:
-            if (address >= 0) and (address + number <= len(self._d_inputs)):
+            if (address >= 0) and (end <= len(self._d_inputs)):
                 return self._d_inputs[address: number + address]
             else:
                 return None
@@ -205,20 +213,21 @@ class DataBank:
         :type bit_list: list
         :returns: True if success or None if error
         :rtype: bool or None
-        :raises ValueError: if bit_list members cannot be converted to bool
+        :raises TypeError: if bit_list members are not booleans or integers
         """
         # ensure bit_list values are bool
-        bit_list = [bool(b) for b in bit_list]
+        bit_list = _to_bool_list(bit_list, 'bit_list')
+        end = address + len(bit_list)
         # ensure atomic update of internal data
         with self._d_inputs_lock:
-            if (address >= 0) and (address + len(bit_list) <= len(self._d_inputs)):
-                for offset, b_value in enumerate(bit_list):
-                    self._d_inputs[address + offset] = b_value
+            if (address >= 0) and (end <= len(self._d_inputs)):
+                self._d_inputs[address:address + len(bit_list)] = bit_list
             else:
                 return None
         return True
 
-    def get_holding_registers(self, address: int, number: int = 1, srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[List[int]]:
+    def get_holding_registers(self, address: int, number: int = 1,
+                              srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[List[int]]:
         """Read data on server holding registers space
 
         :param address: start address
@@ -237,7 +246,8 @@ class DataBank:
             else:
                 return None
 
-    def set_holding_registers(self, address: int, word_list: List[int], srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[bool]:
+    def set_holding_registers(self, address: int, word_list: List[int],
+                              srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[bool]:
         """Write data to server holding registers space
 
         :param address: start address
@@ -248,20 +258,27 @@ class DataBank:
         :type srv_info: ModbusServerInfo
         :returns: True if success or None if error
         :rtype: bool or None
-        :raises ValueError: if word_list members cannot be converted to int
+        :raises TypeError: if word_list members are not integers
+        :raises ValueError: if word_list members are out of the 16 bits range (0 to 65535)
         """
         # ensure word_list values are int with a max bit length of 16
-        word_list = [int(w) & 0xffff for w in word_list]
+        word_list = _to_int_list(word_list, 'word_list')
+        if word_list and (min(word_list) < 0 or max(word_list) > 0xffff):
+            raise ValueError('word_list list contains out of range values')
+        end = address + len(word_list)
         # keep trace of any changes
         changes_list = []
         # ensure atomic update of internal data
         with self._h_regs_lock:
-            if (address >= 0) and (address + len(word_list) <= len(self._h_regs)):
-                for offset, c_value in enumerate(word_list):
-                    c_address = address + offset
-                    if self._h_regs[c_address] != c_value:
-                        changes_list.append((c_address, self._h_regs[c_address], c_value))
-                        self._h_regs[c_address] = c_value
+            if (address >= 0) and (end <= len(self._h_regs)):
+                # compare the whole slice at C speed: skip everything if nothing changes
+                old_values = self._h_regs[address:end]
+                if old_values != word_list:
+                    # changes are only listed when a callback will use them (server request)
+                    if srv_info:
+                        changes_list = [(address + i, old, new) for i, (old, new)
+                                        in enumerate(zip(old_values, word_list)) if old != new]
+                    self._h_regs[address:end] = word_list
             else:
                 return None
         # on server update
@@ -271,7 +288,8 @@ class DataBank:
                 self.on_holding_registers_change(address, from_value, to_value, srv_info=srv_info)
         return True
 
-    def get_input_registers(self, address: int, number: int = 1, srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[List[int]]:
+    def get_input_registers(self, address: int, number: int = 1,
+                            srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[List[int]]:
         """Read data on server input registers space
 
         :param address: start address
@@ -299,22 +317,24 @@ class DataBank:
         :type word_list: list
         :returns: True if success or None if error
         :rtype: bool or None
-        :raises ValueError: if word_list members cannot be converted to int
+        :raises TypeError: if word_list members are not integers
+        :raises ValueError: if word_list members are out of the 16 bits range (0 to 65535)
         """
         # ensure word_list values are int with a max bit length of 16
-        word_list = [int(w) & 0xffff for w in word_list]
+        word_list = _to_int_list(word_list, 'word_list')
+        if word_list and (min(word_list) < 0 or max(word_list) > 0xffff):
+            raise ValueError('word_list list contains out of range values')
+        end = address + len(word_list)
         # ensure atomic update of internal data
         with self._i_regs_lock:
-            if (address >= 0) and (address + len(word_list) <= len(self._i_regs)):
-                for offset, c_value in enumerate(word_list):
-                    c_address = address + offset
-                    if self._i_regs[c_address] != c_value:
-                        self._i_regs[c_address] = c_value
+            if (address >= 0) and (end <= len(self._i_regs)):
+                self._i_regs[address:address + len(word_list)] = word_list
             else:
                 return None
         return True
 
-    def on_coils_change(self, address: int, from_value: bool, to_value: bool, srv_info: ModbusServer.ServerInfo) -> None:
+    def on_coils_change(self, address: int, from_value: bool, to_value: bool,
+                        srv_info: ModbusServer.ServerInfo) -> None:
         """Call by server when a value change occur in coils space
 
         This method is provided to be overridden with user code to catch changes
@@ -330,7 +350,8 @@ class DataBank:
         """
         pass
 
-    def on_holding_registers_change(self, address: int, from_value: int, to_value: int, srv_info: ModbusServer.ServerInfo) -> None:
+    def on_holding_registers_change(self, address: int, from_value: int, to_value: int,
+                                    srv_info: ModbusServer.ServerInfo) -> None:
         """Call by server when a value change occur in holding registers space
 
         This method is provided to be overridden with user code to catch changes
@@ -497,8 +518,9 @@ class DataHandler:
 class DeviceIdentification:
     """ Container class for device identification objects (MEI type 0x0E) return by function 0x2B. """
 
-    def __init__(self, vendor_name: bytes = b'', product_code: bytes = b'', major_minor_revision: bytes = b'', vendor_url: bytes = b'',
-                 product_name: bytes = b'', model_name: bytes = b'', user_application_name: bytes = b'', objects_id: Optional[Dict[int, bytes]] = None) -> None:
+    def __init__(self, vendor_name: bytes = b'', product_code: bytes = b'', major_minor_revision: bytes = b'',
+                 vendor_url: bytes = b'', product_name: bytes = b'', model_name: bytes = b'',
+                 user_application_name: bytes = b'', objects_id: Optional[Dict[int, bytes]] = None) -> None:
         """
         Constructor
 
@@ -890,7 +912,8 @@ class ModbusServer:
                 # raise an error to close this session (see handle())
                 raise ModbusServer.NetworkError('timeout on send, close session')
 
-        def _recv_all(self, size: int, deadline: Optional[float] = None, timeout_msg: str = 'recv timeout', request_timeout: Optional[float] = None) -> bytes:
+        def _recv_all(self, size: int, deadline: Optional[float] = None, timeout_msg: str = 'recv timeout',
+                      request_timeout: Optional[float] = None) -> bytes:
             """Receive size bytes (loop until all bytes are received).
 
             :param deadline: limit for the end of reception (a time.monotonic() value), None for no limit
@@ -1053,7 +1076,8 @@ class ModbusServer:
         self.device_id = device_id
         # private
         self._evt_running = Event()
-        self._service: Optional[Union[ModbusServer.CustomThreadingTCPServer, ModbusServer.CustomThreadingTCPServerV6]] = None
+        self._service: Optional[Union[ModbusServer.CustomThreadingTCPServer,
+                                      ModbusServer.CustomThreadingTCPServerV6]] = None
         self._serve_th: Optional[Thread] = None
         # modbus default functions map
         self._func_map: Dict[int, Callable[[ModbusServer.SessionData], None]] = {
@@ -1132,16 +1156,11 @@ class ModbusServer:
                 ret_hdl = self.data_hdl.read_d_inputs(start_address, quantity_bits, session_data.srv_info)
             # format regular or except response
             if ret_hdl.ok and ret_hdl.data is not None:
-                # allocate bytes list
-                b_size = (quantity_bits + 7) // 8
-                bytes_l = [0] * b_size
-                # populate bytes list with data bank bits
-                for i, item in enumerate(ret_hdl.data):
-                    if item:
-                        bytes_l[i // 8] = set_bit(bytes_l[i // 8], i % 8)
+                # pack data bank bits in bytes
+                bytes_b = _pack_bits(ret_hdl.data)
                 # build pdu
-                send_pdu.add_pack('BB', recv_pdu.func_code, len(bytes_l))
-                send_pdu.add_pack('%dB' % len(bytes_l), *bytes_l)
+                send_pdu.add_pack('BB', recv_pdu.func_code, len(bytes_b))
+                send_pdu.add_pack('%ds' % len(bytes_b), bytes_b)
             else:
                 send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
         else:
@@ -1237,12 +1256,8 @@ class ModbusServer:
         pdu_len_ok = len(recv_pdu.raw[6:]) >= byte_count
         # test ok flags
         if qty_bits_ok and b_count_ok and pdu_len_ok:
-            # allocate bits list
-            bits_l = [False] * quantity_bits
-            # populate bits list with bits from rx frame
-            for i, _ in enumerate(bits_l):
-                bit_val = recv_pdu.raw[i // 8 + 6]
-                bits_l[i] = test_bit(bit_val, i % 8)
+            # bits list from rx frame
+            bits_l = _unpack_bits(recv_pdu.raw[6:], quantity_bits)
             # data handler update request
             ret_hdl = self.data_hdl.write_coils(start_addr, bits_l, session_data.srv_info)
             # format regular or except response
@@ -1271,12 +1286,8 @@ class ModbusServer:
         pdu_len_ok = len(recv_pdu.raw[6:]) >= byte_count
         # test ok flags
         if qty_regs_ok and b_count_ok and pdu_len_ok:
-            # allocate words list
-            regs_l = [0] * quantity_regs
-            # populate words list with words from rx frame
-            for i, _ in enumerate(regs_l):
-                offset = i * 2 + 6
-                regs_l[i] = recv_pdu.unpack('>H', from_byte=offset, to_byte=offset + 2)[0]
+            # words list from rx frame
+            regs_l = list(recv_pdu.unpack('>%dH' % quantity_regs, from_byte=6, to_byte=6 + quantity_regs * 2))
             # data handler update request
             ret_hdl = self.data_hdl.write_h_regs(start_addr, regs_l, session_data.srv_info)
             # format regular or except response
@@ -1310,12 +1321,9 @@ class ModbusServer:
         read_qty_regs_ok = 0x0001 <= read_quantity_regs <= 0x007B
         # test ok flags
         if write_qty_regs_ok and write_b_count_ok and write_pdu_len_ok and read_qty_regs_ok:
-            # allocate words list
-            regs_l = [0] * write_quantity_regs
-            # populate words list with words from rx frame
-            for i, _ in enumerate(regs_l):
-                offset = i * 2 + 10
-                regs_l[i] = recv_pdu.unpack('>H', from_byte=offset, to_byte=offset + 2)[0]
+            # words list from rx frame
+            regs_l = list(recv_pdu.unpack('>%dH' % write_quantity_regs,
+                                          from_byte=10, to_byte=10 + write_quantity_regs * 2))
             # data handler update request
             ret_hdl = self.data_hdl.write_h_regs(write_start_addr, regs_l, session_data.srv_info)
             # format regular or except response
