@@ -343,7 +343,7 @@ class TestDataBankValidation(unittest.TestCase):
                     method(0, [0x10000])
                 for bad_value in (1.0, '5', None):
                     with self.assertRaises(TypeError):
-                        method(0, [bad_value]) # type: ignore
+                        method(0, [bad_value])  # type: ignore
 
     def test_out_of_bank_returns_none(self):
         self.assertIsNone(self.db.set_holding_registers(14, [1, 2, 3]))
@@ -354,7 +354,7 @@ class TestDataBankValidation(unittest.TestCase):
         self.assertEqual(_to_bool_list([True, 0, 2], 'x'), [True, False, True])
         self.assertEqual(_to_bool_list((1, 0), 'x'), [True, False])
         # one-shot iterators must not be lost by the validation fallback
-        self.assertEqual(_to_bool_list(iter([1, 0, 1]), 'x'), [True, False, True]) # type: ignore
+        self.assertEqual(_to_bool_list(iter([1, 0, 1]), 'x'), [True, False, True])  # type: ignore
         for bad_value in (1.0, 'a', None):
             with self.assertRaises(TypeError):
                 _to_bool_list([True, bad_value], 'x')
@@ -365,14 +365,14 @@ class TestDataBankValidation(unittest.TestCase):
             import numpy as np
         except ImportError:
             self.skipTest('numpy not installed')
-        self.assertIs(self.db.set_coils(0, np.array([True, False, True])), True) # type: ignore
+        self.assertIs(self.db.set_coils(0, np.array([True, False, True])), True)  # type: ignore
         self.assertEqual(self.db.get_coils(0, 3), [True, False, True])
-        self.assertIs(self.db.set_discrete_inputs(0, [np.True_, np.False_]), True) # type: ignore
-        self.assertIs(self.db.set_holding_registers(0, np.array([1, 2], dtype=np.uint16)), True) # type: ignore
+        self.assertIs(self.db.set_discrete_inputs(0, [np.True_, np.False_]), True)  # type: ignore
+        self.assertIs(self.db.set_holding_registers(0, np.array([1, 2], dtype=np.uint16)), True)  # type: ignore
         self.assertEqual(self.db.get_holding_registers(0, 2), [1, 2])
         # numpy floats are still rejected
         with self.assertRaises(TypeError):
-            self.db.set_coils(0, np.array([1.0])) # type: ignore
+            self.db.set_coils(0, np.array([1.0]))  # type: ignore
 
 
 class TestModbusServerSpecFrames(unittest.TestCase):

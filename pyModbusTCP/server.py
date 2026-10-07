@@ -912,6 +912,39 @@ class ModbusServer:
                 # raise an error to close this session (see handle())
                 raise ModbusServer.NetworkError('timeout on send, close session')
 
+        def _check_and_update_timeout(self, deadline: Optional[float], timeout_msg: str) -> bool:
+            """Check the deadline (on a system call is only needed when it is near)"""
+            sock_timeout_changed = False
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ModbusServer.NetworkError(timeout_msg)
+                if remaining < self._SOCKET_TIMEOUT:
+                    self.request.settimeout(remaining)
+                    sock_timeout_changed = True
+            return sock_timeout_changed
+
+        def _recv_chunk(self, size: int, data_len: int, deadline: Optional[float], timeout_msg: str,
+                        request_timeout: Optional[float]) -> Tuple[bytes, Optional[float], str, bool]:
+            # avoid keeping this TCP thread run after server.stop() on main server
+            if not self.server_running:
+                raise ModbusServer.NetworkError('main server is not running')
+
+            sock_timeout_changed = self._check_and_update_timeout(deadline, timeout_msg)
+
+            # recv all data or a chunk of it
+            data_chunk = self.request.recv(size - data_len)
+
+            # check data chunk
+            if data_chunk:
+                if data_len == 0 and request_timeout is not None:
+                    # the request is started, the idle wait is over
+                    deadline = time.monotonic() + request_timeout
+                    timeout_msg = 'request timeout'
+                return data_chunk, deadline, timeout_msg, sock_timeout_changed
+            else:
+                raise ModbusServer.NetworkError('recv return null')
+
         def _recv_all(self, size: int, deadline: Optional[float] = None, timeout_msg: str = 'recv timeout',
                       request_timeout: Optional[float] = None) -> bytes:
             """Receive size bytes (loop until all bytes are received).
@@ -928,28 +961,12 @@ class ModbusServer:
             try:
                 while len(data) < size:
                     try:
-                        # avoid keeping this TCP thread run after server.stop() on main server
-                        if not self.server_running:
-                            raise ModbusServer.NetworkError('main server is not running')
-                        # check the deadline (on a system call is only needed when it is near)
-                        if deadline is not None:
-                            remaining = deadline - time.monotonic()
-                            if remaining <= 0:
-                                raise ModbusServer.NetworkError(timeout_msg)
-                            if remaining < self._SOCKET_TIMEOUT:
-                                self.request.settimeout(remaining)
-                                sock_timeout_changed = True
-                        # recv all data or a chunk of it
-                        data_chunk = self.request.recv(size - len(data))
-                        # check data chunk
-                        if data_chunk:
-                            if not data and request_timeout is not None:
-                                # the request is started, the idle wait is over
-                                deadline = time.monotonic() + request_timeout
-                                timeout_msg = 'request timeout'
-                            data += data_chunk
-                        else:
-                            raise ModbusServer.NetworkError('recv return null')
+                        data_chunk, deadline, timeout_msg, timeout_changed = self._recv_chunk(
+                            size, len(data), deadline, timeout_msg, request_timeout
+                        )
+                        if timeout_changed:
+                            sock_timeout_changed = True
+                        data += data_chunk
                     except socket.timeout:
                         # just redo main server run test, deadline test and recv operations on timeout
                         pass

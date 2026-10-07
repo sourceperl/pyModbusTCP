@@ -8,7 +8,7 @@ import time
 from binascii import hexlify
 from dataclasses import dataclass, field
 from socket import AF_UNSPEC, IPPROTO_TCP, SOCK_STREAM, TCP_NODELAY
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 
 from .constants import (
     ENCAPSULATED_INTERFACE_TRANSPORT,

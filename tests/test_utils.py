@@ -196,7 +196,7 @@ class TestUtils(unittest.TestCase):
                 return iter(self._items)
 
         bits = [True, False, True, True, False, False, False, False, True]
-        self.assertEqual(_pack_bits(IterOnly(bits)), _pack_bits(bits)) # type: ignore
+        self.assertEqual(_pack_bits(IterOnly(bits)), _pack_bits(bits))  # type: ignore
 
 
 if __name__ == '__main__':

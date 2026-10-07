@@ -14,10 +14,10 @@ HOST = "127.0.0.1"
 def get_free_tcp_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((HOST, 0))
-        return s.getsockname()[1]
+        return int(s.getsockname()[1])
 
 
-def benchmark(name: str, n: int, fn: Callable) -> None:
+def benchmark(name: str, n: int, fn: Callable[[], bool]) -> None:
     start = time.perf_counter()
 
     for _ in range(n):
