@@ -6,7 +6,6 @@ flake8 . \
     --exit-zero \
     --max-complexity=10 \
     --max-line-length=127 \
-    --statistics \
     --extend-exclude=build/,docs/,venv/,lab/
 
 echo ""

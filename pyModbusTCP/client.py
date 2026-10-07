@@ -38,6 +38,7 @@ from .constants import (
 from .utils import (
     _pack_bits,
     _to_bool,
+    _to_bool_list,
     _to_int,
     _to_int_list,
     _unpack_bits,
@@ -707,6 +708,7 @@ class ModbusClient:
         """
         # check params
         bits_addr = _to_int(bits_addr, 'bits_addr')
+        bits_value = _to_bool_list(bits_value, 'bits_value')
         if not 0 <= bits_addr <= 0xffff:
             raise ValueError('bit_addr out of range (valid from 0 to 65535)')
         if not 1 <= len(bits_value) <= 1968:

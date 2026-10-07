@@ -8,6 +8,8 @@ Revision history for pyModbusTCP
     - fix ModbusClient: treat socket.gaierror as MB_CONNECT_ERR (like any other connect error).
     - fix ModbusClient: timeout is now a limit for the whole request (send + receive) and no more for each socket I/O. A
                         server sending its response byte by byte could hold the client much longer than timeout.
+    - fix ModbusClient: validate write_multiple_coils items to reject non-integer values (like 'a', None, [], 1.5),
+                        matching write_single_coil behavior.
     - fix ModbusServer: close the session on send timeout (a partial send leaves the TCP stream out of sync).
     - fix ModbusServer.PDU: is_valid property was inverted.
     - fix ModbusServer: an unexpected exception during a request (like one raised by a user callback) is now logged and
