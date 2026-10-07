@@ -10,6 +10,8 @@ Revision history for pyModbusTCP
                         server sending its response byte by byte could hold the client much longer than timeout.
     - fix ModbusClient: validate write_multiple_coils items to reject non-integer values (like 'a', None, [], 1.5),
                         matching write_single_coil behavior.
+    - fix ModbusClient: write_multiple_coils() and write_multiple_registers() now set last_error (MB_RECV_ERR) when the
+                        server reply does not match the request, they returned False with last_error == MB_NO_ERR.
     - fix ModbusServer: close the session on send timeout (a partial send leaves the TCP stream out of sync).
     - fix ModbusServer.PDU: is_valid property was inverted.
     - fix ModbusServer: an unexpected exception during a request (like one raised by a user callback) is now logged and
@@ -25,6 +27,8 @@ Revision history for pyModbusTCP
                     their input. Non-integer items (float, str, None...) raise a TypeError (numpy integers and
                     booleans are accepted), and register values out of the 0-65535 range raise a ValueError.
                     Before, they were silently converted (a value like 70000 or -1 was truncated to 16 bits).
+    - fix utils: valid_host() returns False for an empty host or a host with a NUL char, it raised an IndexError or a
+                 ValueError (so ModbusClient(host='') raised an IndexError instead of a ValueError).
     - improve ModbusClient: decode/encode registers and bits in one pass (faster reads and writes).
     - improve ModbusClient: add some python hints for better python type checking and IDE support.
     - improve ModbusClient: set TCP_NODELAY on connect (new no_delay argument, on by default) to reduce latency on small

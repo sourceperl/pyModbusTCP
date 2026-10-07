@@ -727,8 +727,9 @@ class ModbusClient:
             # response decode
             resp_write_addr, resp_write_count = struct.unpack('>HH', rx_pdu[1:5])
             # check response fields
-            write_ok: bool = (resp_write_addr == bits_addr) and (resp_write_count == len(bits_value))
-            return write_ok
+            if (resp_write_addr != bits_addr) or (resp_write_count != len(bits_value)):
+                raise ModbusClient._NetworkError(MB_RECV_ERR, 'server reply does not match the request')
+            return True
         # handle error during request
         except ModbusClient._InternalError as e:
             self._req_except_handler(e)
@@ -768,8 +769,9 @@ class ModbusClient:
             # response decode
             resp_write_addr, resp_write_count = struct.unpack('>HH', rx_pdu[1:5])
             # check response fields
-            write_ok: bool = (resp_write_addr == regs_addr) and (resp_write_count == len(regs_value))
-            return write_ok
+            if (resp_write_addr != regs_addr) or (resp_write_count != len(regs_value)):
+                raise ModbusClient._NetworkError(MB_RECV_ERR, 'server reply does not match the request')
+            return True
         # handle error during request
         except ModbusClient._InternalError as e:
             self._req_except_handler(e)

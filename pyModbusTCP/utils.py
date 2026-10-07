@@ -302,6 +302,9 @@ def valid_host(host_str: str) -> bool:
     :returns: True if host_str is valid
     :rtype: bool
     """
+    # an empty host or a NUL char (rejected by the system resolver functions) can't be valid
+    if not host_str or '\x00' in host_str:
+        return False
     # IPv4 valid address ?
     try:
         socket.inet_pton(socket.AF_INET, host_str)
