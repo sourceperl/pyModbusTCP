@@ -15,6 +15,10 @@ Revision history for pyModbusTCP
     - fix ModbusServer: start() no longer modifies class attributes of socketserver, since ThreadingTCPServer can be
                         shared with the rest of the process.
     - fix ModbusServer: close the listening socket when start() fails to bind.
+    - fix ModbusServer: make function Write/Read Multiple Registers (0x17) atomic to prevent writing when the read range
+                        is out of bounds.
+    - fix ModbusServer: ensure Write Single Coil (0x05) complies fully with the Modbus specification.
+    - fix ModbusServer: support MBAP header length from 2 to 253.
     - fix DataBank: set_coils(), set_discrete_inputs(), set_holding_registers() and set_input_registers() now check
                     their input. Non-integer items (float, str, None...) raise a TypeError (numpy integers and
                     booleans are accepted), and register values out of the 0-65535 range raise a ValueError.

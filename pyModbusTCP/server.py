@@ -779,7 +779,7 @@ class ModbusServer:
             # check frame header content inconsistency
             if self.protocol_id != 0:
                 raise ModbusServer.DataFormatError('MBAP protocol ID must be 0')
-            if not 2 < self.length < 256:
+            if not 2 <= self.length <= 253:
                 raise ModbusServer.DataFormatError('MBAP length must be between 2 and 256')
 
     class PDU:
@@ -834,7 +834,7 @@ class ModbusServer:
             try:
                 return struct.unpack(fmt, raw_section)
             except struct.error:
-                err_msg = 'unable to decode PDU message  (fmt: %s, values: %r)' % (fmt, raw_section)
+                err_msg = "unable to decode PDU message  (fmt: '%s', values: %r)" % (fmt, raw_section)
                 raise ModbusServer.DataFormatError(err_msg)
 
     class CustomThreadingTCPServer(ThreadingTCPServer):
@@ -1225,15 +1225,19 @@ class ModbusServer:
         send_pdu = session_data.response.pdu
         # decode pdu
         (coil_addr, coil_value) = recv_pdu.unpack('>HH', from_byte=1, to_byte=5)
+        # check allowed values
+        if coil_value not in (0x0000, 0xFF00):
+            send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
+            return
         # format coil raw value to bool
         coil_as_bool = bool(coil_value == 0xFF00)
         # data handler update request
         ret_hdl = self.data_hdl.write_coils(coil_addr, [coil_as_bool], session_data.srv_info)
-        # format regular or except response
-        if ret_hdl.ok:
-            send_pdu.add_pack('>BHH', recv_pdu.func_code, coil_addr, coil_value)
-        else:
+        # format except or regular response
+        if not ret_hdl.ok:
             send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
+            return
+        send_pdu.add_pack('>BHH', recv_pdu.func_code, coil_addr, coil_value)
 
     def _write_single_register(self, session_data: ModbusServer.SessionData) -> None:
         """
@@ -1332,31 +1336,36 @@ class ModbusServer:
          write_quantity_regs,
          byte_count) = recv_pdu.unpack('>HHHHB', from_byte=1, to_byte=10)
         # ok flags: some tests on pdu fields
-        write_qty_regs_ok = 0x0001 <= write_quantity_regs <= 0x007B
+        write_qty_regs_ok = 0x0001 <= write_quantity_regs <= 0x0079
         write_b_count_ok = byte_count == write_quantity_regs * 2
         write_pdu_len_ok = len(recv_pdu.raw[10:]) >= byte_count
-        read_qty_regs_ok = 0x0001 <= read_quantity_regs <= 0x007B
+        read_qty_regs_ok = 0x0001 <= read_quantity_regs <= 0x007D
         # test ok flags
-        if write_qty_regs_ok and write_b_count_ok and write_pdu_len_ok and read_qty_regs_ok:
-            # words list from rx frame
-            regs_l = list(recv_pdu.unpack('>%dH' % write_quantity_regs,
-                                          from_byte=10, to_byte=10 + write_quantity_regs * 2))
-            # data handler update request
-            ret_hdl = self.data_hdl.write_h_regs(write_start_addr, regs_l, session_data.srv_info)
-            # format regular or except response
-            if ret_hdl.ok:
-                ret_hdl = self.data_hdl.read_h_regs(read_start_addr, read_quantity_regs, session_data.srv_info)
-                if ret_hdl.ok and ret_hdl.data is not None:
-                    # build pdu
-                    send_pdu.add_pack('BB', recv_pdu.func_code, read_quantity_regs * 2)
-                    # add_pack requested words
-                    send_pdu.add_pack('>%dH' % len(ret_hdl.data), *ret_hdl.data)
-                else:
-                    send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
-            else:
-                send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
-        else:
+        if not (write_qty_regs_ok and write_b_count_ok and write_pdu_len_ok and read_qty_regs_ok):
             send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
+            return
+        # words list from rx frame
+        regs_l = list(recv_pdu.unpack('>%dH' % write_quantity_regs,
+                                      from_byte=10, to_byte=10 + write_quantity_regs * 2))
+        # gratuitous read to check error status (avoid to write if read fail)
+        ret_hdl_read = self.data_hdl.read_h_regs(read_start_addr, read_quantity_regs, session_data.srv_info)
+        if not ret_hdl_read.ok or ret_hdl_read.data is None:
+            send_pdu.build_except(recv_pdu.func_code, ret_hdl_read.exp_code)
+            return
+        # do write
+        ret_hdl_write = self.data_hdl.write_h_regs(write_start_addr, regs_l, session_data.srv_info)
+        if not ret_hdl_write.ok:
+            send_pdu.build_except(recv_pdu.func_code, ret_hdl_write.exp_code)
+            return
+        # redo read after write
+        ret_hdl_read = self.data_hdl.read_h_regs(read_start_addr, read_quantity_regs, session_data.srv_info)
+        if not ret_hdl_read.ok or ret_hdl_read.data is None:
+            send_pdu.build_except(recv_pdu.func_code, ret_hdl_read.exp_code)
+            return
+        # build pdu
+        send_pdu.add_pack('BB', recv_pdu.func_code, read_quantity_regs * 2)
+        # add_pack requested words
+        send_pdu.add_pack('>%dH' % len(ret_hdl_read.data), *ret_hdl_read.data)
 
     def _encapsulated_interface_transport(self, session_data: ModbusServer.SessionData) -> None:
         """
