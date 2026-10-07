@@ -780,7 +780,7 @@ class ModbusServer:
             if self.protocol_id != 0:
                 raise ModbusServer.DataFormatError('MBAP protocol ID must be 0')
             if not 2 <= self.length <= 253:
-                raise ModbusServer.DataFormatError('MBAP length must be between 2 and 256')
+                raise ModbusServer.DataFormatError('MBAP length must be between 2 and 253')
 
     class PDU:
         """ PDU (Protocol Data Unit) container class. """
