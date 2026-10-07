@@ -22,6 +22,7 @@ from pyModbusTCP.utils import test_bit as get_bit
 from pyModbusTCP.utils import (
     twos_c,
     twos_c_l,
+    valid_host,
     word_list_to_long,
     words2longs,
 )
@@ -197,6 +198,13 @@ class TestUtils(unittest.TestCase):
 
         bits = [True, False, True, True, False, False, False, False, True]
         self.assertEqual(_pack_bits(IterOnly(bits)), _pack_bits(bits))  # type: ignore
+
+    def test_valid_host(self):
+        """valid_host() always returns a bool: an empty host or a NUL char are invalid (and raise nothing)."""
+        for host in ['localhost', '127.0.0.1', '::1', 'example.com', 'a-b.c_d.example.', 'x' * 63]:
+            self.assertIs(valid_host(host), True, host)
+        for host in ['', '\x00', 'a\x00b', 'host\x00', 'wrong@host', '-bad.example.com', 'x' * 64, 'a' * 256]:
+            self.assertIs(valid_host(host), False, repr(host))
 
 
 if __name__ == '__main__':

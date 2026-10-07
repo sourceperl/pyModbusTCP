@@ -441,6 +441,48 @@ class TestModbusServerSpecFrames(unittest.TestCase):
         self.assertEqual(resp, '170c00fe0acd00010003000d00ff')
         self.assertEqual(self.bank.get_holding_registers(13, 5), [0, 0xff, 0xff, 0xff, 0])
 
+    def test_write_single_coil_values(self):
+        # the only legal values are 0x0000 (off) and 0xFF00 (on), any other one is an ILLEGAL DATA VALUE (03)
+        self.bank.set_coils(10, [True])
+        for value in ('0001', '00ff', '8000', 'ff01', 'ffff'):
+            self.assertEqual(self.exchange(f'05 000a {value}'), '8503', value)
+            self.assertEqual(self.bank.get_coils(10, 1), [True], 'a refused request must not write')
+        self.assertEqual(self.exchange('05 000a 0000'), '05000a0000')
+        self.assertEqual(self.bank.get_coils(10, 1), [False])
+        self.assertEqual(self.exchange('05 000a ff00'), '05000aff00')
+        self.assertEqual(self.bank.get_coils(10, 1), [True])
+
+    def test_read_write_multiple_registers_refused_request(self):
+        # a refused request (exception response) must not write anything: here the read area is out of the table
+        self.assertEqual(self.exchange('17 ffff 0002 0032 0001 02 0457'), '9702')
+        self.assertEqual(self.bank.get_holding_registers(50, 1), [0])
+        # quantities: read from 1 to 125 (0x7D), write from 1 to 121 (0x79)
+        self.assertEqual(self.exchange('17 0000 007e 0000 0001 02 0007'), '9703')
+        self.assertEqual(self.bank.get_holding_registers(0, 1), [0])
+        resp = self.exchange('17 0000 007d 0000 0001 02 0007')
+        self.assertEqual(resp[:4], '17fa')
+        self.assertEqual(len(resp), 2 * (2 + 250))
+        self.assertEqual(self.exchange('17 0000 0001 0000 0079 f2' + '0000' * 121), '17020000')
+
+    def test_unsupported_function_without_parameter(self):
+        # a request can be a function code only (like 0x07, 0x0B, 0x0C or 0x11): ILLEGAL FUNCTION, not a closed session
+        for func in (0x07, 0x0b, 0x0c, 0x11):
+            self.assertEqual(self.exchange(f'{func:02x}'), f'{func | 0x80:02x}01')
+
+    @staticmethod
+    def _closed_by_server(frame):
+        with socket.create_connection(('127.0.0.1', 5040), timeout=5) as sock:
+            sock.sendall(frame)
+            try:
+                return sock.recv(16) == b''
+            except ConnectionResetError:
+                return True
+
+    def test_malformed_requests_close_the_session(self):
+        # no function code at all (MBAP length 1), and a known function without its parameters
+        self.assertTrue(self._closed_by_server(b'\x00\x01\x00\x00\x00\x01\x01'))
+        self.assertTrue(self._closed_by_server(b'\x00\x01\x00\x00\x00\x02\x01\x03'))
+
 
 if __name__ == '__main__':
     unittest.main()

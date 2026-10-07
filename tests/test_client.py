@@ -9,7 +9,7 @@ import unittest
 from unittest import mock
 
 from pyModbusTCP.client import ModbusClient, _decode_regs
-from pyModbusTCP.constants import MB_CONNECT_ERR, MB_TIMEOUT_ERR
+from pyModbusTCP.constants import MB_CONNECT_ERR, MB_NO_ERR, MB_RECV_ERR, MB_TIMEOUT_ERR
 from pyModbusTCP.utils import _unpack_bits, set_bit
 
 
@@ -23,6 +23,9 @@ class TestModbusClient(unittest.TestCase):
         # should raise ValueError for bad value
         self.assertRaises(ValueError, ModbusClient, host='wrong@host')
         self.assertRaises(ValueError, ModbusClient, host='::notip:1')
+        # an empty host or a host with a NUL char is invalid too (ValueError, not another exception)
+        self.assertRaises(ValueError, ModbusClient, host='')
+        self.assertRaises(ValueError, ModbusClient, host='bad\x00host')
         # shouldn't raise ValueError for valid value
         try:
             [ModbusClient(host=h) for h in ['CamelCaseHost', 'plc-1.net', 'my.good.host',
@@ -206,6 +209,37 @@ class TestModbusClient(unittest.TestCase):
             self.assertRaises(TypeError, c.write_multiple_registers, 0, [1, '2'])
             self.assertRaises(TypeError, c.write_read_multiple_registers, 0, [1, None], 0)
             self.assertRaises(ValueError, c.write_read_multiple_registers, 0, [1, -1], 0)
+            # coils items must be bool or integers (like write_single_coil)
+            self.assertRaises(TypeError, c.write_multiple_coils, 0, [True, 'a'])
+            self.assertRaises(TypeError, c.write_multiple_coils, 0, [None])
+            self.assertRaises(TypeError, c.write_multiple_coils, 0, [1.5])
+            self.assertRaises(TypeError, c.write_multiple_coils, 0, [[]])
+
+    def test_write_multiple_reply_mismatch(self):
+        """
+        A reply that doesn't echo the address/quantity of the request is an error (last_error), not a silent False.
+        """
+        def reply(addr_delta, qty_delta):
+            def fake_req_pdu(tx_pdu, rx_min_len):
+                addr, qty = struct.unpack('>HH', tx_pdu[1:5])
+                return struct.pack('>BHH', tx_pdu[0], addr + addr_delta, qty + qty_delta)
+            return fake_req_pdu
+
+        calls = {'write_multiple_coils': lambda c: c.write_multiple_coils(10, [True, False, True]),
+                 'write_multiple_registers': lambda c: c.write_multiple_registers(10, [1, 2, 3])}
+        for name, call in calls.items():
+            for addr_delta, qty_delta in ((0, 0), (1, 0), (0, 1), (0, -1)):
+                with self.subTest(method=name, addr_delta=addr_delta, qty_delta=qty_delta):
+                    # a new client each time: with _req_pdu mocked, last_error is not reset between two calls
+                    c = ModbusClient()
+                    with mock.patch.object(c, '_req_pdu', side_effect=reply(addr_delta, qty_delta)):
+                        result = call(c)
+                    if (addr_delta, qty_delta) == (0, 0):
+                        self.assertIs(result, True)
+                        self.assertEqual(c.last_error, MB_NO_ERR)
+                    else:
+                        self.assertIs(result, False)
+                        self.assertEqual(c.last_error, MB_RECV_ERR)
 
 
 if __name__ == '__main__':
