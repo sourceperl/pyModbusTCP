@@ -48,6 +48,7 @@ Revision history for pyModbusTCP
     - improve DataBank: set_coils() and set_holding_registers() now compare the whole slice before writing, and
                         only build the list of changes when a server request needs it for the on_*_change()
                         callbacks. Writing unchanged values is much faster.
+    - improve DataBank: remove deprecated class methods (get_bits, set_bits, get_words and set_words).
 
 0.3.1 2026-09-29
 

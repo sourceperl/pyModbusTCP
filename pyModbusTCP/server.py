@@ -9,7 +9,6 @@ import time
 from socketserver import BaseRequestHandler, ThreadingTCPServer
 from threading import Event, Lock, Thread
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-from warnings import warn
 
 from .constants import (
     ENCAPSULATED_INTERFACE_TRANSPORT,
@@ -38,28 +37,6 @@ logger = logging.getLogger(__name__)
 
 class DataBank:
     """ Data space class with thread safe access functions """
-
-    _DEPR_MSG = 'This class method is deprecated. Use DataBank instance method instead: '
-
-    @classmethod
-    def get_bits(cls, *_args: Any, **_kwargs: Any) -> None:
-        msg = DataBank._DEPR_MSG + 'server.data_bank.get_coils() or get_discrete_inputs()'
-        warn(msg, DeprecationWarning, stacklevel=2)
-
-    @classmethod
-    def set_bits(cls, *_args: Any, **_kwargs: Any) -> None:
-        msg = DataBank._DEPR_MSG + 'server.data_bank.set_coils() or set_discrete_inputs()'
-        warn(msg, DeprecationWarning, stacklevel=2)
-
-    @classmethod
-    def get_words(cls, *_args: Any, **_kwargs: Any) -> None:
-        msg = DataBank._DEPR_MSG + 'server.data_bank.get_holding_registers() or get_input_registers()'
-        warn(msg, DeprecationWarning, stacklevel=2)
-
-    @classmethod
-    def set_words(cls, *_args: Any, **_kwargs: Any) -> None:
-        msg = DataBank._DEPR_MSG + 'server.data_bank.set_holding_registers() or set_input_registers()'
-        warn(msg, DeprecationWarning, stacklevel=2)
 
     def __init__(self, coils_size: int = 0x10000, coils_default_value: bool = False,
                  d_inputs_size: int = 0x10000, d_inputs_default_value: bool = False,
