@@ -668,17 +668,6 @@ class DeviceIdentification:
         return items_l
 
 
-def _check_timeout(value: Optional[Union[int, float]], name: str) -> Optional[float]:
-    """Check an optional timeout (None or a number of seconds > 0) and return it as a float (or None)."""
-    if value is None:
-        return None
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError('%s must be a number or None' % name)
-    if value <= 0:
-        raise ValueError('%s must be greater than 0 (or None to disable it)' % name)
-    return float(value)
-
-
 class ModbusServer:
     """ Modbus TCP server """
 
@@ -1022,14 +1011,17 @@ class ModbusServer:
                  ext_engine: Optional[Callable[[ModbusServer.SessionData], None]] = None,
                  device_id: Optional[DeviceIdentification] = None,
                  request_timeout: Optional[float] = 30.0, idle_timeout: Optional[float] = None,
-                 max_connections: Optional[int] = None) -> None:
-        """Constructor
+                 max_connections: Optional[int] = None, port_range: Optional[Tuple[int, int]] = None) -> None:
+        """Initialize a Modbus TCP server.
 
-        Modbus server constructor.
+        Sets up a Modbus TCP server with configurable network parameters, data handling,
+        and optional device identification. Type validation is performed on critical
+        parameters to prevent silent runtime failures.
+
 
         :param host: hostname or IPv4/IPv6 address server address (default is 'localhost')
         :type host: str
-        :param port: TCP port number (default is 502)
+        :param port: TCP port number (default is 502), use 0 to let the OS choose a free port
         :type port: int
         :param no_block: no block mode, i.e. start() will return (default is False)
         :type no_block: bool
@@ -1052,51 +1044,54 @@ class ModbusServer:
         :param max_connections: max number of simultaneous client connections, the next ones are closed immediately,\
             None for no limit (default)
         :type max_connections: int or None
+        :param port_range: inclusive range (first, last) of TCP ports to try in order, the first free one is used,\
+            when set the port param is ignored, None to disable (default)
+        :type port_range: tuple(int, int) or None
         """
-        # check data_bank
-        if data_bank and not isinstance(data_bank, DataBank):
-            raise TypeError('data_bank is not a DataBank instance')
-        # check data_hdl
-        if data_hdl and not isinstance(data_hdl, DataHandler):
-            raise TypeError('data_hdl is not a DataHandler instance')
-        # data_hdl and data_bank can't be set at same time
-        if data_hdl and data_bank:
-            raise ValueError('when data_hdl is set, you must define data_bank in it')
-        # check ext_engine
-        if ext_engine and not callable(ext_engine):
-            raise TypeError('ext_engine must be callable')
-        # check device_id
-        if device_id and not isinstance(device_id, DeviceIdentification):
-            raise TypeError('device_id is not a DeviceIdentification instance')
-        # check timeouts and connections limit
-        request_timeout = _check_timeout(request_timeout, 'request_timeout')
-        idle_timeout = _check_timeout(idle_timeout, 'idle_timeout')
-        if max_connections is not None:
-            if isinstance(max_connections, bool) or not isinstance(max_connections, int):
-                raise TypeError('max_connections must be an int or None')
-            if max_connections < 1:
-                raise ValueError('max_connections must be at least 1 (or None for no limit)')
-        # public
+        # validate complex objects (data storage and callbacks)
+        self._validate_data_bank_and_handler(data_bank, data_hdl)
+        self._validate_ext_engine(ext_engine)
+        device_id = self._validate_device_id(device_id)
+
+        # validate numeric parameters with constraints
+        request_timeout = self._check_timeout(request_timeout, 'request_timeout')
+        idle_timeout = self._check_timeout(idle_timeout, 'idle_timeout')
+        max_connections = self._validate_max_connections(max_connections)
+        port_range = self._validate_port_range(port_range)
+
+        # store network configuration
         self.host = host
         self.port = port
+        self.port_range = port_range
         self.no_block = no_block
+        self.ipv6 = ipv6
+
+        # store timeout settings
         self.request_timeout = request_timeout
         self.idle_timeout = idle_timeout
         self.max_connections = max_connections
-        self.ipv6 = ipv6
+
+        # store callbacks and device info
         self.ext_engine = ext_engine
-        # First, internal data_bank will be linked to an external data handler if defined.
-        # If not, an external or internal DataBank will be used instead.
-        # "virtual mode" will be set for save memory if an external engine is in use.
-        self.data_bank = data_hdl.data_bank if data_hdl else data_bank or DataBank(virtual_mode=bool(ext_engine))
-        self.data_hdl = data_hdl or DataHandler(data_bank=self.data_bank)
         self.device_id = device_id
-        # private
-        self._evt_running = Event()
+
+        # initialize data storage (prefer data_hdl's internal bank, then explicit data_bank, then create new)
+        if data_hdl:
+            self.data_bank = data_hdl.data_bank
+            self.data_hdl = data_hdl
+        else:
+            self.data_bank = data_bank or DataBank(virtual_mode=bool(ext_engine))
+            self.data_hdl = DataHandler(data_bank=self.data_bank)
+
+        # initialize internal state for server operation
+        self._evt_running = Event()  # Event to signal server is running
+        # active server instance
         self._service: Optional[Union[ModbusServer.CustomThreadingTCPServer,
                                       ModbusServer.CustomThreadingTCPServerV6]] = None
+        # server thread handle
         self._serve_th: Optional[Thread] = None
-        # modbus default functions map
+
+        # map Modbus function codes to handler methods (fixed routing table)
         self._func_map: Dict[int, Callable[[ModbusServer.SessionData], None]] = {
             READ_COILS: self._read_bits,
             READ_DISCRETE_INPUTS: self._read_bits,
@@ -1109,6 +1104,67 @@ class ModbusServer:
             WRITE_READ_MULTIPLE_REGISTERS: self._write_read_multiple_registers,
             ENCAPSULATED_INTERFACE_TRANSPORT: self._encapsulated_interface_transport
         }
+
+    @staticmethod
+    def _validate_data_bank_and_handler(data_bank: Optional[DataBank], data_hdl: Optional[DataHandler]) -> None:
+        if data_bank and not isinstance(data_bank, DataBank):
+            raise TypeError('data_bank is not a DataBank instance')
+        if data_hdl and not isinstance(data_hdl, DataHandler):
+            raise TypeError('data_hdl is not a DataHandler instance')
+        if data_hdl and data_bank:
+            raise ValueError('when data_hdl is set, you must define data_bank in it')
+
+    @staticmethod
+    def _validate_ext_engine(ext_engine: Optional[Callable[[SessionData], None]]) -> None:
+        if ext_engine and not callable(ext_engine):
+            raise TypeError('ext_engine must be callable')
+
+    @staticmethod
+    def _validate_device_id(device_id: Optional[DeviceIdentification]) -> Optional[DeviceIdentification]:
+        if device_id is None:
+            return None
+        if not isinstance(device_id, DeviceIdentification):
+            raise TypeError(f'device_id must be a DeviceIdentification instance or None, '
+                            f'got {type(device_id).__name__}')
+        return device_id
+
+    @staticmethod
+    def _check_timeout(value: Optional[Union[int, float]], name: str) -> Optional[float]:
+        """Check an optional timeout (None or a number of seconds > 0) and return it as a float (or None)."""
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError('%s must be a number or None' % name)
+        if value <= 0:
+            raise ValueError('%s must be greater than 0 (or None to disable it)' % name)
+        return float(value)
+
+    @staticmethod
+    def _validate_max_connections(max_connections: Optional[int]) -> Optional[int]:
+        if max_connections is None:
+            return None
+        if isinstance(max_connections, bool):
+            raise TypeError('max_connections must be an int or None')
+        if not isinstance(max_connections, int):
+            raise TypeError('max_connections must be an int or None')
+        if max_connections < 1:
+            raise ValueError('max_connections must be at least 1 (or None for no limit)')
+        return max_connections
+
+    @staticmethod
+    def _validate_port_range(port_range: Optional[Tuple[int, int]]) -> Optional[Tuple[int, int]]:
+        if port_range is None:
+            return None
+        try:
+            first, last = port_range
+        except (TypeError, ValueError):
+            raise TypeError('port_range must be a (first, last) tuple of int or None') from None
+        for port in (first, last):
+            if isinstance(port, bool) or not isinstance(port, int):
+                raise TypeError('port_range must be a (first, last) tuple of int or None')
+        if not (0 <= first <= last <= 0xffff):
+            raise ValueError('port_range must verify 0 <= first <= last <= 65535')
+        return (first, last)
 
     def __repr__(self) -> str:
         r_str = 'ModbusServer(host=\'%s\', port=%d, no_block=%s, ipv6=%s, data_bank=%s, data_hdl=%s, ext_engine=%s)'
@@ -1439,44 +1495,93 @@ class ModbusServer:
             # return except 2 for an unknown MEI type
             send_pdu.build_except(recv_pdu.func_code, EXP_DATA_ADDRESS)
 
-    def start(self) -> None:
-        """Start the server.
+    def _candidate_ports(self) -> range:
+        """Ports to try at start: the whole port_range if set, otherwise just self.port."""
+        if self.port_range is not None:
+            return range(self.port_range[0], self.port_range[1] + 1)
+        return range(self.port, self.port + 1)
 
-        This function will block (or not if no_block flag is set).
+    def _bind_service(self, port: int) -> None:
+        """Create the listening server (self._service) on a given port.
+
+        :raises ModbusServer.NetworkError: if the port is unavailable
         """
-        # do nothing if server is already running
-        if self.is_run:
-            return
         # init server (IPv4 or IPv6)
         # here we subclass ThreadingTCPServer to don't alter the socketserver classes shared with other code
         server_cls = ModbusServer.CustomThreadingTCPServerV6 if self.ipv6 else ModbusServer.CustomThreadingTCPServer
-        self._service = server_cls((self.host, self.port), self.ModbusService, bind_and_activate=False)
+        service = server_cls((self.host, port), self.ModbusService, bind_and_activate=False)
+        # keep a reference on it, even if the bind below fails (the failed service is closed, as before)
+        self._service = service
         # pass some things shared with server threads (access via self.server in ModbusService.handle())
-        self._service.evt_running = self._evt_running
-        self._service.engine = self._engine
-        self._service.request_timeout = self.request_timeout
-        self._service.idle_timeout = self.idle_timeout
-        self._service.max_connections = self.max_connections
+        service.evt_running = self._evt_running
+        service.engine = self._engine
+        service.request_timeout = self.request_timeout
+        service.idle_timeout = self.idle_timeout
+        service.max_connections = self.max_connections
         # set socket options
-        self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        # In auto-port mode (port_range or port 0), we need a reliable "port already in use" detection. On Windows,
+        # SO_REUSEADDR allows to bind a port already listening, so use SO_EXCLUSIVEADDRUSE there instead.
+        auto_port = self.port_range is not None or port == 0
+        if auto_port and hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
+            service.socket.setsockopt(socket.SOL_SOCKET,
+                                      socket.SO_EXCLUSIVEADDRUSE, 1)  # pyright: ignore[reportAttributeAccessIssue]
+        else:
+            service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         # TODO test no_delay with bench
-        self._service.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        service.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         # bind and activate
         try:
-            self._service.server_bind()
-            self._service.server_activate()
+            service.server_bind()
+            service.server_activate()
         except OSError as e:
             # don't keep the listening socket open after a failed start
-            self._service.server_close()
+            service.server_close()
             raise ModbusServer.NetworkError(e)
+
+    def _server_address(self) -> Tuple[str | bytes | bytearray, int]:
+        if self._service is None:
+            raise RuntimeError('server is not start')
+        return (self._service.server_address[0], self._service.server_address[1])
+
+    def start(self) -> Tuple[str | bytes | bytearray, int]:
+        """Start the server.
+
+        This function will block (or not if no_block flag is set).
+
+        If port_range is set (or port is 0), the first available TCP port is used.
+        The full server address structure is returned.
+
+        :return: A tuple containing the address information (e.g., ('127.0.0.1', 54321)).
+        :raises ModbusServer.NetworkError: if the server can't listen (no port available)
+        """
+        # do nothing if server is already running
+        if self.is_run:
+            return self._server_address()
+        # bind on the first available port
+        last_error: Optional[ModbusServer.NetworkError] = None
+        for port in self._candidate_ports():
+            try:
+                self._bind_service(port)
+                break
+            except ModbusServer.NetworkError as e:
+                last_error = e
+        else:
+            raise ModbusServer.NetworkError(last_error)
+
         # serve request
         if self.no_block:
-            self._serve_th = Thread(target=self._serve)
-            self._serve_th.daemon = True
+            self._serve_th = Thread(target=self._serve, daemon=True)
             self._serve_th.start()
         else:
             self._serve()
+
+        return self._server_address()
+
+    def wait(self, timeout: Optional[float] = None) -> None:
+        """Wait for the server thread to finish (useful in non-blocking mode)."""
+        if self._serve_th is not None and self._serve_th.is_alive():
+            self._serve_th.join(timeout=timeout)
 
     def stop(self) -> None:
         """Stop the server."""

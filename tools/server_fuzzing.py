@@ -32,7 +32,7 @@ class FuzzerConfig:
 def setup_logging(verbose: bool = False) -> logging.Logger:
     """Configure and return a logger instance."""
     level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(level=level, format="%(asctime)s [%(levelname)7s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    logging.basicConfig(level=level, format="%(asctime)s [%(levelname)-7s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
     return logging.getLogger(__name__)
 
 
