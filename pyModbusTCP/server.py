@@ -1209,8 +1209,7 @@ class ModbusServer:
                 # pack data bank bits in bytes
                 bytes_b = _pack_bits(ret_hdl.data)
                 # build pdu
-                send_pdu.add_pack('BB', recv_pdu.func_code, len(bytes_b))
-                send_pdu.add_pack('%ds' % len(bytes_b), bytes_b)
+                send_pdu.add_pack('BB%ds' % len(bytes_b), recv_pdu.func_code, len(bytes_b), bytes_b)
             else:
                 send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
         else:
@@ -1238,9 +1237,8 @@ class ModbusServer:
             # format regular or except response
             if ret_hdl.ok and ret_hdl.data is not None:
                 # build pdu
-                send_pdu.add_pack('BB', recv_pdu.func_code, quantity_regs * 2)
-                # add_pack requested words
-                send_pdu.add_pack('>%dH' % len(ret_hdl.data), *ret_hdl.data)
+                # (header + requested words in a single pack: avoid an intermediate bytes copy)
+                send_pdu.add_pack('>BB%dH' % len(ret_hdl.data), recv_pdu.func_code, quantity_regs * 2, *ret_hdl.data)
             else:
                 send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
         else:
