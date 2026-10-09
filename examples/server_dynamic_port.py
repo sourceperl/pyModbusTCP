@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Example script running a Modbus TCP server with dynamic port allocation and full debug message logging.
+Modbus TCP server script with dynamic port allocation.
 """
 
 import logging
@@ -9,22 +9,25 @@ import sys
 
 from pyModbusTCP.server import ModbusServer
 
-# logging setup
+# Logging setup
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)-7s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-logging.getLogger('pyModbusTCP.server').setLevel(logging.DEBUG)
-# init modbus server
-server = ModbusServer(host='0.0.0.0', port=0, no_block=True)
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s [%(levelname)-7s] %(message)s",
+                    datefmt="%Y-%m-%d %H:%M:%S")
+# Silence noisy third-party loggers
+logging.getLogger('pyModbusTCP.server').setLevel(logging.CRITICAL)
+
+# Server Configuration
+# For IPv4: host="0.0.0.0", use_ipv6=False
+# For IPv6 / Dual-stack: host="::", use_ipv6=True
+server = ModbusServer(host='0.0.0.0', port=0, no_block=True, ipv6=False)
 
 try:
-    # start the server and retrieve the full address structure
-    addr_info = server.start()
+    # Start the server
+    bound_host, bound_port = server.start()
+    logger.info(f'Server started successfully on "{bound_host}" at TCP port {bound_port}')
 
-    # safely unpack host and port, supporting both IPv4 and IPv6 structures
-    host, port = addr_info[0], addr_info[1]
-    logger.info(f"Modbus server started successfully at {host}:{port}")
-
-    # block the main thread to keep the service running in the background
+    # Keep the main thread alive in non-blocking mode
     server.wait()
 except KeyboardInterrupt:
     logger.info("Keyboard interrupt received. Shutting down server...")

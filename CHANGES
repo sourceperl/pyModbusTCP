@@ -45,6 +45,10 @@ Revision history for pyModbusTCP
     - improve ModbusServer: increase the listen backlog from 5 to 128, a burst of simultaneous connections (like clients
                             reconnecting together) no longer waits for a TCP retransmission (1 s or more).
     - improve ModbusServer: allow dynamic TCP port allocation.
+    - improve ModbusServer: add bound_address and bound_port properties, set as soon as the server is bound (the way to
+                            get the port allocated by the OS in blocking mode, where start() doesn't return).
+    - improve ModbusServer: with port_range, only a busy (or not allowed) port is skipped, any other bind error (like an
+                            invalid host) is now raised at once with its real cause instead of trying every port.
     - improve DataBank: set_coils() and set_holding_registers() now compare the whole slice before writing, and
                         only build the list of changes when a server request needs it for the on_*_change()
                         callbacks. Writing unchanged values is much faster.

@@ -859,7 +859,7 @@ class ModbusClient:
         try:
             self._sock.setsockopt(IPPROTO_TCP, TCP_NODELAY, int(value))
         except socket.error as e:
-            logger.debug('unable to change TCP_NODELAY on the open connection: %r', e)
+            logger.debug('Unable to change TCP_NODELAY on the open connection: %r', e)
 
     def _send(self, frame: bytes) -> None:
         """Send frame over current socket.

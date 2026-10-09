@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import errno
 import logging
+import os
 import socket
 import struct
 import time
@@ -832,7 +834,7 @@ class ModbusServer:
                 # log the first rejection at once, then one message per 10 s at most
                 now = time.monotonic()
                 if self._rejected_log_time is None or now - self._rejected_log_time >= 10.0:
-                    logger.warning('maximum number of connections (%d) reached: %d connection(s) rejected '
+                    logger.warning('Maximum number of connections (%d) reached: %d connection(s) rejected '
                                    '(last from %r)', self.max_connections, self._rejected, client_address)
                     self._rejected = 0
                     self._rejected_log_time = now
@@ -955,7 +957,7 @@ class ModbusServer:
                 session_data = ModbusServer.SessionData()
                 (session_data.client.address, session_data.client.port) = self.request.getpeername()
                 # debug message
-                logger.debug('accept new connection from %r', session_data.client)
+                logger.debug('Accept new connection from %r', session_data.client)
                 # main processing loop
                 while True:
                     # init session data for new request
@@ -979,7 +981,7 @@ class ModbusServer:
                     self._send_all(session_data.response.raw)
             except (ModbusServer.Error, OSError, socket.error) as e:
                 # debug message
-                logger.debug('exception %r for %r', e, session_data.client)
+                logger.debug('Exception %r for %r', e, session_data.client)
                 # on main loop except: exit from it and cleanly close the current socket
                 self.request.close()
 
@@ -1067,6 +1069,8 @@ class ModbusServer:
                                       ModbusServer.CustomThreadingTCPServerV6]] = None
         # server thread handle
         self._serve_th: Optional[Thread] = None
+        # (host, port) of the listening socket, set as soon as the server is bound (see bound_address)
+        self._bound_address: Optional[Tuple[str, int]] = None
 
         # map Modbus function codes to handler methods (fixed routing table)
         self._func_map: Dict[int, Callable[[ModbusServer.SessionData], None]] = {
@@ -1182,7 +1186,7 @@ class ModbusServer:
         except Exception:
             # unexpected error (like an exception raised by a user callback): log it and keep the session alive
             # (this keeps the TCP session synchronized and tells the client that the request has failed)
-            logger.exception('unexpected error during processing of function 0x%02X', func_code)
+            logger.exception('Unexpected error during processing of function 0x%02X', func_code)
             session_data.response.pdu.build_except(func_code, EXP_SLAVE_DEVICE_FAILURE)
 
     def _read_bits(self, session_data: ModbusServer.SessionData) -> None:
@@ -1512,14 +1516,26 @@ class ModbusServer:
         except OSError as e:
             # don't keep the listening socket open after a failed start
             service.server_close()
-            raise ModbusServer.NetworkError(e)
+            raise ModbusServer.NetworkError(e) from e
+        # publish the address actually used (the port is allocated by the OS if port is 0)
+        address = service.server_address
+        self._bound_address = (str(address[0]), int(address[1]))
+        logger.info('Listening on %s:%d', *self._bound_address)
 
-    def _server_address(self) -> Tuple[str | bytes | bytearray, int]:
-        if self._service is None:
-            raise RuntimeError('server is not start')
-        return (self._service.server_address[0], self._service.server_address[1])
+    @staticmethod
+    def _is_port_unavailable(error: ModbusServer.NetworkError) -> bool:
+        """True if a bind error only means "try another port": the port is already in use or not allowed.
 
-    def start(self) -> Tuple[str | bytes | bytearray, int]:
+        Any other error (invalid host address, IP family not supported...) has nothing to do with the port:
+        there is no point in trying the next one.
+        """
+        # EACCES: privileged port (< 1024) for a non-root user, WSAEACCES: port in use with SO_EXCLUSIVEADDRUSE (Windows)
+        unavailable = {errno.EADDRINUSE, errno.EACCES}
+        if os.name == 'nt':
+            unavailable.add(getattr(errno, 'WSAEACCES', 10013))
+        return getattr(error.__cause__, 'errno', None) in unavailable
+
+    def start(self) -> Tuple[str, int]:
         """Start the server.
 
         This function will block (or not if no_block flag is set).
@@ -1532,7 +1548,7 @@ class ModbusServer:
         """
         # do nothing if server is already running
         if self.is_run:
-            return self._server_address()
+            return self._bound_address if self._bound_address else ('', 0)
         # bind on the first available port
         last_error: Optional[ModbusServer.NetworkError] = None
         for port in self._candidate_ports():
@@ -1540,9 +1556,12 @@ class ModbusServer:
                 self._bind_service(port)
                 break
             except ModbusServer.NetworkError as e:
+                # an error not related to the port (bad host...) is the same for all ports: raise it at once
+                if not self._is_port_unavailable(e):
+                    raise
                 last_error = e
         else:
-            raise ModbusServer.NetworkError(last_error)
+            raise ModbusServer.NetworkError(last_error) from last_error
 
         # serve request
         if self.no_block:
@@ -1551,7 +1570,7 @@ class ModbusServer:
         else:
             self._serve()
 
-        return self._server_address()
+        return self._bound_address if self._bound_address else ('', 0)
 
     def wait(self, timeout: Optional[float] = None) -> None:
         """Wait for the server thread to finish (useful in non-blocking mode)."""
@@ -1563,12 +1582,25 @@ class ModbusServer:
         if self.is_run and self._service is not None:
             self._service.shutdown()
             self._service.server_close()
+        self._bound_address = None
+
+    @property
+    def bound_address(self) -> Optional[Tuple[str, int]]:
+        """The (host, port) the server listens on, None if it isn't started.
+
+        Set as soon as the server is bound, so it is available from another thread even in blocking mode
+        (no_block=False). This is the way to get the port allocated by the OS when port is 0 (or port_range is set).
+        """
+        return self._bound_address
+
+    @property
+    def bound_port(self) -> Optional[int]:
+        """The TCP port the server listens on, None if it isn't started (see bound_address)."""
+        return None if self._bound_address is None else self._bound_address[1]
 
     @property
     def is_run(self) -> bool:
-        """Return True if server running.
-
-        """
+        """Return True if server running."""
         return self._evt_running.is_set()
 
     def _serve(self) -> None:
@@ -1584,3 +1616,4 @@ class ModbusServer:
             self._service.server_close()
         finally:
             self._evt_running.clear()
+            self._bound_address = None
