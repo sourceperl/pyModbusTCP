@@ -2,6 +2,7 @@
 
 import errno
 import socket
+import struct
 import time
 import unittest
 from unittest import mock
@@ -517,7 +518,7 @@ class TestModbusServerBind(unittest.TestCase):
         with self.assertRaises(ModbusServer.NetworkError) as ctx:
             server.start()
         self.assertIsInstance(ctx.exception.__cause__, ModbusServer.NetworkError)
-        self.assertIsInstance(ctx.exception.__cause__.__cause__, OSError)
+        self.assertIsInstance(ctx.exception.__cause__.__cause__, OSError)  # type: ignore
         self.assertFalse(server.is_run)
 
     def test_port_range_stop_at_first_error_not_related_to_port(self):
@@ -529,7 +530,7 @@ class TestModbusServerBind(unittest.TestCase):
         self.assertEqual(bind.call_count, 1)
         # the real cause is available (and not the one of the last port of the range)
         self.assertIsInstance(ctx.exception.__cause__, OSError)
-        self.assertNotEqual(ctx.exception.__cause__.errno, errno.EADDRINUSE)
+        self.assertNotEqual(ctx.exception.__cause__.errno, errno.EADDRINUSE)  # type: ignore
 
     def test_is_port_unavailable(self):
         """Only "address in use" and "access denied" mean that another port can be tried."""
@@ -545,6 +546,96 @@ class TestModbusServerBind(unittest.TestCase):
         self.assertFalse(ModbusServer._is_port_unavailable(net_err(errno.EAFNOSUPPORT)))
         # no OSError cause
         self.assertFalse(ModbusServer._is_port_unavailable(ModbusServer.NetworkError('no cause')))
+
+
+"""Tests for the ModbusServer `ipv6` option."""
+
+
+def ipv6_available() -> bool:
+    """True if this machine can really bind an IPv6 loopback socket."""
+    if not socket.has_ipv6:
+        return False
+    try:
+        with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as s:
+            s.bind(('::1', 0))
+        return True
+    except OSError:
+        return False
+
+
+def first_socket_family(**server_kwargs) -> int:
+    """Start a server and return the family requested for the first socket it creates.
+
+    start() may fail afterwards (no IPv6 on this machine, invalid address...): only the family matters here.
+    """
+    real_socket = socket.socket
+    families = []
+
+    def spy(family=-1, *args, **kwargs):
+        families.append(family)
+        return real_socket(family, *args, **kwargs)
+
+    server = ModbusServer(no_block=True, **server_kwargs)
+    with mock.patch('socket.socket', side_effect=spy):
+        try:
+            server.start()
+        except (ModbusServer.NetworkError, OSError):
+            pass
+    server.stop()
+    return families[0]
+
+
+class TestIPv6Option(unittest.TestCase):
+    def test_ipv4_is_the_default_family(self):
+        self.assertEqual(first_socket_family(host='127.0.0.1', port=0), socket.AF_INET)
+
+    def test_ipv6_option_requests_an_ipv6_socket(self):
+        # fails if address_family is set after TCPServer.__init__() (the socket is already AF_INET)
+        self.assertEqual(first_socket_family(host='::1', port=0, ipv6=True), socket.AF_INET6)
+
+    @unittest.skipUnless(ipv6_available(), 'IPv6 loopback not available on this machine')
+    def test_ipv6_real_connection(self):
+        server = ModbusServer(host='::1', port=0, ipv6=True, no_block=True)
+        server.start()
+        try:
+            assert server.tcp_server is not None
+            self.assertEqual(server.tcp_server.socket.family, socket.AF_INET6)
+            host, port = server.tcp_server.server_address[:2]
+            self.assertEqual(host, '::1')
+            with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as c:
+                c.settimeout(2)
+                c.connect(('::1', port))
+                # read 1 holding register at address 0: MBAP (tid 1, pid 0, len 6, unit 1) + FC 3
+                c.sendall(struct.pack('>HHHBBHH', 1, 0, 6, 1, 3, 0, 1))
+                resp = c.recv(64)
+            self.assertEqual(resp, struct.pack('>HHHBBBH', 1, 0, 5, 1, 3, 2, 0))
+        finally:
+            server.stop()
+
+    @unittest.skipUnless(ipv6_available(), 'IPv6 loopback not available on this machine')
+    def test_ipv6_server_stop_and_restart(self):
+        server = ModbusServer(host='::1', port=0, ipv6=True, no_block=True)
+        for _ in range(3):
+            server.start()
+            self.assertTrue(server.is_run)
+            assert server.tcp_server is not None
+            self.assertEqual(server.tcp_server.socket.family, socket.AF_INET6)
+            server.stop()
+            self.assertFalse(server.is_run)
+
+    def test_ipv4_real_connection(self):
+        server = ModbusServer(host='127.0.0.1', port=0, no_block=True)
+        server.start()
+        try:
+            assert server.tcp_server is not None
+            self.assertEqual(server.tcp_server.socket.family, socket.AF_INET)
+            port = server.tcp_server.server_address[1]
+            with socket.create_connection(('127.0.0.1', port), timeout=2) as c:
+                c.sendall(struct.pack('>HHHBBHH', 1, 0, 6, 1, 3, 0, 1))
+                resp = c.recv(64)
+            self.assertEqual(resp, struct.pack('>HHHBBBH', 1, 0, 5, 1, 3, 2, 0))
+        finally:
+            server.stop()
 
 
 if __name__ == '__main__':

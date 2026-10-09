@@ -9,7 +9,7 @@ import socket
 import struct
 import time
 from socketserver import BaseRequestHandler, ThreadingTCPServer
-from threading import Event, Lock, Thread
+from threading import Event, Lock, Thread, current_thread
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from .constants import (
@@ -817,10 +817,14 @@ class ModbusServer:
         max_connections: Optional[int] = None
         idle_timeout: Optional[float] = None
         request_timeout: Optional[float] = None
-        evt_running: Event
         engine: Callable[[ModbusServer.SessionData], None]
 
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
+        def __init__(self, *args: Any, ipv6: bool = False, **kwargs: Any) -> None:
+            # "keep serving" flag shared with the session threads. It belongs to this server instance (one per run),
+            # so a restart can't revive the sessions of a previous run.
+            self.running_evt = Event()
+            # must be set before ThreadingTCPServer.__init__(), which creates the socket from it
+            self.address_family = socket.AF_INET6 if ipv6 else socket.AF_INET
             # number of active sessions (a session = a client TCP connection with its thread)
             self._sessions = 0
             self._sessions_lock = Lock()
@@ -861,10 +865,6 @@ class ModbusServer:
                 with self._sessions_lock:
                     self._sessions -= 1
 
-    # class CustomThreadingTCPServerV6(CustomThreadingTCPServer):
-    #     """IPv6 threaded TCP server."""
-    #     address_family = socket.AF_INET6
-
     class ModbusRequestHandler(BaseRequestHandler):
         # default socket timeout (in s) on blocking operations
         _SOCKET_TIMEOUT: float = 1.0
@@ -872,7 +872,7 @@ class ModbusServer:
 
         @property
         def server_running(self) -> bool:
-            return bool(self.server.evt_running.is_set())
+            return bool(self.server.running_evt.is_set())
 
         def _send_all(self, data: bytes) -> None:
             try:
@@ -1065,7 +1065,6 @@ class ModbusServer:
             self.data_hdl = DataHandler(data_bank=self.data_bank)
 
         # initialize internal state for server operation
-        self._evt_running = Event()  # Event to signal server is running
         # active server instance
         self.tcp_server: Optional[ModbusServer.CustomThreadingTCPServer] = None
         # server thread handle
@@ -1485,27 +1484,15 @@ class ModbusServer:
         :raises ModbusServer.NetworkError: if the port is unavailable
         """
         # init TCP server
+        # always need a fresh instance since server_close() destroys the underlying socket file descriptor
+        # IPv4 or IPv6: address_family must be a class attribute, the socket is created in TCPServer.__init__()
         self.tcp_server = self.CustomThreadingTCPServer((self.host, port), self.ModbusRequestHandler,
-                                                        bind_and_activate=False)
-        # IPv4 or IPv6
-        self.tcp_server.address_family = socket.AF_INET if self.ipv6 else socket.AF_INET6
+                                                        bind_and_activate=False, ipv6=self.ipv6)
         # pass some things shared with server threads (access via self.server in ModbusRequestHandler.handle())
-        self.tcp_server.evt_running = self._evt_running
         self.tcp_server.engine = self._engine
         self.tcp_server.request_timeout = self.request_timeout
         self.tcp_server.idle_timeout = self.idle_timeout
         self.tcp_server.max_connections = self.max_connections
-
-        # REMOVE THIS if tests under windows are ok
-        # In auto-port mode (port_range or port 0), we need a reliable "port already in use" detection. On Windows,
-        # SO_REUSEADDR allows to bind a port already listening, so use SO_EXCLUSIVEADDRUSE there instead.
-        # auto_port = self.port_range is not None or port == 0
-        # if auto_port and hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
-        #     server.socket.setsockopt(socket.SOL_SOCKET,
-        #                              socket.SO_EXCLUSIVEADDRUSE, 1)  # pyright: ignore[reportAttributeAccessIssue]
-        # else:
-        #     server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        
         # set socket options
         self.tcp_server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         self.tcp_server.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -1561,10 +1548,17 @@ class ModbusServer:
         else:
             raise ModbusServer.NetworkError(last_error) from last_error
 
+        # flag the server as running before serving (and before the thread starts): a stop() or a second start()
+        # right after start() must see it
+        self.tcp_server.running_evt.set()
         # serve request
         if self.no_block:
-            self._srv_thread = Thread(target=self._serve, daemon=True)
-            self._srv_thread.start()
+            try:
+                self._srv_thread = Thread(target=self._serve, daemon=True)
+                self._srv_thread.start()
+            except BaseException:
+                self.tcp_server.running_evt.clear()
+                raise
         else:
             self._serve()
 
@@ -1577,25 +1571,34 @@ class ModbusServer:
 
     def stop(self) -> None:
         """Stop the server."""
-        if self.is_run and self.tcp_server is not None:
-            self.tcp_server.shutdown()
-            self.tcp_server.server_close()
+        tcp_server = self.tcp_server
+        if self.is_run and tcp_server is not None:
+            # keep self.tcp_server until the end: _serve() must still find it if the thread starts late
+            tcp_server.shutdown()
+            tcp_server.server_close()
+            # wait for the server thread: a start() right after stop() must find a clean state
+            srv_thread = self._srv_thread
+            if srv_thread is not None and srv_thread is not current_thread():
+                srv_thread.join()
+            self.tcp_server = None
 
     @property
     def is_run(self) -> bool:
         """Return True if server running."""
-        return self._evt_running.is_set()
+        tcp_server = self.tcp_server
+        return tcp_server is not None and tcp_server.running_evt.is_set()
 
     def _serve(self) -> None:
-        if self.tcp_server is None:
+        tcp_server = self.tcp_server
+        if tcp_server is None:
             return
         try:
-            self._evt_running.set()
-            self.tcp_server.serve_forever(poll_interval=self._SERVE_POLL_INTERVAL)
+            tcp_server.serve_forever(poll_interval=self._SERVE_POLL_INTERVAL)
         except Exception:
-            self.tcp_server.server_close()
+            tcp_server.server_close()
             raise
         except KeyboardInterrupt:
-            self.tcp_server.server_close()
+            tcp_server.server_close()
         finally:
-            self._evt_running.clear()
+            # end of this run: tell its sessions to stop (the flag belongs to this server, not to a later run)
+            tcp_server.running_evt.clear()
