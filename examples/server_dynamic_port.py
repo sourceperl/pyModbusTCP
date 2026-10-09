@@ -24,7 +24,10 @@ server = ModbusServer(host='0.0.0.0', port=0, no_block=True, ipv6=False)
 
 try:
     # Start the server
-    bound_host, bound_port = server.start()
+    server.start()
+    assert server.tcp_server is not None
+    bound_host = server.tcp_server.server_address[0]
+    bound_port = server.tcp_server.server_address[1]
     logger.info(f'Server started successfully on "{bound_host}" at TCP port {bound_port}')
 
     # Keep the main thread alive in non-blocking mode

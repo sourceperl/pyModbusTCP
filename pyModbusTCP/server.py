@@ -807,6 +807,8 @@ class ModbusServer:
 
     class CustomThreadingTCPServer(ThreadingTCPServer):
         """IPv4 threaded TCP server."""
+        address_family = socket.AF_INET
+        allow_reuse_address = True
         daemon_threads: bool = True
         # listen backlog: the socketserver default (5) makes a burst of simultaneous connections wait for a TCP SYN
         # retransmission (1 s or more) as soon as the accept loop is a bit late
@@ -859,11 +861,11 @@ class ModbusServer:
                 with self._sessions_lock:
                     self._sessions -= 1
 
-    class CustomThreadingTCPServerV6(CustomThreadingTCPServer):
-        """IPv6 threaded TCP server."""
-        address_family = socket.AF_INET6
+    # class CustomThreadingTCPServerV6(CustomThreadingTCPServer):
+    #     """IPv6 threaded TCP server."""
+    #     address_family = socket.AF_INET6
 
-    class ModbusService(BaseRequestHandler):
+    class ModbusRequestHandler(BaseRequestHandler):
         # default socket timeout (in s) on blocking operations
         _SOCKET_TIMEOUT: float = 1.0
         server: ModbusServer.CustomThreadingTCPServer
@@ -1065,12 +1067,9 @@ class ModbusServer:
         # initialize internal state for server operation
         self._evt_running = Event()  # Event to signal server is running
         # active server instance
-        self._service: Optional[Union[ModbusServer.CustomThreadingTCPServer,
-                                      ModbusServer.CustomThreadingTCPServerV6]] = None
+        self.tcp_server: Optional[ModbusServer.CustomThreadingTCPServer] = None
         # server thread handle
-        self._serve_th: Optional[Thread] = None
-        # (host, port) of the listening socket, set as soon as the server is bound (see bound_address)
-        self._bound_address: Optional[Tuple[str, int]] = None
+        self._srv_thread: Optional[Thread] = None
 
         # map Modbus function codes to handler methods (fixed routing table)
         self._func_map: Dict[int, Callable[[ModbusServer.SessionData], None]] = {
@@ -1480,47 +1479,46 @@ class ModbusServer:
             return range(self.port_range[0], self.port_range[1] + 1)
         return range(self.port, self.port + 1)
 
-    def _bind_service(self, port: int) -> None:
+    def _bind_server(self, port: int) -> None:
         """Create the listening server (self._service) on a given port.
 
         :raises ModbusServer.NetworkError: if the port is unavailable
         """
-        # init server (IPv4 or IPv6)
-        # here we subclass ThreadingTCPServer to don't alter the socketserver classes shared with other code
-        server_cls = ModbusServer.CustomThreadingTCPServerV6 if self.ipv6 else ModbusServer.CustomThreadingTCPServer
-        service = server_cls((self.host, port), self.ModbusService, bind_and_activate=False)
-        # keep a reference on it, even if the bind below fails (the failed service is closed, as before)
-        self._service = service
-        # pass some things shared with server threads (access via self.server in ModbusService.handle())
-        service.evt_running = self._evt_running
-        service.engine = self._engine
-        service.request_timeout = self.request_timeout
-        service.idle_timeout = self.idle_timeout
-        service.max_connections = self.max_connections
-        # set socket options
+        # init TCP server
+        self.tcp_server = self.CustomThreadingTCPServer((self.host, port), self.ModbusRequestHandler,
+                                                        bind_and_activate=False)
+        # IPv4 or IPv6
+        self.tcp_server.address_family = socket.AF_INET if self.ipv6 else socket.AF_INET6
+        # pass some things shared with server threads (access via self.server in ModbusRequestHandler.handle())
+        self.tcp_server.evt_running = self._evt_running
+        self.tcp_server.engine = self._engine
+        self.tcp_server.request_timeout = self.request_timeout
+        self.tcp_server.idle_timeout = self.idle_timeout
+        self.tcp_server.max_connections = self.max_connections
+
+        # REMOVE THIS if tests under windows are ok
         # In auto-port mode (port_range or port 0), we need a reliable "port already in use" detection. On Windows,
         # SO_REUSEADDR allows to bind a port already listening, so use SO_EXCLUSIVEADDRUSE there instead.
-        auto_port = self.port_range is not None or port == 0
-        if auto_port and hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
-            service.socket.setsockopt(socket.SOL_SOCKET,
-                                      socket.SO_EXCLUSIVEADDRUSE, 1)  # pyright: ignore[reportAttributeAccessIssue]
-        else:
-            service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        service.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        # TODO test no_delay with bench
-        service.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        # auto_port = self.port_range is not None or port == 0
+        # if auto_port and hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
+        #     server.socket.setsockopt(socket.SOL_SOCKET,
+        #                              socket.SO_EXCLUSIVEADDRUSE, 1)  # pyright: ignore[reportAttributeAccessIssue]
+        # else:
+        #     server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        
+        # set socket options
+        self.tcp_server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        self.tcp_server.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
         # bind and activate
         try:
-            service.server_bind()
-            service.server_activate()
+            self.tcp_server.server_bind()
+            self.tcp_server.server_activate()
         except OSError as e:
             # don't keep the listening socket open after a failed start
-            service.server_close()
+            self.tcp_server.server_close()
             raise ModbusServer.NetworkError(e) from e
-        # publish the address actually used (the port is allocated by the OS if port is 0)
-        address = service.server_address
-        self._bound_address = (str(address[0]), int(address[1]))
-        logger.info('Listening on %s:%d', *self._bound_address)
+        logger.info('Listening on %s:%d', *self.tcp_server.server_address[:2])
 
     @staticmethod
     def _is_port_unavailable(error: ModbusServer.NetworkError) -> bool:
@@ -1535,7 +1533,7 @@ class ModbusServer:
             unavailable.add(getattr(errno, 'WSAEACCES', 10013))
         return getattr(error.__cause__, 'errno', None) in unavailable
 
-    def start(self) -> Tuple[str, int]:
+    def start(self) -> None:
         """Start the server.
 
         This function will block (or not if no_block flag is set).
@@ -1548,12 +1546,12 @@ class ModbusServer:
         """
         # do nothing if server is already running
         if self.is_run:
-            return self._bound_address if self._bound_address else ('', 0)
+            return
         # bind on the first available port
         last_error: Optional[ModbusServer.NetworkError] = None
         for port in self._candidate_ports():
             try:
-                self._bind_service(port)
+                self._bind_server(port)
                 break
             except ModbusServer.NetworkError as e:
                 # an error not related to the port (bad host...) is the same for all ports: raise it at once
@@ -1565,38 +1563,23 @@ class ModbusServer:
 
         # serve request
         if self.no_block:
-            self._serve_th = Thread(target=self._serve, daemon=True)
-            self._serve_th.start()
+            self._srv_thread = Thread(target=self._serve, daemon=True)
+            self._srv_thread.start()
         else:
             self._serve()
 
-        return self._bound_address if self._bound_address else ('', 0)
+        return
 
     def wait(self, timeout: Optional[float] = None) -> None:
         """Wait for the server thread to finish (useful in non-blocking mode)."""
-        if self._serve_th is not None and self._serve_th.is_alive():
-            self._serve_th.join(timeout=timeout)
+        if self._srv_thread is not None and self._srv_thread.is_alive():
+            self._srv_thread.join(timeout=timeout)
 
     def stop(self) -> None:
         """Stop the server."""
-        if self.is_run and self._service is not None:
-            self._service.shutdown()
-            self._service.server_close()
-        self._bound_address = None
-
-    @property
-    def bound_address(self) -> Optional[Tuple[str, int]]:
-        """The (host, port) the server listens on, None if it isn't started.
-
-        Set as soon as the server is bound, so it is available from another thread even in blocking mode
-        (no_block=False). This is the way to get the port allocated by the OS when port is 0 (or port_range is set).
-        """
-        return self._bound_address
-
-    @property
-    def bound_port(self) -> Optional[int]:
-        """The TCP port the server listens on, None if it isn't started (see bound_address)."""
-        return None if self._bound_address is None else self._bound_address[1]
+        if self.is_run and self.tcp_server is not None:
+            self.tcp_server.shutdown()
+            self.tcp_server.server_close()
 
     @property
     def is_run(self) -> bool:
@@ -1604,16 +1587,15 @@ class ModbusServer:
         return self._evt_running.is_set()
 
     def _serve(self) -> None:
-        if self._service is None:
+        if self.tcp_server is None:
             return
         try:
             self._evt_running.set()
-            self._service.serve_forever(poll_interval=self._SERVE_POLL_INTERVAL)
+            self.tcp_server.serve_forever(poll_interval=self._SERVE_POLL_INTERVAL)
         except Exception:
-            self._service.server_close()
+            self.tcp_server.server_close()
             raise
         except KeyboardInterrupt:
-            self._service.server_close()
+            self.tcp_server.server_close()
         finally:
             self._evt_running.clear()
-            self._bound_address = None

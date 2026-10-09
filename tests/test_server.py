@@ -2,7 +2,6 @@
 
 import errno
 import socket
-import threading
 import time
 import unittest
 from unittest import mock
@@ -61,8 +60,8 @@ class TestModbusServer(unittest.TestCase):
             def sendall(self, _data):
                 pass
 
-        # ModbusService __init__ would start handling a request, so bypass it (with __new__)
-        service = ModbusServer.ModbusService.__new__(ModbusServer.ModbusService)
+        # ModbusRequestHandler __init__ would start handling a request, so bypass it (with __new__)
+        service = ModbusServer.ModbusRequestHandler.__new__(ModbusServer.ModbusRequestHandler)
         # raise ModbusServer.NetworkError
         service.request = TimeoutSock()
         with self.assertRaises(ModbusServer.NetworkError):
@@ -92,7 +91,7 @@ class TestModbusServer(unittest.TestCase):
         with self.assertRaises(ModbusServer.NetworkError):
             server.start()
         self.assertFalse(server.is_run)
-        self.assertEqual(server._service.socket.fileno(), -1)  # type: ignore
+        self.assertEqual(server.tcp_server.socket.fileno(), -1)  # type: ignore
 
 
 class TestModbusServerLimits(unittest.TestCase):
@@ -501,51 +500,15 @@ class TestModbusServerBind(unittest.TestCase):
         self.addCleanup(sock.close)
         return sock.getsockname()[1]
 
-    def test_bound_address(self):
-        """bound_address and bound_port give the address really used (port allocated by the OS)."""
-        server = ModbusServer(host='127.0.0.1', port=0, no_block=True)
-        self.addCleanup(server.stop)
-        self.assertIsNone(server.bound_address)
-        self.assertIsNone(server.bound_port)
-        host, port = server.start()[:2]
-        self.assertGreater(port, 0)
-        self.assertEqual(server.bound_address, (host, port))
-        self.assertEqual(server.bound_port, port)
-        server.stop()
-        self.assertIsNone(server.bound_address)
-        self.assertIsNone(server.bound_port)
-
-    def test_bound_address_in_blocking_mode(self):
-        """In blocking mode (no_block=False) start() doesn't return: bound_address is the only way to get the port."""
-        server = ModbusServer(host='127.0.0.1', port=0, no_block=False)
-        self.addCleanup(server.stop)
-        th = threading.Thread(target=server.start, daemon=True)
-        th.start()
-        deadline = time.monotonic() + 5.0
-        while server.bound_address is None and time.monotonic() < deadline:
-            time.sleep(0.01)
-        self.assertIsNotNone(server.bound_address, 'bound_address never set')
-        with socket.create_connection(server.bound_address, timeout=5):
-            pass
-        server.stop()
-        th.join(timeout=5.0)
-        self.assertFalse(th.is_alive())
-        self.assertIsNone(server.bound_address)
-
-    def test_bound_address_not_set_on_failed_start(self):
-        server = ModbusServer(host=self.NOT_LOCAL_HOST, port=0, no_block=True)
-        with self.assertRaises(ModbusServer.NetworkError):
-            server.start()
-        self.assertIsNone(server.bound_address)
-
     def test_port_range_skip_busy_ports(self):
         """With port_range, a busy port is skipped: the first free one is used."""
         busy_port = self._hold_port()
         server = ModbusServer(host='127.0.0.1', port_range=(busy_port, busy_port + 20), no_block=True)
         self.addCleanup(server.stop)
         server.start()
-        self.assertGreater(server.bound_port, busy_port)
-        self.assertLessEqual(server.bound_port, busy_port + 20)
+        assert server.tcp_server is not None
+        self.assertGreater(server.tcp_server.server_address[1], busy_port)
+        self.assertLessEqual(server.tcp_server.server_address[1], busy_port + 20)
 
     def test_port_range_all_busy(self):
         """If every port of the range is busy, start() fails with a NetworkError caused by the last OSError."""
@@ -556,12 +519,11 @@ class TestModbusServerBind(unittest.TestCase):
         self.assertIsInstance(ctx.exception.__cause__, ModbusServer.NetworkError)
         self.assertIsInstance(ctx.exception.__cause__.__cause__, OSError)
         self.assertFalse(server.is_run)
-        self.assertIsNone(server.bound_address)
 
     def test_port_range_stop_at_first_error_not_related_to_port(self):
         """An error not related to the port (here an invalid host) must not be retried on every port of the range."""
         server = ModbusServer(host=self.NOT_LOCAL_HOST, port_range=(20000, 29999), no_block=True)
-        with mock.patch.object(server, '_bind_service', wraps=server._bind_service) as bind:
+        with mock.patch.object(server, '_bind_server', wraps=server._bind_server) as bind:
             with self.assertRaises(ModbusServer.NetworkError) as ctx:
                 server.start()
         self.assertEqual(bind.call_count, 1)
