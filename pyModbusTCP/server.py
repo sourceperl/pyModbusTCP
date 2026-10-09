@@ -955,7 +955,7 @@ class ModbusServer:
             try:
                 # init and update server info structure
                 session_data = ModbusServer.SessionData()
-                (session_data.client.address, session_data.client.port) = self.request.getpeername()
+                (session_data.client.address, session_data.client.port) = self.request.getpeername()[:2]
                 # debug message
                 logger.debug('Accept new connection from %r', session_data.client)
                 # main processing loop
