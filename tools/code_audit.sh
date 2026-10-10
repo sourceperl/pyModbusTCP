@@ -16,5 +16,4 @@ mypy . \
     --exclude 'docs/' \
     --exclude 'lab/' \
     --exclude 'venv/' \
-    --exclude 'tests/' \
-    --exclude 'examples/' \
+    --exclude 'tests/'

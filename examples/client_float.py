@@ -2,15 +2,21 @@
 
 """ How-to add float support to ModbusClient. """
 
+from typing import List, Optional
+
 from pyModbusTCP.client import ModbusClient
-from pyModbusTCP.utils import (decode_ieee, encode_ieee, long_list_to_word,
-                               word_list_to_long)
+from pyModbusTCP.utils import (
+    decode_ieee,
+    encode_ieee,
+    long_list_to_word,
+    word_list_to_long,
+)
 
 
 class FloatModbusClient(ModbusClient):
     """A ModbusClient class with float support."""
 
-    def read_float(self, address, number=1):
+    def read_float(self, address: int, number: int = 1) -> Optional[List[float]]:
         """Read float(s) with read holding registers."""
         reg_l = self.read_holding_registers(address, number * 2)
         if reg_l:
@@ -18,7 +24,7 @@ class FloatModbusClient(ModbusClient):
         else:
             return None
 
-    def write_float(self, address, floats_list):
+    def write_float(self, address: int, floats_list: List[float]) -> bool:
         """Write float(s) with write multiple registers."""
         b32_l = [encode_ieee(f) for f in floats_list]
         b16_l = long_list_to_word(b32_l)

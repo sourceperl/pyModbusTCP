@@ -23,7 +23,7 @@ regs = []
 regs_lock = Lock()
 
 
-def polling_thread():
+def polling_thread() -> None:
     """Modbus polling thread."""
     global regs
     c = ModbusClient(host=SERVER_HOST, port=SERVER_PORT, auto_open=True)

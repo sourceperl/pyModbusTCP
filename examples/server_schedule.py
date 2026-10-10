@@ -21,7 +21,7 @@ import schedule
 from pyModbusTCP.server import ModbusServer
 
 
-def alive_word_job():
+def alive_word_job() -> None:
     """Update holding register @0 with day second (since 00:00).
 
     Job called every 10s by scheduler.

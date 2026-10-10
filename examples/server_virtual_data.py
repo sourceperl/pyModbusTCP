@@ -13,6 +13,7 @@ Run this as root to listen on TCP priviliged ports (<= 1024).
 
 import argparse
 from datetime import datetime
+from typing import List, Optional
 
 from pyModbusTCP.server import DataBank, ModbusServer
 
@@ -20,12 +21,13 @@ from pyModbusTCP.server import DataBank, ModbusServer
 class MyDataBank(DataBank):
     """A custom ModbusServerDataBank for override get_holding_registers method."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         # turn off allocation of memory for standard modbus object types
         # only "holding registers" space will be replaced by dynamic build values.
         super().__init__(virtual_mode=True)
 
-    def get_holding_registers(self, address, number=1, srv_info=None):
+    def get_holding_registers(self, address: int, number: int = 1,
+                              srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[List[int]]:
         """Get virtual holding registers."""
         # populate virtual registers dict with current datetime values
         now = datetime.now()
@@ -34,9 +36,9 @@ class MyDataBank(DataBank):
         # build a list of virtual regs to return to server data handler
         # return None if any of virtual registers is missing
         try:
-            return [v_regs_d[a] for a in range(address, address+number)]
+            return [v_regs_d[a] for a in range(address, address + number)]
         except KeyError:
-            return
+            return None
 
 
 if __name__ == '__main__':
@@ -45,6 +47,7 @@ if __name__ == '__main__':
     parser.add_argument('-H', '--host', type=str, default='localhost', help='Host (default: localhost)')
     parser.add_argument('-p', '--port', type=int, default=502, help='TCP port (default: 502)')
     args = parser.parse_args()
+
     # init modbus server and start it
     server = ModbusServer(host=args.host, port=args.port, data_bank=MyDataBank())
     server.start()

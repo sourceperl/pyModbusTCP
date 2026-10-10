@@ -19,40 +19,41 @@ import struct
 from queue import Queue
 from threading import Event
 
-# need sudo pip install pyserial==3.4
+# need pyserial==3.5
 from serial import Serial, serialutil
 
-from pyModbusTCP.constants import (EXP_GATEWAY_PATH_UNAVAILABLE,
-                                   EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND)
+from pyModbusTCP.constants import (
+    EXP_GATEWAY_PATH_UNAVAILABLE,
+    EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND,
+)
 from pyModbusTCP.server import ModbusServer
 from pyModbusTCP.utils import crc16
 
 
-# some class
 class ModbusRTUFrame:
-    """ Modbus RTU frame container class. """
+    """Modbus RTU frame container class."""
 
-    def __init__(self, raw=b''):
+    def __init__(self, raw: bytes = b'') -> None:
         # public
         self.raw = raw
 
     @property
-    def pdu(self):
+    def pdu(self) -> bytes:
         """Return PDU part of frame."""
         return self.raw[1:-2]
 
     @property
-    def slave_address(self):
+    def slave_address(self) -> int:
         """Return slave address part of frame."""
         return self.raw[0]
 
     @property
-    def function_code(self):
+    def function_code(self) -> int:
         """Return function code part of frame."""
         return self.raw[1]
 
     @property
-    def is_valid(self):
+    def is_valid(self) -> bool:
         """Check if frame is valid.
 
         :return: True if frame is valid
@@ -60,7 +61,7 @@ class ModbusRTUFrame:
         """
         return len(self.raw) > 4 and crc16(self.raw) == 0
 
-    def build(self, raw_pdu, slave_ad):
+    def build(self, raw_pdu: bytes, slave_ad: int) -> None:
         """Build a full modbus RTU message from PDU and slave address.
 
         :param raw_pdu: modbus as raw value
@@ -76,27 +77,27 @@ class ModbusRTUFrame:
 
 
 class RtuQuery:
-    """ Request container to deal with modbus serial worker. """
+    """Request container to deal with modbus serial worker."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.completed = Event()
         self.request = ModbusRTUFrame()
         self.response = ModbusRTUFrame()
 
 
 class ModbusSerialWorker:
-    """ A serial worker to manage I/O with RTU devices. """
+    """A serial worker to manage I/O with RTU devices."""
 
-    def __init__(self, port, timeout=1.0, end_of_frame=0.05):
+    def __init__(self, port: Serial, timeout: float = 1.0, end_of_frame: float = 0.05) -> None:
         # public
         self.serial_port = port
         self.timeout = timeout
         self.end_of_frame = end_of_frame
         # internal request queue
         # accept 5 simultaneous requests before overloaded exception is return
-        self.rtu_queries_q = Queue(maxsize=5)
+        self.rtu_queries_q: Queue[RtuQuery] = Queue(maxsize=5)
 
-    def loop(self):
+    def loop(self) -> None:
         """Serial worker main loop."""
         while True:
             # get next exchange from queue
@@ -123,7 +124,7 @@ class ModbusSerialWorker:
             rtu_query.completed.set()
             self.rtu_queries_q.task_done()
 
-    def srv_engine_entry(self, session_data):
+    def srv_engine_entry(self, session_data: ModbusServer.SessionData) -> None:
         """Server engine entry point (pass request to serial worker queries queue).
 
         :param session_data: server session data
@@ -163,23 +164,33 @@ if __name__ == '__main__':
     parser.add_argument('-e', '--eof', type=float, default=0.05, help='end of frame delay (default is 0.05 s)')
     parser.add_argument('-d', '--debug', action='store_true', help='set debug mode')
     args = parser.parse_args()
+
     # init logging
     logging.basicConfig(level=logging.DEBUG if args.debug else None)
     logger = logging.getLogger(__name__)
+
     try:
         # init serial port
         logger.debug('Open serial port %s at %d bauds', args.device, args.baudrate)
-        serial_port = Serial(port=args.device, baudrate=args.baudrate)
+        serial_port: Serial = Serial(port=args.device, baudrate=args.baudrate)
+
         # init serial worker
-        serial_worker = ModbusSerialWorker(serial_port, args.timeout, args.eof)
+        serial_worker: ModbusSerialWorker = ModbusSerialWorker(serial_port, args.timeout, args.eof)
+
         # start modbus server with custom engine
         logger.debug('Start modbus server (%s, %d)', args.host, args.port)
-        srv = ModbusServer(host=args.host, port=args.port,
-                           no_block=True, ext_engine=serial_worker.srv_engine_entry)
+        srv: ModbusServer = ModbusServer(
+            host=args.host,
+            port=args.port,
+            no_block=True,
+            ext_engine=serial_worker.srv_engine_entry,
+        )
         srv.start()
+
         # start serial worker loop
         logger.debug('Start serial worker')
         serial_worker.loop()
+
     except serialutil.SerialException as e:
         logger.critical('Serial device error: %r', e)
         exit(1)

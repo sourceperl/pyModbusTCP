@@ -8,48 +8,49 @@ Run this as root to listen on TCP privileged ports (<= 1024).
 """
 
 import argparse
+from typing import List
 
 from pyModbusTCP.constants import EXP_ILLEGAL_FUNCTION
 from pyModbusTCP.server import DataHandler, ModbusServer
 
 # some const
-ALLOW_R_L = ['127.0.0.1', '192.168.0.10']
-ALLOW_W_L = ['127.0.0.1']
+ALLOW_R_L: List[str] = ['127.0.0.1', '192.168.0.10']
+ALLOW_W_L: List[str] = ['127.0.0.1']
 
 
 # a custom data handler with IPs filter
 class MyDataHandler(DataHandler):
-    def read_coils(self, address, count, srv_info):
+    def read_coils(self, address: int, count: int, srv_info: ModbusServer.ServerInfo) -> DataHandler.Return:
         if srv_info.client.address in ALLOW_R_L:
             return super().read_coils(address, count, srv_info)
         else:
             return DataHandler.Return(exp_code=EXP_ILLEGAL_FUNCTION)
 
-    def read_d_inputs(self, address, count, srv_info):
+    def read_d_inputs(self, address: int, count: int, srv_info: ModbusServer.ServerInfo) -> DataHandler.Return:
         if srv_info.client.address in ALLOW_R_L:
             return super().read_d_inputs(address, count, srv_info)
         else:
             return DataHandler.Return(exp_code=EXP_ILLEGAL_FUNCTION)
 
-    def read_h_regs(self, address, count, srv_info):
+    def read_h_regs(self, address: int, count: int, srv_info: ModbusServer.ServerInfo) -> DataHandler.Return:
         if srv_info.client.address in ALLOW_R_L:
             return super().read_h_regs(address, count, srv_info)
         else:
             return DataHandler.Return(exp_code=EXP_ILLEGAL_FUNCTION)
 
-    def read_i_regs(self, address, count, srv_info):
+    def read_i_regs(self, address: int, count: int, srv_info: ModbusServer.ServerInfo) -> DataHandler.Return:
         if srv_info.client.address in ALLOW_R_L:
             return super().read_i_regs(address, count, srv_info)
         else:
             return DataHandler.Return(exp_code=EXP_ILLEGAL_FUNCTION)
 
-    def write_coils(self, address, bits_l, srv_info):
+    def write_coils(self, address: int, bits_l: List[bool], srv_info: ModbusServer.ServerInfo) -> DataHandler.Return:
         if srv_info.client.address in ALLOW_W_L:
             return super().write_coils(address, bits_l, srv_info)
         else:
             return DataHandler.Return(exp_code=EXP_ILLEGAL_FUNCTION)
 
-    def write_h_regs(self, address, words_l, srv_info):
+    def write_h_regs(self, address: int, words_l: List[int], srv_info: ModbusServer.ServerInfo) -> DataHandler.Return:
         if srv_info.client.address in ALLOW_W_L:
             return super().write_h_regs(address, words_l, srv_info)
         else:
@@ -62,6 +63,7 @@ if __name__ == '__main__':
     parser.add_argument('-H', '--host', type=str, default='localhost', help='Host (default: localhost)')
     parser.add_argument('-p', '--port', type=int, default=502, help='TCP port (default: 502)')
     args = parser.parse_args()
+
     # init modbus server and start it
-    server = ModbusServer(host=args.host, port=args.port, data_hdl=MyDataHandler())
+    server: ModbusServer = ModbusServer(host=args.host, port=args.port, data_hdl=MyDataHandler())
     server.start()
