@@ -35,11 +35,13 @@ class TestClientServer(unittest.TestCase):
 
     def setUp(self):
         """Init client-server for test_xxx methods."""
-        # modbus server
-        self.server = ModbusServer(port=5020, no_block=True)
+        # modbus server: port=0 for a free TCP port chosen by the OS (never a fixed port of the host)
+        self.server = ModbusServer(host='127.0.0.1', port=0, no_block=True)
         self.server.start()
-        # modbus client
-        self.client = ModbusClient(port=5020)
+        address = self.server.bound_address
+        assert address is not None
+        # modbus client: connect to the port actually allocated to the server
+        self.client = ModbusClient(host=address[0], port=address[1])
         self.client.open()
 
     def tearDown(self):

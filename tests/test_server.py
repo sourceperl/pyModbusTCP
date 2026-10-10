@@ -76,7 +76,7 @@ class TestModbusServer(unittest.TestCase):
     def test_start_doesnt_alter_socketserver_classes(self):
         """ModbusServer must not change class attributes of the stdlib socketserver classes."""
         from socketserver import ThreadingTCPServer
-        server = ModbusServer(host='127.0.0.1', port=5021, no_block=True)
+        server = ModbusServer(host='127.0.0.1', port=0, no_block=True)
         server.start()
         try:
             self.assertFalse(ThreadingTCPServer.daemon_threads)
@@ -87,7 +87,7 @@ class TestModbusServer(unittest.TestCase):
     def test_failed_start_close_socket(self):
         """A failed start (bind error) must not leave a listening socket open."""
         # 192.0.2.1 is reserved for documentation (TEST-NET-1): not a local address, so bind() fails on all systems
-        server = ModbusServer(host='192.0.2.1', port=5022, no_block=True)
+        server = ModbusServer(host='192.0.2.1', port=0, no_block=True)
         with self.assertRaises(ModbusServer.NetworkError):
             server.start()
         self.assertFalse(server.is_running)
@@ -100,14 +100,19 @@ class TestModbusServerLimits(unittest.TestCase):
     REQ_FRAME = b'\x00\x01\x00\x00\x00\x06\x01\x03\x00\x00\x00\x01'
     RESP_LEN = 11
 
-    def _start_server(self, port, **kwargs):
-        server = ModbusServer(host='127.0.0.1', port=port, no_block=True, **kwargs)
+    def _start_server(self, **kwargs):
+        """Start a server on a free TCP port chosen by the OS (port=0), it's stored in self.port."""
+        server = ModbusServer(host='127.0.0.1', port=0, no_block=True, **kwargs)
         server.start()
         self.addCleanup(server.stop)
+        address = server.bound_address
+        assert address is not None
+        self.port = address[1]
         return server
 
-    def _connect(self, port):
-        sock = socket.create_connection(('127.0.0.1', port), timeout=5)
+    def _connect(self):
+        """Open a new client connection to the server started by _start_server()."""
+        sock = socket.create_connection(('127.0.0.1', self.port), timeout=5)
         self.addCleanup(sock.close)
         return sock
 
@@ -159,35 +164,35 @@ class TestModbusServerLimits(unittest.TestCase):
 
     def test_request_timeout(self):
         """A request that is never completed (partial MBAP header, or header without PDU) closes the session."""
-        self._start_server(5031, request_timeout=0.25)
+        self._start_server(request_timeout=0.25)
         for sent_len in (3, 7):
-            sock = self._connect(5031)
+            sock = self._connect()
             sock.sendall(self.REQ_FRAME[:sent_len])
             delay = self._closed_after(sock, 3.0)
             self.assertIsNotNone(delay, 'stalled request (%d bytes sent): session is still open' % sent_len)
             self.assertLess(delay, 2.0)  # type: ignore
         # server is still serving others
-        self.assertEqual(len(self._request(self._connect(5031))), self.RESP_LEN)
+        self.assertEqual(len(self._request(self._connect())), self.RESP_LEN)
 
     def test_request_timeout_disabled(self):
         """With request_timeout=None a stalled request is never closed (old behavior)."""
-        self._start_server(5036, request_timeout=None)
-        sock = self._connect(5036)
+        self._start_server(request_timeout=None)
+        sock = self._connect()
         sock.sendall(self.REQ_FRAME[:7])
         self.assertIsNone(self._closed_after(sock, 0.7))
 
     def test_request_timeout_not_for_a_complete_request(self):
         """The request_timeout don't apply to a session that wait for a request (see idle_timeout)."""
-        self._start_server(5032, request_timeout=0.25)
-        sock = self._connect(5032)
+        self._start_server(request_timeout=0.25)
+        sock = self._connect()
         self.assertEqual(len(self._request(sock)), self.RESP_LEN)
         self.assertIsNone(self._closed_after(sock, 0.7), 'request_timeout close an idle session')
         self.assertEqual(len(self._request(sock)), self.RESP_LEN)
 
     def test_idle_timeout(self):
         """A session without request is closed after idle_timeout, an active one is kept."""
-        self._start_server(5033, idle_timeout=0.25)
-        sock = self._connect(5033)
+        self._start_server(idle_timeout=0.25)
+        sock = self._connect()
         for _ in range(5):  # 0.5 s of activity (more than idle_timeout)
             self.assertEqual(len(self._request(sock)), self.RESP_LEN)
             time.sleep(0.1)
@@ -197,8 +202,8 @@ class TestModbusServerLimits(unittest.TestCase):
 
     def test_idle_timeout_stops_when_request_starts(self):
         """idle_timeout is for a session without any data: a slow request is a matter for request_timeout."""
-        self._start_server(5037, idle_timeout=0.2)
-        sock = self._connect(5037)
+        self._start_server(idle_timeout=0.2)
+        sock = self._connect()
         sock.sendall(self.REQ_FRAME[:3])
         time.sleep(0.5)  # more than idle_timeout
         sock.sendall(self.REQ_FRAME[3:])
@@ -208,28 +213,28 @@ class TestModbusServerLimits(unittest.TestCase):
 
     def test_connection_burst(self):
         """A burst of simultaneous connections must not wait for a TCP SYN retransmission (listen backlog)."""
-        self._start_server(5038)
+        self._start_server()
         start = time.monotonic()
         for _ in range(60):
-            self._connect(5038)
+            self._connect()
         self.assertLess(time.monotonic() - start, 3.0)
 
     def test_no_idle_timeout_by_default(self):
-        self._start_server(5034)
-        sock = self._connect(5034)
+        self._start_server()
+        sock = self._connect()
         self.assertIsNone(self._closed_after(sock, 0.7))
         self.assertEqual(len(self._request(sock)), self.RESP_LEN)
 
     def test_max_connections(self):
         """Connections over max_connections are closed at once, slots are freed when a session end."""
-        self._start_server(5035, max_connections=2)
-        sock_1, sock_2 = self._connect(5035), self._connect(5035)
+        self._start_server(max_connections=2)
+        sock_1, sock_2 = self._connect(), self._connect()
         self.assertEqual(len(self._request(sock_1)), self.RESP_LEN)
         self.assertEqual(len(self._request(sock_2)), self.RESP_LEN)
         # third connection is rejected
         with self.assertLogs('pyModbusTCP.server', level='WARNING') as logs:
             for _ in range(3):
-                sock_3 = self._connect(5035)
+                sock_3 = self._connect()
                 self.assertIsNotNone(self._closed_after(sock_3, 2.0), 'connection over max_connections is not closed')
         # a connection flood must not flood the log: only the first rejection is logged
         self.assertEqual(len(logs.records), 1)
@@ -240,7 +245,7 @@ class TestModbusServerLimits(unittest.TestCase):
         deadline = time.monotonic() + 5.0
         accepted = False
         while time.monotonic() < deadline and not accepted:
-            sock_4 = self._connect(5035)
+            sock_4 = self._connect()
             accepted = len(self._request(sock_4)) == self.RESP_LEN
             sock_4.close()
             time.sleep(0.05)
@@ -381,10 +386,14 @@ class TestModbusServerSpecFrames(unittest.TestCase):
 
     def setUp(self):
         self.bank = DataBank()
-        self.server = ModbusServer(host='127.0.0.1', port=5040, no_block=True, data_bank=self.bank)
+        # port=0: a free TCP port chosen by the OS
+        self.server = ModbusServer(host='127.0.0.1', port=0, no_block=True, data_bank=self.bank)
         self.server.start()
         self.addCleanup(self.server.stop)
-        self.sock = socket.create_connection(('127.0.0.1', 5040), timeout=5)
+        address = self.server.bound_address
+        assert address is not None
+        self.port = address[1]
+        self.sock = socket.create_connection(('127.0.0.1', self.port), timeout=5)
         self.addCleanup(self.sock.close)
 
     def _recv(self, size):
@@ -470,9 +479,8 @@ class TestModbusServerSpecFrames(unittest.TestCase):
         for func in (0x07, 0x0b, 0x0c, 0x11):
             self.assertEqual(self.exchange(f'{func:02x}'), f'{func | 0x80:02x}01')
 
-    @staticmethod
-    def _closed_by_server(frame):
-        with socket.create_connection(('127.0.0.1', 5040), timeout=5) as sock:
+    def _closed_by_server(self, frame):
+        with socket.create_connection(('127.0.0.1', self.port), timeout=5) as sock:
             sock.sendall(frame)
             try:
                 return sock.recv(16) == b''
@@ -512,6 +520,8 @@ def first_socket_family(**server_kwargs) -> int:
         families.append(family)
         return real_socket(family, *args, **kwargs)
 
+    # never the default port (502) by accident: free port chosen by the OS unless told otherwise
+    server_kwargs.setdefault('port', 0)
     server = ModbusServer(no_block=True, **server_kwargs)
     with mock.patch('socket.socket', side_effect=spy):
         try:
