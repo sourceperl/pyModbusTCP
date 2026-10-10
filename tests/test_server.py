@@ -1,6 +1,5 @@
 """ Test of pyModbusTCP.ModbusServer """
 
-import errno
 import socket
 import struct
 import time
@@ -91,8 +90,7 @@ class TestModbusServer(unittest.TestCase):
         server = ModbusServer(host='192.0.2.1', port=5022, no_block=True)
         with self.assertRaises(ModbusServer.NetworkError):
             server.start()
-        self.assertFalse(server.is_run)
-        self.assertEqual(server.tcp_server.socket.fileno(), -1)  # type: ignore
+        self.assertFalse(server.is_running)
 
 
 class TestModbusServerLimits(unittest.TestCase):
@@ -487,67 +485,6 @@ class TestModbusServerSpecFrames(unittest.TestCase):
         self.assertTrue(self._closed_by_server(b'\x00\x01\x00\x00\x00\x02\x01\x03'))
 
 
-class TestModbusServerBind(unittest.TestCase):
-    """Tests of the bound address and of the port allocation (port=0 or port_range)."""
-
-    # 192.0.2.1 is reserved for documentation (TEST-NET-1): not a local address, so bind() fails on all systems
-    NOT_LOCAL_HOST = '192.0.2.1'
-
-    def _hold_port(self):
-        """Occupy a free TCP port with a listening socket: return this port."""
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.bind(('127.0.0.1', 0))
-        sock.listen()
-        self.addCleanup(sock.close)
-        return sock.getsockname()[1]
-
-    def test_port_range_skip_busy_ports(self):
-        """With port_range, a busy port is skipped: the first free one is used."""
-        busy_port = self._hold_port()
-        server = ModbusServer(host='127.0.0.1', port_range=(busy_port, busy_port + 20), no_block=True)
-        self.addCleanup(server.stop)
-        server.start()
-        assert server.tcp_server is not None
-        self.assertGreater(server.tcp_server.server_address[1], busy_port)
-        self.assertLessEqual(server.tcp_server.server_address[1], busy_port + 20)
-
-    def test_port_range_all_busy(self):
-        """If every port of the range is busy, start() fails with a NetworkError caused by the last OSError."""
-        busy_port = self._hold_port()
-        server = ModbusServer(host='127.0.0.1', port_range=(busy_port, busy_port), no_block=True)
-        with self.assertRaises(ModbusServer.NetworkError) as ctx:
-            server.start()
-        self.assertIsInstance(ctx.exception.__cause__, ModbusServer.NetworkError)
-        self.assertIsInstance(ctx.exception.__cause__.__cause__, OSError)  # type: ignore
-        self.assertFalse(server.is_run)
-
-    def test_port_range_stop_at_first_error_not_related_to_port(self):
-        """An error not related to the port (here an invalid host) must not be retried on every port of the range."""
-        server = ModbusServer(host=self.NOT_LOCAL_HOST, port_range=(20000, 29999), no_block=True)
-        with mock.patch.object(server, '_bind_server', wraps=server._bind_server) as bind:
-            with self.assertRaises(ModbusServer.NetworkError) as ctx:
-                server.start()
-        self.assertEqual(bind.call_count, 1)
-        # the real cause is available (and not the one of the last port of the range)
-        self.assertIsInstance(ctx.exception.__cause__, OSError)
-        self.assertNotEqual(ctx.exception.__cause__.errno, errno.EADDRINUSE)  # type: ignore
-
-    def test_is_port_unavailable(self):
-        """Only "address in use" and "access denied" mean that another port can be tried."""
-        def net_err(os_errno):
-            os_err = OSError(os_errno, 'test')
-            net_err = ModbusServer.NetworkError(os_err)
-            net_err.__cause__ = os_err
-            return net_err
-
-        self.assertTrue(ModbusServer._is_port_unavailable(net_err(errno.EADDRINUSE)))
-        self.assertTrue(ModbusServer._is_port_unavailable(net_err(errno.EACCES)))
-        self.assertFalse(ModbusServer._is_port_unavailable(net_err(errno.EADDRNOTAVAIL)))
-        self.assertFalse(ModbusServer._is_port_unavailable(net_err(errno.EAFNOSUPPORT)))
-        # no OSError cause
-        self.assertFalse(ModbusServer._is_port_unavailable(ModbusServer.NetworkError('no cause')))
-
-
 """Tests for the ModbusServer `ipv6` option."""
 
 
@@ -598,9 +535,9 @@ class TestIPv6Option(unittest.TestCase):
         server = ModbusServer(host='::1', port=0, ipv6=True, no_block=True)
         server.start()
         try:
-            assert server.tcp_server is not None
-            self.assertEqual(server.tcp_server.socket.family, socket.AF_INET6)
-            host, port = server.tcp_server.server_address[:2]
+            assert server._tcp_server is not None
+            self.assertEqual(server._tcp_server.socket.family, socket.AF_INET6)
+            host, port = server._tcp_server.server_address[:2]
             self.assertEqual(host, '::1')
             with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as c:
                 c.settimeout(2)
@@ -617,19 +554,19 @@ class TestIPv6Option(unittest.TestCase):
         server = ModbusServer(host='::1', port=0, ipv6=True, no_block=True)
         for _ in range(3):
             server.start()
-            self.assertTrue(server.is_run)
-            assert server.tcp_server is not None
-            self.assertEqual(server.tcp_server.socket.family, socket.AF_INET6)
+            self.assertTrue(server.is_running)
+            assert server._tcp_server is not None
+            self.assertEqual(server._tcp_server.socket.family, socket.AF_INET6)
             server.stop()
-            self.assertFalse(server.is_run)
+            self.assertFalse(server.is_running)
 
     def test_ipv4_real_connection(self):
         server = ModbusServer(host='127.0.0.1', port=0, no_block=True)
         server.start()
         try:
-            assert server.tcp_server is not None
-            self.assertEqual(server.tcp_server.socket.family, socket.AF_INET)
-            port = server.tcp_server.server_address[1]
+            assert server._tcp_server is not None
+            self.assertEqual(server._tcp_server.socket.family, socket.AF_INET)
+            port = server._tcp_server.server_address[1]
             with socket.create_connection(('127.0.0.1', port), timeout=2) as c:
                 c.sendall(struct.pack('>HHHBBHH', 1, 0, 6, 1, 3, 0, 1))
                 resp = c.recv(64)
