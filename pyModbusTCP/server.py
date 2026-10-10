@@ -1450,17 +1450,19 @@ class ModbusServer:
             # return except 2 for an unknown MEI type
             send_pdu.build_except(recv_pdu.func_code, EXP_DATA_ADDRESS)
 
-    def start(self) -> None:
+    def start(self) -> Tuple[str, int]:
         """Start the server.
 
         This function will block (or not if no_block flag is set).
-        With port=0, the port chosen by the OS is available through bound_address once the server is started.
+        With port=0, the port chosen by the OS is available through the returned tuple.
 
+        :return: A tuple containing the bound host string and port integer.
+        :rtype: Tuple[str, int]
         :raises ModbusServer.NetworkError: if the server can't listen (port already in use, bad host...)
         """
         # do nothing if server is already running
         if self.is_running:
-            return
+            raise ModbusServer.NetworkError('server is already running')
         # init TCP server
         # always need a fresh instance since server_close() destroys the underlying socket file descriptor
         tcp_server: Optional[ModbusServer.CustomThreadingTCPServer] = None
@@ -1509,6 +1511,9 @@ class ModbusServer:
             finally:
                 if self._tcp_server is tcp_server:
                     self._tcp_server = None
+        # return current bindings to client
+        host, port = tcp_server.server_address[:2]
+        return str(host), int(port)
 
     def wait(self, timeout: Optional[float] = None) -> None:
         """Wait for the server thread to finish (useful in non-blocking mode)."""
@@ -1539,25 +1544,6 @@ class ModbusServer:
         """Return True if server running."""
         tcp_server = self._tcp_server
         return tcp_server is not None and tcp_server.running_evt.is_set()
-
-    @property
-    def bound_address(self) -> Optional[Tuple[str, int]]:
-        """The (host, port) the server is listening on, None if it isn't running (useful with port=0)."""
-        tcp_server = self._tcp_server
-        if tcp_server is None or not tcp_server.running_evt.is_set():
-            return None
-        host, port = tcp_server.server_address[:2]
-        return str(host), int(port)
-
-    def __enter__(self) -> ModbusServer:
-        """Start the server for a with block (no_block mode only: start() would never return otherwise)."""
-        if not self.no_block:
-            raise RuntimeError('"with" requires no_block=True (start() would block)')
-        self.start()
-        return self
-
-    def __exit__(self, *exc_info: Any) -> None:
-        self.stop()
 
     def _serve(self, tcp_server: ModbusServer.CustomThreadingTCPServer) -> None:
         # the server is given as argument: self._tcp_server may be reset by a concurrent stop() at any time

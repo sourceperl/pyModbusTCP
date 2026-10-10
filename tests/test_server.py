@@ -103,11 +103,9 @@ class TestModbusServerLimits(unittest.TestCase):
     def _start_server(self, **kwargs):
         """Start a server on a free TCP port chosen by the OS (port=0), it's stored in self.port."""
         server = ModbusServer(host='127.0.0.1', port=0, no_block=True, **kwargs)
-        server.start()
+        host, port = server.start()
         self.addCleanup(server.stop)
-        address = server.bound_address
-        assert address is not None
-        self.port = address[1]
+        self.port = port
         return server
 
     def _connect(self):
@@ -388,11 +386,9 @@ class TestModbusServerSpecFrames(unittest.TestCase):
         self.bank = DataBank()
         # port=0: a free TCP port chosen by the OS
         self.server = ModbusServer(host='127.0.0.1', port=0, no_block=True, data_bank=self.bank)
-        self.server.start()
+        host, port = self.server.start()
         self.addCleanup(self.server.stop)
-        address = self.server.bound_address
-        assert address is not None
-        self.port = address[1]
+        self.port = port
         self.sock = socket.create_connection(('127.0.0.1', self.port), timeout=5)
         self.addCleanup(self.sock.close)
 
