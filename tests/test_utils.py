@@ -206,6 +206,11 @@ class TestUtils(unittest.TestCase):
         for host in ['', '\x00', 'a\x00b', 'host\x00', 'wrong@host', '-bad.example.com', 'x' * 64, 'a' * 256]:
             self.assertIs(valid_host(host), False, repr(host))
 
+    def test_valid_host_rejects_trailing_newline(self):
+        self.assertTrue(valid_host('example.com'))
+        for bad in ('example.com\n', 'example.com\r\n', '\nexample.com', 'exa mple.com'):
+            self.assertFalse(valid_host(bad), repr(bad))
+
 
 if __name__ == '__main__':
     unittest.main()

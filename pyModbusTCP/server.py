@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import ipaddress
 import logging
+import math
 import socket
 import struct
 import time
 from socketserver import BaseRequestHandler, ThreadingTCPServer
-from threading import Event, Lock, Thread, current_thread
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from threading import Lock, RLock, Thread, current_thread
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 from .constants import (
     ENCAPSULATED_INTERFACE_TRANSPORT,
@@ -18,11 +20,15 @@ from .constants import (
     EXP_NONE,
     EXP_SLAVE_DEVICE_FAILURE,
     MAX_PDU_SIZE,
+    MBAP_MAX_LENGTH,
+    MBAP_MIN_LENGTH,
+    MBAP_SIZE,
     MEI_TYPE_READ_DEVICE_ID,
     READ_COILS,
     READ_DISCRETE_INPUTS,
     READ_HOLDING_REGISTERS,
     READ_INPUT_REGISTERS,
+    WRITE_FUNCTION_CODES,
     WRITE_MULTIPLE_COILS,
     WRITE_MULTIPLE_REGISTERS,
     WRITE_READ_MULTIPLE_REGISTERS,
@@ -33,6 +39,9 @@ from .utils import _pack_bits, _to_bool_list, _to_int_list, _unpack_bits
 
 # add a logger for pyModbusTCP.server
 logger = logging.getLogger(__name__)
+
+# an IPv4 or IPv6 network (an address is a network with a full prefix)
+_IPNetwork = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
 
 
 class DataBank:
@@ -262,7 +271,7 @@ class DataBank:
         if srv_info:
             # notify changes with on change method (after atomic update)
             for address, from_value, to_value in changes_list:
-                self.on_holding_registers_change(address, from_value, to_value, srv_info=srv_info)
+                self.on_holding_registers_change(address, from_value, to_value, srv_info)
         return True
 
     def get_input_registers(self, address: int, number: int = 1,
@@ -495,6 +504,9 @@ class DataHandler:
 class DeviceIdentification:
     """ Container class for device identification objects (MEI type 0x0E) return by function 0x2B. """
 
+    # max size of an object value: it must fit in a response PDU (7 bytes header + 2 bytes object id and length)
+    MAX_OBJECT_SIZE = MAX_PDU_SIZE - 9
+
     def __init__(self, vendor_name: bytes = b'', product_code: bytes = b'', major_minor_revision: bytes = b'',
                  vendor_url: bytes = b'', product_name: bytes = b'', model_name: bytes = b'',
                  user_application_name: bytes = b'', objects_id: Optional[Dict[int, bytes]] = None) -> None:
@@ -546,6 +558,8 @@ class DeviceIdentification:
         if 0xff >= key >= 0x00:
             if not isinstance(value, bytes):
                 raise TypeError('this object is of type bytes only')
+            if len(value) > self.MAX_OBJECT_SIZE:
+                raise ValueError('object value is too long (max %d bytes)' % self.MAX_OBJECT_SIZE)
             with self._objs_lock:
                 self._objs_d[key] = value
         else:
@@ -737,16 +751,17 @@ class ModbusServer:
         @raw.setter
         def raw(self, value: bytes) -> None:
             # close connection if no standard 7 bytes mbap header
-            if not (value and len(value) == 7):
-                raise ModbusServer.DataFormatError('MBAP must have a length of 7 bytes')
+            if not (value and len(value) == MBAP_SIZE):
+                raise ModbusServer.DataFormatError(f'MBAP must have a length of {MBAP_SIZE} bytes')
             # decode header
             (self.transaction_id, self.protocol_id,
              self.length, self.unit_id) = struct.unpack('>HHHB', value)
             # check frame header content inconsistency
             if self.protocol_id != 0:
                 raise ModbusServer.DataFormatError('MBAP protocol ID must be 0')
-            if not 2 <= self.length <= 253:
-                raise ModbusServer.DataFormatError('MBAP length must be between 2 and 253')
+            if not MBAP_MIN_LENGTH <= self.length <= MBAP_MAX_LENGTH:
+                msg = f'MBAP length must be between {MBAP_MIN_LENGTH} and {MBAP_MAX_LENGTH}'
+                raise ModbusServer.DataFormatError(msg)
 
     class PDU:
         """ PDU (Protocol Data Unit) container class. """
@@ -801,7 +816,11 @@ class ModbusServer:
                 return struct.unpack(fmt, raw_section)
             except struct.error:
                 err_msg = "unable to decode PDU message  (fmt: '%s', values: %r)" % (fmt, raw_section)
-                raise ModbusServer.DataFormatError(err_msg)
+                raise ModbusServer.PDUDecodeError(err_msg)
+
+    class PDUDecodeError(DataFormatError):
+        """ Exception raise when a received request PDU can't be decoded (too short...). """
+        pass
 
     class CustomThreadingTCPServer(ThreadingTCPServer):
         """Threaded TCP server."""
@@ -815,24 +834,78 @@ class ModbusServer:
         max_connections: Optional[int] = None
         idle_timeout: Optional[float] = None
         request_timeout: Optional[float] = None
+        # whitelist of allowed client networks (None: every client is allowed), set by ModbusServer.start()
+        allowed_networks: Optional[Tuple[_IPNetwork, ...]] = None
         engine: Callable[[ModbusServer.SessionData], None]
 
         def __init__(self, *args: Any, ipv6: bool = False, **kwargs: Any) -> None:
-            # "keep serving" flag shared with the session threads. It belongs to this server instance (one per run),
-            # so a restart can't revive the sessions of a previous run.
-            self.running_evt = Event()
             # must be set before ThreadingTCPServer.__init__(), which creates the socket from it
             self.address_family = socket.AF_INET6 if ipv6 else socket.AF_INET
-            # number of active sessions (a session = a client TCP connection with its thread)
-            self._sessions = 0
+            # active sessions (a session = a client TCP connection with its thread): socket -> client address
+            self._active_sessions: Dict[socket.socket, Any] = {}
             self._sessions_lock = Lock()
             # connections rejected since the last warning in the log (don't flood the log on a connection flood)
             self._rejected = 0
             self._rejected_log_time: Optional[float] = None
+            # connections refused by the allowed hosts whitelist since the last warning in the log
+            self._denied = 0
+            self._denied_log_time: Optional[float] = None
             super().__init__(*args, **kwargs)
 
+        @property
+        def _sessions(self) -> int:
+            """Number of active sessions."""
+            return len(self._active_sessions)
+
+        def active_sessions(self) -> List[Tuple[socket.socket, Any]]:
+            """Return a snapshot of the active sessions as a list of (socket, client address)."""
+            with self._sessions_lock:
+                return list(self._active_sessions.items())
+
+        def shutdown_sessions(self) -> int:
+            """Call shutdown() on the socket of every active session.
+
+            Each session thread sees its connection closed on the next recv() and ends cleanly (see
+            ModbusRequestHandler.handle()). Sessions are not removed here: their own thread does it when it ends.
+
+            :return: number of sessions the shutdown was requested for
+            """
+            # snapshot: don't hold the lock while calling the sockets, session threads need it to end
+            sessions = self.active_sessions()
+            for sock, client_address in sessions:
+                try:
+                    sock.shutdown(socket.SHUT_RDWR)
+                except OSError as e:
+                    # already closed or disconnected by the peer: nothing more to do
+                    logger.debug('Session shutdown for %r: %r', client_address, e)
+            return len(sessions)
+
+        def is_allowed(self, client_address: Any) -> bool:
+            """Return True if the client address is accepted by the allowed hosts whitelist (if any)."""
+            if self.allowed_networks is None:
+                return True
+            try:
+                # drop the zone id of a link-local IPv6 address (like "fe80::1%eth0")
+                ip = ipaddress.ip_address(str(client_address[0]).split('%')[0])
+            except ValueError:
+                return False
+            # an IPv4 client on a dual-stack IPv6 socket is seen as an IPv4-mapped address (::ffff:a.b.c.d)
+            if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+                ip = ip.ipv4_mapped
+            return any(ip in network for network in self.allowed_networks)
+
         def verify_request(self, request: Any, client_address: Any) -> bool:
-            # called by the main server thread, the only one that add sessions (so this check is safe)
+            # called by the main server thread, the only one that add sessions (so these checks are safe)
+            if not self.is_allowed(client_address):
+                self._denied += 1
+                # log the first refusal at once, then one message per 10 s at most
+                now = time.monotonic()
+                if self._denied_log_time is None or now - self._denied_log_time >= 10.0:
+                    logger.warning('Connection refused, host not in allowed hosts: %d connection(s) refused '
+                                   '(last from %r)', self._denied, client_address)
+                    self._denied = 0
+                    self._denied_log_time = now
+                return False
             if self.max_connections is not None and self._sessions >= self.max_connections:
                 self._rejected += 1
                 # log the first rejection at once, then one message per 10 s at most
@@ -847,13 +920,13 @@ class ModbusServer:
 
         def process_request(self, request: Any, client_address: Any) -> None:
             with self._sessions_lock:
-                self._sessions += 1
+                self._active_sessions[request] = client_address
             try:
                 super().process_request(request, client_address)
             except BaseException:
                 # the session thread can't start: no session
                 with self._sessions_lock:
-                    self._sessions -= 1
+                    self._active_sessions.pop(request, None)
                 raise
 
         def process_request_thread(self, request: Any, client_address: Any) -> None:
@@ -861,16 +934,12 @@ class ModbusServer:
                 super().process_request_thread(request, client_address)
             finally:
                 with self._sessions_lock:
-                    self._sessions -= 1
+                    self._active_sessions.pop(request, None)
 
     class ModbusRequestHandler(BaseRequestHandler):
         # default socket timeout (in s) on blocking operations
         _SOCKET_TIMEOUT: float = 1.0
         server: ModbusServer.CustomThreadingTCPServer
-
-        @property
-        def is_running(self) -> bool:
-            return bool(self.server.running_evt.is_set())
 
         def _send_all(self, data: bytes) -> None:
             try:
@@ -894,10 +963,6 @@ class ModbusServer:
 
         def _recv_chunk(self, size: int, data_len: int, deadline: Optional[float], timeout_msg: str,
                         request_timeout: Optional[float]) -> Tuple[bytes, Optional[float], str, bool]:
-            # avoid keeping this TCP thread run after server.stop() on main server
-            if not self.is_running:
-                raise ModbusServer.NetworkError('main server is not running')
-
             sock_timeout_changed = self._check_and_update_timeout(deadline, timeout_msg)
 
             # recv all data or a chunk of it
@@ -989,8 +1054,9 @@ class ModbusServer:
                  data_bank: Optional[DataBank] = None, data_hdl: Optional[DataHandler] = None,
                  ext_engine: Optional[Callable[[ModbusServer.SessionData], None]] = None,
                  device_id: Optional[DeviceIdentification] = None,
-                 request_timeout: Optional[float] = 30.0, idle_timeout: Optional[float] = None,
-                 max_connections: Optional[int] = None) -> None:
+                 request_timeout: Optional[float] = 30.0, idle_timeout: Optional[float] = 300,
+                 max_connections: Optional[int] = 64, read_only: bool = False,
+                 allowed_hosts: Optional[Iterable[str]] = None) -> None:
         """Initialize a Modbus TCP server.
 
         Sets up a Modbus TCP server with configurable network parameters, data handling,
@@ -1018,11 +1084,18 @@ class ModbusServer:
             the PDU: a stalled request), on expiry the client session is closed, None to disable (default is 30.0)
         :type request_timeout: float or None
         :param idle_timeout: max time in seconds without any request from a client before closing its session,\
-            None to disable (default)
+            None to disable (default is 300.0)
         :type idle_timeout: float or None
         :param max_connections: max number of simultaneous client connections, the next ones are closed immediately,\
-            None for no limit (default)
+            None for no limit (default is 64)
         :type max_connections: int or None
+        :param read_only: refuse every request that writes data (functions 0x05, 0x06, 0x0F, 0x10 and 0x17) with an\
+            "illegal function" exception, only the internal engine is concerned (default is False)
+        :type read_only: bool
+        :param allowed_hosts: whitelist of the clients allowed to connect: IP addresses or networks in CIDR notation\
+            (like ['192.168.1.10', '10.0.0.0/24', '::1']), other connections are closed at once, None to accept\
+            every client (default), hostnames are not supported (an empty whitelist is an error)
+        :type allowed_hosts: iterable of str or None
         """
         # validate complex objects (data storage and callbacks)
         self._validate_data_bank_and_handler(data_bank, data_hdl)
@@ -1033,6 +1106,8 @@ class ModbusServer:
         request_timeout = self._validate_timeout(request_timeout, 'request_timeout')
         idle_timeout = self._validate_timeout(idle_timeout, 'idle_timeout')
         max_connections = self._validate_max_connections(max_connections)
+        read_only = self._validate_read_only(read_only)
+        allowed_networks = self._validate_allowed_hosts(allowed_hosts)
 
         # store network configuration
         self.host = host
@@ -1044,6 +1119,13 @@ class ModbusServer:
         self.request_timeout = request_timeout
         self.idle_timeout = idle_timeout
         self.max_connections = max_connections
+
+        # store access control settings (the whitelist is kept as normalized networks, in CIDR notation)
+        self.read_only = read_only
+        self._allowed_networks = allowed_networks
+        self.allowed_hosts: Optional[List[str]] = None
+        if allowed_networks is not None:
+            self.allowed_hosts = [str(network) for network in allowed_networks]
 
         # store callbacks and device info
         self.ext_engine = ext_engine
@@ -1062,6 +1144,9 @@ class ModbusServer:
         self._tcp_server: Optional[ModbusServer.CustomThreadingTCPServer] = None
         # server thread handle
         self._srv_thread: Optional[Thread] = None
+        # ensure atomic start and stop operations
+        # (reentrant: stop() may be called from a signal handler running in the thread that is inside start())
+        self._start_stop_lock = RLock()
 
         # map Modbus function codes to handler methods (fixed routing table)
         self._func_map: Dict[int, Callable[[ModbusServer.SessionData], None]] = {
@@ -1076,6 +1161,38 @@ class ModbusServer:
             WRITE_READ_MULTIPLE_REGISTERS: self._write_read_multiple_registers,
             ENCAPSULATED_INTERFACE_TRANSPORT: self._encapsulated_interface_transport
         }
+
+    @property
+    def is_run(self) -> bool:
+        """Deprecated: use is_running."""
+        return self.is_running
+
+    @property
+    def is_running(self) -> bool:
+        """Return True if server running."""
+        return self._srv_thread is not None and self._srv_thread.is_alive()
+
+    @property
+    def active_sessions(self) -> List[Tuple[str, int]]:
+        """Return the (address, port) of the clients of all active sessions (empty if server is stopped)."""
+        tcp_server = self._tcp_server
+        if tcp_server is None:
+            return []
+        return [tuple(client_address[:2]) for _, client_address in tcp_server.active_sessions()]
+
+    def shutdown_sessions(self) -> int:
+        """Call shutdown() on every active session (client connection).
+
+        The server keeps listening: new clients can still connect afterwards.
+        It is automatically called when the server stops.
+
+        :return: number of sessions the shutdown was requested for
+        :rtype: int
+        """
+        tcp_server = self._tcp_server
+        if tcp_server is None:
+            return 0
+        return tcp_server.shutdown_sessions()
 
     @staticmethod
     def _validate_data_bank_and_handler(data_bank: Optional[DataBank], data_hdl: Optional[DataHandler]) -> None:
@@ -1107,8 +1224,8 @@ class ModbusServer:
             return None
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError('%s must be a number or None' % name)
-        if value <= 0:
-            raise ValueError('%s must be greater than 0 (or None to disable it)' % name)
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError('%s must be a finite number greater than 0 (or None to disable it)' % name)
         return float(value)
 
     @staticmethod
@@ -1121,11 +1238,45 @@ class ModbusServer:
             raise ValueError('max_connections must be at least 1 (or None for no limit)')
         return max_connections
 
+    @staticmethod
+    def _validate_read_only(read_only: bool) -> bool:
+        if not isinstance(read_only, bool):
+            raise TypeError('read_only must be a bool')
+        return read_only
+
+    @staticmethod
+    def _validate_allowed_hosts(allowed_hosts: Optional[Iterable[str]]) -> Optional[Tuple[_IPNetwork, ...]]:
+        """Check the whitelist (None or an iterable of IP addresses/networks) and return it as networks (or None)."""
+        if allowed_hosts is None:
+            return None
+        # a lone string would be read char by char
+        if isinstance(allowed_hosts, (str, bytes)):
+            raise TypeError('allowed_hosts must be an iterable of str (or None), not a single str')
+        try:
+            hosts = list(allowed_hosts)
+        except TypeError:
+            raise TypeError('allowed_hosts must be an iterable of str or None') from None
+        if not hosts:
+            raise ValueError('allowed_hosts must not be empty (use None to allow every host)')
+        networks: List[_IPNetwork] = []
+        for host in hosts:
+            if not isinstance(host, str):
+                raise TypeError('allowed_hosts items must be str, got %s' % type(host).__name__)
+            try:
+                # strict=False: "192.168.1.5/24" is accepted as the network 192.168.1.0/24
+                networks.append(ipaddress.ip_network(host.strip(), strict=False))
+            except ValueError:
+                raise ValueError('allowed_hosts item %r is not an IP address or a network (hostnames are not '
+                                 'supported)' % host) from None
+        return tuple(networks)
+
     def __repr__(self) -> str:
         r_str = ('ModbusServer(host=\'%s\', port=%d, no_block=%s, ipv6=%s, data_bank=%s, data_hdl=%s, ext_engine=%s, '
-                 'device_id=%s, request_timeout=%s, idle_timeout=%s, max_connections=%s)')
+                 'device_id=%s, request_timeout=%s, idle_timeout=%s, max_connections=%s, read_only=%s, '
+                 'allowed_hosts=%s)')
         r_str %= (self.host, self.port, self.no_block, self.ipv6, self.data_bank, self.data_hdl, self.ext_engine,
-                  self.device_id, self.request_timeout, self.idle_timeout, self.max_connections)
+                  self.device_id, self.request_timeout, self.idle_timeout, self.max_connections, self.read_only,
+                  self.allowed_hosts)
         return r_str
 
     def _engine(self, session_data: ModbusServer.SessionData) -> None:
@@ -1138,7 +1289,8 @@ class ModbusServer:
             try:
                 self.ext_engine(session_data)
             except Exception as e:
-                raise ModbusServer.Error('external engine raise an exception: %r' % e)
+                logger.exception('External engine raise an exception, close session')
+                raise ModbusServer.Error('external engine raise an exception: %r' % e) from e
         else:
             self._internal_engine(session_data)
 
@@ -1147,23 +1299,53 @@ class ModbusServer:
 
         :type session_data: ModbusServer.SessionData
         """
-        func_code = session_data.request.pdu.func_code
+        # session alias
+        client = session_data.client
+        recv_pdu = session_data.request.pdu
+        send_pdu = session_data.response.pdu
+        func_code = recv_pdu.func_code
+        # a request can't have the exception flag (bit 7) set, and an exception response must fit in a byte:
+        # answer "illegal function" with the same code (code | 0x80), the TCP session stays synchronized
+        if func_code > 0x7F:
+            logger.debug('Request with an invalid function code 0x%02X from %s', func_code, client)
+            send_pdu.build_except(func_code & 0x7F, EXP_ILLEGAL_FUNCTION)
+            return
+        # read-only server: a function that writes data is not available
+        if self.read_only and func_code in WRITE_FUNCTION_CODES:
+            logger.debug('Write function 0x%02X refused (read-only mode) from %s', func_code, client)
+            send_pdu.build_except(func_code, EXP_ILLEGAL_FUNCTION)
+            return
         # get the ad-hoc function, if none exists (or is disabled with None), send an "illegal function" exception
         func = self._func_map.get(func_code)
         if not callable(func):
-            session_data.response.pdu.build_except(func_code, EXP_ILLEGAL_FUNCTION)
+            send_pdu.build_except(func_code, EXP_ILLEGAL_FUNCTION)
             return
         # call ad-hoc func
         try:
             func(session_data)
+        except ModbusServer.PDUDecodeError as e:
+            # request PDU too short or malformed: the TCP stream is still in sync, answer with "illegal data value"
+            logger.debug('Malformed request for function 0x%02X: %s from %s', func_code, e, client)
+            send_pdu.build_except(func_code, EXP_DATA_VALUE)
         except ModbusServer.Error:
-            # malformed frame or network error: let the session handler close the connection
+            # network error or other frame error: let the session handler close the connection
             raise
         except Exception:
             # unexpected error (like an exception raised by a user callback): log it and keep the session alive
-            # (this keeps the TCP session synchronized and tells the client that the request has failed)
-            logger.exception('Unexpected error during processing of function 0x%02X', func_code)
-            session_data.response.pdu.build_except(func_code, EXP_SLAVE_DEVICE_FAILURE)
+            logger.exception('Unexpected error during processing of function 0x%02X from %s', func_code, client)
+            send_pdu.build_except(func_code, EXP_SLAVE_DEVICE_FAILURE)
+
+    @staticmethod
+    def _checked_read_data(func_code: int, expected: int, data: Optional[List[Any]]) -> Optional[List[Any]]:
+        """Return data if a data handler returned the expected number of items for a read request.
+
+        Otherwise log an error and return None (the caller must answer with a slave device failure).
+        """
+        if data is None or len(data) != expected:
+            logger.error('Data handler returned %s item(s) for function 0x%02X, %d expected',
+                         'no' if data is None else len(data), func_code, expected)
+            return None
+        return data
 
     def _read_bits(self, session_data: ModbusServer.SessionData) -> None:
         """
@@ -1185,13 +1367,17 @@ class ModbusServer:
             else:
                 ret_hdl = self.data_hdl.read_d_inputs(start_address, quantity_bits, session_data.srv_info)
             # format regular or except response
-            if ret_hdl.ok and ret_hdl.data is not None:
-                # pack data bank bits in bytes
-                bytes_b = _pack_bits(ret_hdl.data)
-                # build pdu
-                send_pdu.add_pack('BB%ds' % len(bytes_b), recv_pdu.func_code, len(bytes_b), bytes_b)
-            else:
+            if not ret_hdl.ok:
                 send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
+            else:
+                bits_l = self._checked_read_data(recv_pdu.func_code, quantity_bits, ret_hdl.data)
+                if bits_l is None:
+                    send_pdu.build_except(recv_pdu.func_code, EXP_SLAVE_DEVICE_FAILURE)
+                else:
+                    # pack data bank bits in bytes
+                    bytes_b = _pack_bits(bits_l)
+                    # build pdu
+                    send_pdu.add_pack('BB%ds' % len(bytes_b), recv_pdu.func_code, len(bytes_b), bytes_b)
         else:
             send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
 
@@ -1215,12 +1401,16 @@ class ModbusServer:
             else:
                 ret_hdl = self.data_hdl.read_i_regs(start_addr, quantity_regs, session_data.srv_info)
             # format regular or except response
-            if ret_hdl.ok and ret_hdl.data is not None:
-                # build pdu
-                # (header + requested words in a single pack: avoid an intermediate bytes copy)
-                send_pdu.add_pack('>BB%dH' % len(ret_hdl.data), recv_pdu.func_code, quantity_regs * 2, *ret_hdl.data)
-            else:
+            if not ret_hdl.ok:
                 send_pdu.build_except(recv_pdu.func_code, ret_hdl.exp_code)
+            else:
+                words_l = self._checked_read_data(recv_pdu.func_code, quantity_regs, ret_hdl.data)
+                if words_l is None:
+                    send_pdu.build_except(recv_pdu.func_code, EXP_SLAVE_DEVICE_FAILURE)
+                else:
+                    # build pdu
+                    # (header + requested words in a single pack: avoid an intermediate bytes copy)
+                    send_pdu.add_pack('>BB%dH' % len(words_l), recv_pdu.func_code, quantity_regs * 2, *words_l)
         else:
             send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
 
@@ -1370,13 +1560,17 @@ class ModbusServer:
             return
         # redo read after write
         ret_hdl_read = self.data_hdl.read_h_regs(read_start_addr, read_quantity_regs, session_data.srv_info)
-        if not ret_hdl_read.ok or ret_hdl_read.data is None:
+        if not ret_hdl_read.ok:
             send_pdu.build_except(recv_pdu.func_code, ret_hdl_read.exp_code)
+            return
+        read_words_l = self._checked_read_data(recv_pdu.func_code, read_quantity_regs, ret_hdl_read.data)
+        if read_words_l is None:
+            send_pdu.build_except(recv_pdu.func_code, EXP_SLAVE_DEVICE_FAILURE)
             return
         # build pdu
         send_pdu.add_pack('BB', recv_pdu.func_code, read_quantity_regs * 2)
         # add_pack requested words
-        send_pdu.add_pack('>%dH' % len(ret_hdl_read.data), *ret_hdl_read.data)
+        send_pdu.add_pack('>%dH' % len(read_words_l), *read_words_l)
 
     def _encapsulated_interface_transport(self, session_data: ModbusServer.SessionData) -> None:
         """
@@ -1460,57 +1654,50 @@ class ModbusServer:
         :rtype: Tuple[str, int]
         :raises ModbusServer.NetworkError: if the server can't listen (port already in use, bad host...)
         """
-        # do nothing if server is already running
-        if self.is_running:
-            raise ModbusServer.NetworkError('server is already running')
-        # init TCP server
-        # always need a fresh instance since server_close() destroys the underlying socket file descriptor
-        tcp_server: Optional[ModbusServer.CustomThreadingTCPServer] = None
-        try:
-            # IPv4 or IPv6: handled by the server class, the socket is created in its constructor
-            tcp_server = self.CustomThreadingTCPServer((self.host, self.port), self.ModbusRequestHandler,
-                                                       bind_and_activate=False, ipv6=self.ipv6)
-            # pass some things shared with server threads (access via self.server in ModbusRequestHandler.handle())
-            tcp_server.engine = self._engine
-            tcp_server.request_timeout = self.request_timeout
-            tcp_server.idle_timeout = self.idle_timeout
-            tcp_server.max_connections = self.max_connections
-            # set socket options
-            tcp_server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-            tcp_server.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            # bind and activate
-            tcp_server.server_bind()
-            tcp_server.server_activate()
-        except OSError as e:
-            # don't keep the listening socket open after a failed start
-            if tcp_server is not None:
-                tcp_server.server_close()
-            raise ModbusServer.NetworkError(e) from e
-        logger.info('Listening on %s:%d', *tcp_server.server_address[:2])
-        self._tcp_server = tcp_server
-
-        # flag the server as running before serving (and before the thread starts): a stop() or a second start()
-        # right after start() must see it
-        tcp_server.running_evt.set()
-        # serve request
-        if self.no_block:
-            # try to start _serve as a thread
+        with self._start_stop_lock:
+            # do nothing if server is already running
+            if self.is_running:
+                raise ModbusServer.NetworkError('server is already running')
+            # init TCP server
+            # always need a fresh instance since server_close() destroys the underlying socket file descriptor
+            tcp_server: Optional[ModbusServer.CustomThreadingTCPServer] = None
             try:
-                self._srv_thread = Thread(target=self._serve, args=(tcp_server,), daemon=True)
+                # IPv4 or IPv6: handled by the server class, the socket is created in its constructor
+                tcp_server = self.CustomThreadingTCPServer((self.host, self.port), self.ModbusRequestHandler,
+                                                           bind_and_activate=False, ipv6=self.ipv6)
+                # pass some things shared with server threads (access via self.server in ModbusRequestHandler.handle())
+                tcp_server.engine = self._engine
+                tcp_server.request_timeout = self.request_timeout
+                tcp_server.idle_timeout = self.idle_timeout
+                tcp_server.max_connections = self.max_connections
+                tcp_server.allowed_networks = self._allowed_networks
+                # set socket options
+                tcp_server.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                # bind and activate
+                tcp_server.server_bind()
+                tcp_server.server_activate()
+            except OSError as e:
+                # don't keep the listening socket open after a failed start
+                if tcp_server is not None:
+                    tcp_server.server_close()
+                raise ModbusServer.NetworkError(e) from e
+            logger.info('Listening on %s:%d', *tcp_server.server_address[:2])
+            self._tcp_server = tcp_server
+
+            # start the request processing service
+            srv_thread = Thread(target=self._serve, args=(tcp_server,), daemon=True)
+            self._srv_thread = srv_thread
+            try:
                 self._srv_thread.start()
             except BaseException:
                 # unable to start thread
-                tcp_server.running_evt.clear()
                 tcp_server.server_close()
                 self._tcp_server = None
                 self._srv_thread = None
                 raise
-        else:
-            try:
-                self._serve(tcp_server)
-            finally:
-                if self._tcp_server is tcp_server:
-                    self._tcp_server = None
+        # block here if we are not in no_block mode
+        if not self.no_block:
+            srv_thread.join()
         # return current bindings to client
         host, port = tcp_server.server_address[:2]
         return str(host), int(port)
@@ -1523,35 +1710,23 @@ class ModbusServer:
 
     def stop(self) -> None:
         """Stop the server."""
-        tcp_server = self._tcp_server
-        if tcp_server is not None and tcp_server.running_evt.is_set():
-            srv_thread = self._srv_thread
-            tcp_server.shutdown()
-            tcp_server.server_close()
+        with self._start_stop_lock:
+            # send a shutdown request to TCP server (tell the serve_forever() loop to stop and wait until it does)
+            tcp_server = self._tcp_server
+            if tcp_server is not None:
+                tcp_server.shutdown()
             # wait for the server thread: a start() right after stop() must find a clean state
+            srv_thread = self._srv_thread
             if srv_thread is not None and srv_thread is not current_thread():
                 srv_thread.join()
             self._srv_thread = None
             self._tcp_server = None
 
-    @property
-    def is_run(self) -> bool:
-        """Deprecated: use is_running."""
-        return self.is_running
-
-    @property
-    def is_running(self) -> bool:
-        """Return True if server running."""
-        tcp_server = self._tcp_server
-        return tcp_server is not None and tcp_server.running_evt.is_set()
-
     def _serve(self, tcp_server: ModbusServer.CustomThreadingTCPServer) -> None:
         # the server is given as argument: self._tcp_server may be reset by a concurrent stop() at any time
         try:
             tcp_server.serve_forever(poll_interval=self._SERVE_POLL_INTERVAL)
-        except KeyboardInterrupt:
-            pass  # Ctrl+C in blocking mode: normal end
         finally:
-            # end of this run: tell its sessions to stop (the flag belongs to this server, not to a later run)
-            tcp_server.running_evt.clear()
+            # actively shutdown every session instead of waiting for them to notice the flag
+            tcp_server.shutdown_sessions()
             tcp_server.server_close()

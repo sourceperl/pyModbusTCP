@@ -292,6 +292,10 @@ def crc16(frame: bytes) -> int:
     return crc
 
 
+# one label of a hostname (1 to 63 chars: letters, digits, "-" or "_", no leading/trailing "-")
+_RE_HOST_PART_OK = re.compile('(?!-)[a-z0-9-_]{1,63}(?<!-)', re.IGNORECASE)
+
+
 def valid_host(host_str: str) -> bool:
     """Validate a host string.
 
@@ -324,8 +328,8 @@ def valid_host(host_str: str) -> bool:
     if host_str[-1] == '.':
         host_str = host_str[:-1]
     # validate each part of the hostname (part_1.part_2.part_3)
-    re_part_ok = re.compile('(?!-)[a-z0-9-_]{1,63}(?<!-)$', re.IGNORECASE)
-    return all(re_part_ok.match(part) for part in host_str.split('.'))
+    # fullmatch: a "$" anchor would accept a trailing newline (like "example.com\n")
+    return all(_RE_HOST_PART_OK.fullmatch(part) for part in host_str.split('.'))
 
 
 ####################

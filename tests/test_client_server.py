@@ -305,5 +305,55 @@ class TestClientServer(unittest.TestCase):
         self.server.device_id = None
 
 
+class TestClientServerAccessControl(unittest.TestCase):
+    """ Client behavior with a server that uses the read_only or allowed_hosts options. """
+
+    def _start(self, **server_kwargs):
+        """Start a server on a free port with some options and return it with a client connected to it."""
+        server = ModbusServer(host='127.0.0.1', port=0, no_block=True, **server_kwargs)
+        host, port = server.start()
+        self.addCleanup(server.stop)
+        client = ModbusClient(host=host, port=port)
+        self.addCleanup(client.close)
+        return server, client
+
+    def test_read_only(self):
+        """A read_only server serves the reads and answers ILLEGAL FUNCTION to every write."""
+        server, client = self._start(read_only=True)
+        server.data_bank.set_holding_registers(0, [42])
+        self.assertEqual(client.read_holding_registers(0), [42])
+        writes = {'write_single_coil': lambda: client.write_single_coil(0, True),
+                  'write_single_register': lambda: client.write_single_register(0, 1),
+                  'write_multiple_coils': lambda: client.write_multiple_coils(0, [True, False]),
+                  'write_multiple_registers': lambda: client.write_multiple_registers(0, [1, 2]),
+                  'write_read_multiple_registers': lambda: client.write_read_multiple_registers(0, [1], 0, 1)}
+        for name, write in writes.items():
+            with self.subTest(name):
+                self.assertFalse(write())
+                self.assertEqual(client.last_error, MB_EXCEPT_ERR)
+                self.assertEqual(client.last_except, EXP_ILLEGAL_FUNCTION)
+                self.assertTrue(client.is_open, 'session must stay open after a refused write')
+        # nothing is written, and the same session is still usable
+        self.assertEqual(server.data_bank.get_holding_registers(0, 1), [42])
+        self.assertEqual(server.data_bank.get_coils(0, 2), [False, False])
+        self.assertEqual(client.read_holding_registers(0), [42])
+        self.assertEqual(client.last_error, MB_NO_ERR)
+
+    def test_allowed_hosts(self):
+        """A client in the whitelist is served."""
+        server, client = self._start(allowed_hosts=['127.0.0.1'])
+        self.assertTrue(client.write_single_register(0, 7))
+        self.assertEqual(client.read_holding_registers(0), [7])
+
+    def test_not_allowed_host(self):
+        """A client out of the whitelist is disconnected: its requests fail."""
+        server, client = self._start(allowed_hosts=['10.1.2.3'])
+        with self.assertLogs('pyModbusTCP.server', level='WARNING'):
+            self.assertIsNone(client.read_holding_registers(0))
+        self.assertNotEqual(client.last_error, MB_NO_ERR)
+        self.assertFalse(client.is_open)
+        self.assertEqual(server.active_sessions, [])
+
+
 if __name__ == '__main__':
     unittest.main()

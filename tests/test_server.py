@@ -1,7 +1,10 @@
 """ Test of pyModbusTCP.ModbusServer """
 
+import signal
 import socket
 import struct
+import subprocess
+import sys
 import time
 import unittest
 from unittest import mock
@@ -94,7 +97,7 @@ class TestModbusServer(unittest.TestCase):
 
 
 class TestModbusServerLimits(unittest.TestCase):
-    """Tests of request_timeout, idle_timeout and max_connections."""
+    """Tests of request_timeout, idle_timeout, max_connections and allowed_hosts."""
 
     # read 1 holding register at address 0: MBAP (transaction 1, unit 1) + PDU
     REQ_FRAME = b'\x00\x01\x00\x00\x00\x06\x01\x03\x00\x00\x00\x01'
@@ -144,8 +147,8 @@ class TestModbusServerLimits(unittest.TestCase):
     def test_defaults(self):
         server = ModbusServer()
         self.assertEqual(server.request_timeout, 30.0)
-        self.assertIsNone(server.idle_timeout)
-        self.assertIsNone(server.max_connections)
+        self.assertEqual(server.idle_timeout, 300.0)
+        self.assertEqual(server.max_connections, 64)
 
     def test_params_check(self):
         for kwargs in ({'request_timeout': 0}, {'request_timeout': -1}, {'idle_timeout': 0}, {'idle_timeout': -2.5},
@@ -249,6 +252,47 @@ class TestModbusServerLimits(unittest.TestCase):
             time.sleep(0.05)
         self.assertTrue(accepted, 'slot of a closed session is never freed')
         self.assertEqual(len(self._request(sock_2)), self.RESP_LEN)
+
+    def test_allowed_hosts(self):
+        """Only the clients of the allowed_hosts whitelist are served."""
+        for hosts in (['127.0.0.1'], ['127.0.0.0/8'], ['10.1.2.3', '127.0.0.1'], ('10.0.0.0/8', '127.0.0.0/8')):
+            with self.subTest(allowed_hosts=hosts):
+                server = self._start_server(allowed_hosts=hosts)
+                sock = self._connect()
+                self.assertEqual(len(self._request(sock)), self.RESP_LEN)
+                self.assertEqual(len(server.active_sessions), 1)
+                server.stop()
+
+    def test_allowed_hosts_refusal(self):
+        """A client out of allowed_hosts is closed at once and never gets a session (the refusal is logged)."""
+        server = self._start_server(allowed_hosts=['10.1.2.3', '192.168.0.0/16'])
+        with self.assertLogs('pyModbusTCP.server', level='WARNING') as logs:
+            for _ in range(3):
+                sock = self._connect()
+                self.assertIsNotNone(self._closed_after(sock, 2.0), 'host out of allowed_hosts is not closed')
+        # a connection flood must not flood the log: only the first refusal is logged
+        self.assertEqual(len(logs.records), 1)
+        self.assertIn('127.0.0.1', logs.records[0].getMessage())
+        self.assertEqual(server.active_sessions, [])
+        self.assertTrue(server.is_running)
+
+    def test_allowed_hosts_after_restart(self):
+        """The whitelist is still applied after a stop/start."""
+        server = self._start_server(allowed_hosts=['10.1.2.3'])
+        for _ in range(2):
+            with self.assertLogs('pyModbusTCP.server', level='WARNING'):
+                sock = self._connect()
+                self.assertIsNotNone(self._closed_after(sock, 2.0), 'host out of allowed_hosts is not closed')
+            server.stop()
+            self.port = server.start()[1]
+
+    def test_allowed_hosts_with_external_engine(self):
+        """The whitelist is checked before any engine: an external engine is never called for a refused client."""
+        calls = []
+        self._start_server(allowed_hosts=['10.1.2.3'], ext_engine=lambda session_data: calls.append(session_data))
+        with self.assertLogs('pyModbusTCP.server', level='WARNING'):
+            self.assertIsNotNone(self._closed_after(self._connect(), 2.0), 'host out of allowed_hosts is not closed')
+        self.assertEqual(calls, [])
 
 
 class TestDataBankSetters(unittest.TestCase):
@@ -484,9 +528,31 @@ class TestModbusServerSpecFrames(unittest.TestCase):
                 return True
 
     def test_malformed_requests_close_the_session(self):
-        # no function code at all (MBAP length 1), and a known function without its parameters
+        # no function code at all (MBAP length 1)
         self.assertTrue(self._closed_by_server(b'\x00\x01\x00\x00\x00\x01\x01'))
-        self.assertTrue(self._closed_by_server(b'\x00\x01\x00\x00\x00\x02\x01\x03'))
+
+
+"""Test safe start/stop sequences."""
+
+
+class TestStopFromSignalHandler(unittest.TestCase):
+    @unittest.skipUnless(hasattr(signal, 'setitimer'), 'needs SIGALRM (not available on Windows)')
+    def test_stop_from_signal_handler_in_blocking_mode(self):
+        code = (
+            'import signal\n'
+            'from pyModbusTCP.server import ModbusServer\n'
+            'srv = ModbusServer(host="127.0.0.1", port=0)\n'
+            'signal.signal(signal.SIGALRM, lambda *_: srv.stop())\n'
+            'signal.setitimer(signal.ITIMER_REAL, 0.3)\n'
+            'srv.start()\n'
+            'assert not srv.is_running\n'
+        )
+        # in a subprocess: a deadlock is a clean test failure (timeout), not a hanging test suite
+        try:
+            res = subprocess.run([sys.executable, '-c', code], timeout=15, capture_output=True, text=True)
+        except subprocess.TimeoutExpired:
+            self.fail('stop() called from a signal handler deadlocks')
+        self.assertEqual(res.returncode, 0, res.stderr)
 
 
 """Tests for the ModbusServer `ipv6` option."""
@@ -579,6 +645,229 @@ class TestIPv6Option(unittest.TestCase):
             self.assertEqual(resp, struct.pack('>HHHBBBH', 1, 0, 5, 1, 3, 2, 0))
         finally:
             server.stop()
+
+
+"""Tests for the ModbusServer `read_only` option."""
+
+
+class TestReadOnlyOption(unittest.TestCase):
+    """The requests that write data (0x05, 0x06, 0x0F, 0x10 and 0x17) are refused with an ILLEGAL FUNCTION exception."""
+
+    # request PDU (as hex string) of every function that writes data
+    WRITE_REQUESTS = {
+        'write single coil': '05 0001 ff00',
+        'write single register': '06 0005 002a',
+        'write multiple coils': '0f 0000 0002 01 03',
+        'write multiple registers': '10 0000 0001 02 0007',
+        'write/read multiple registers': '17 0000 0001 0000 0001 02 0007',
+    }
+
+    def _start_server(self, **kwargs):
+        """Start a server on a free TCP port (port=0) and open a raw connection to it (self.sock)."""
+        server = ModbusServer(host='127.0.0.1', port=0, no_block=True, **kwargs)
+        host, port = server.start()
+        self.addCleanup(server.stop)
+        self.sock = socket.create_connection((host, port), timeout=5)
+        self.addCleanup(self.sock.close)
+        return server
+
+    def _recv(self, size):
+        data = b''
+        while len(data) < size:
+            chunk = self.sock.recv(size - len(data))
+            self.assertTrue(chunk, 'connection closed by server')
+            data += chunk
+        return data
+
+    def exchange(self, pdu_hex):
+        """Send a PDU (as hex string) in a frame to the server and return the response PDU as hex string."""
+        pdu = bytes.fromhex(pdu_hex)
+        self.sock.sendall(b'\x00\x01\x00\x00' + (len(pdu) + 1).to_bytes(2, 'big') + b'\x01' + pdu)
+        header = self._recv(7)
+        return self._recv(int.from_bytes(header[4:6], 'big') - 1).hex()
+
+    def test_params_check(self):
+        self.assertIs(ModbusServer().read_only, False)
+        self.assertIs(ModbusServer(read_only=True).read_only, True)
+        for value in (1, 0, 'yes', None, [True]):
+            with self.assertRaises(TypeError, msg=repr(value)):
+                ModbusServer(read_only=value)  # type: ignore
+        self.assertIn('read_only=True', repr(ModbusServer(read_only=True)))
+        self.assertIn('read_only=False', repr(ModbusServer()))
+
+    def test_default_is_read_write(self):
+        bank = TestDataBankSetters.RecordingDataBank()
+        self._start_server(data_bank=bank)
+        for name, pdu in self.WRITE_REQUESTS.items():
+            self.assertEqual(self.exchange(pdu)[:2], pdu[:2], name)
+        self.assertEqual(bank.get_holding_registers(5, 1), [0x2a])
+        self.assertTrue(bank.changes, 'writes must be notified to the data bank')
+
+    def test_read_functions_are_allowed(self):
+        bank = DataBank()
+        bank.set_holding_registers(0, [0x1234])
+        bank.set_input_registers(0, [0x5678])
+        bank.set_coils(0, [True] + [False] * 7)
+        bank.set_discrete_inputs(1, [True])
+        self._start_server(read_only=True, data_bank=bank)
+        self.assertEqual(self.exchange('01 0000 0008'), '010101')
+        self.assertEqual(self.exchange('02 0000 0008'), '020102')
+        self.assertEqual(self.exchange('03 0000 0001'), '03021234')
+        self.assertEqual(self.exchange('04 0000 0001'), '04025678')
+
+    def test_write_functions_are_refused(self):
+        bank = TestDataBankSetters.RecordingDataBank()
+        self._start_server(read_only=True, data_bank=bank)
+        for name, pdu in self.WRITE_REQUESTS.items():
+            with self.subTest(name):
+                # exception response: function code + 0x80, then the exception code 1 (ILLEGAL FUNCTION)
+                self.assertEqual(self.exchange(pdu), f'{bytes.fromhex(pdu)[0] | 0x80:02x}01')
+        # nothing is written, nothing is notified
+        self.assertEqual(bank.get_coils(0, 16), [False] * 16)
+        self.assertEqual(bank.get_holding_registers(0, 16), [0] * 16)
+        self.assertEqual(bank.changes, [])
+        # the session is still open and in sync
+        self.assertEqual(self.exchange('03 0000 0001'), '03020000')
+
+    def test_server_side_writes_are_still_possible(self):
+        """read_only is for the requests of the clients, not for the application that owns the data bank."""
+        server = self._start_server(read_only=True)
+        self.assertTrue(server.data_bank.set_holding_registers(0, [9]))
+        self.assertEqual(self.exchange('03 0000 0001'), '03020009')
+
+    def test_other_functions_are_not_concerned(self):
+        self._start_server(read_only=True, device_id=DeviceIdentification(vendor_name=b'me'))
+        # read device identification (individual access to VendorName)
+        self.assertEqual(self.exchange('2b 0e 04 00'), '2b0e048300000100026d65')
+        # an unknown function keeps its own exception
+        self.assertEqual(self.exchange('55 00'), 'd501')
+
+    def test_not_applied_to_an_external_engine(self):
+        """With an ext_engine the requests are handled by user code: read_only has no effect on them."""
+        received = []
+
+        def engine(session_data):
+            received.append(session_data.request.pdu.func_code)
+            session_data.response.pdu.raw = session_data.request.pdu.raw
+
+        self._start_server(read_only=True, ext_engine=engine)
+        self.assertEqual(self.exchange('06 0005 002a'), '06 0005 002a'.replace(' ', ''))
+        self.assertEqual(received, [0x06])
+
+    def test_with_allowed_hosts(self):
+        self._start_server(read_only=True, allowed_hosts=['127.0.0.1'])
+        self.assertEqual(self.exchange('06 0005 002a'), '8601')
+        self.assertEqual(self.exchange('03 0000 0001'), '03020000')
+
+
+"""Tests for the ModbusServer `allowed_hosts` option."""
+
+
+class TestAllowedHostsOption(unittest.TestCase):
+    """Check of the allowed_hosts parameter and match of the client addresses (without any connection)."""
+
+    def _tcp_server(self, hosts):
+        """Return a (not bound) TCP server of ModbusServer with a whitelist."""
+        tcp_server = ModbusServer.CustomThreadingTCPServer(('127.0.0.1', 0), ModbusServer.ModbusRequestHandler,
+                                                           bind_and_activate=False)
+        self.addCleanup(tcp_server.server_close)
+        tcp_server.allowed_networks = ModbusServer._validate_allowed_hosts(hosts)
+        return tcp_server
+
+    def test_default(self):
+        server = ModbusServer()
+        self.assertIsNone(server.allowed_hosts)
+        self.assertIn('allowed_hosts=None', repr(server))
+
+    def test_hosts_are_normalized(self):
+        server = ModbusServer(allowed_hosts=['192.168.1.10', '10.0.0.0/24', '::1', 'fd00::/8', ' 127.0.0.1 '])
+        self.assertEqual(server.allowed_hosts,
+                         ['192.168.1.10/32', '10.0.0.0/24', '::1/128', 'fd00::/8', '127.0.0.1/32'])
+        self.assertIn("allowed_hosts=['192.168.1.10/32'", repr(server))
+        # host bits of a network are ignored
+        self.assertEqual(ModbusServer(allowed_hosts=['192.168.1.5/24']).allowed_hosts, ['192.168.1.0/24'])
+
+    def test_any_iterable_is_accepted(self):
+        for hosts in (('127.0.0.1',), iter(['127.0.0.1']), {'127.0.0.1'}, (host for host in ['127.0.0.1'])):
+            self.assertEqual(ModbusServer(allowed_hosts=hosts).allowed_hosts, ['127.0.0.1/32'])
+
+    def test_params_check(self):
+        # an empty whitelist is an error (None is for "no whitelist"), and hostnames are not supported
+        for hosts in ([], (), set(), ['localhost'], ['example.com'], [''], ['999.1.1.1'], ['1.2.3'], ['10.0.0.0/33'],
+                      ['::1/129'], ['10.0.0.0/a'], ['127.0.0.1', 'localhost']):
+            with self.assertRaises(ValueError, msg=repr(hosts)):
+                ModbusServer(allowed_hosts=hosts)
+        # a lone string must not be read char by char, an int is a valid address for ipaddress but not here
+        for hosts in ('127.0.0.1', b'127.0.0.1', '', 42, 1.5, [3232235777], [None], [1.5], [b'127.0.0.1'],
+                      [('127.0.0.1',)]):
+            with self.assertRaises(TypeError, msg=repr(hosts)):
+                ModbusServer(allowed_hosts=hosts)  # type: ignore
+        # the error message names the faulty item
+        with self.assertRaises(ValueError) as ctx:
+            ModbusServer(allowed_hosts=['127.0.0.1', 'localhost'])
+        self.assertIn("'localhost'", str(ctx.exception))
+
+    def test_no_whitelist_allows_everything(self):
+        tcp_server = self._tcp_server(None)
+        for address in ('127.0.0.1', '8.8.8.8', '::1', 'not an ip'):
+            self.assertTrue(tcp_server.is_allowed((address, 1234)), address)
+
+    def test_ipv4_match(self):
+        tcp_server = self._tcp_server(['10.1.2.3', '192.168.0.0/16', '172.16.0.0/24'])
+        for address, expected in (('10.1.2.3', True), ('10.1.2.4', False), ('192.168.0.1', True),
+                                  ('192.168.255.254', True), ('192.169.0.1', False), ('127.0.0.1', False),
+                                  ('172.15.255.255', False), ('172.16.0.0', True), ('172.16.0.255', True),
+                                  ('172.16.1.0', False)):
+            self.assertEqual(tcp_server.is_allowed((address, 1234)), expected, address)
+
+    def test_ipv6_match(self):
+        tcp_server = self._tcp_server(['::1', 'fd00::/8'])
+        for address, expected in (('::1', True), ('::2', False), ('fd12:3456::1', True), ('fe80::1', False)):
+            self.assertEqual(tcp_server.is_allowed((address, 1234, 0, 0)), expected, address)
+        # the IP versions are never mixed
+        self.assertFalse(tcp_server.is_allowed(('127.0.0.1', 1234)))
+        self.assertFalse(self._tcp_server(['127.0.0.1']).is_allowed(('::1', 1234, 0, 0)))
+
+    def test_ipv4_mapped_address(self):
+        """An IPv4 client of a dual-stack IPv6 socket is seen as ::ffff:a.b.c.d."""
+        tcp_server = self._tcp_server(['192.168.1.0/24'])
+        self.assertTrue(tcp_server.is_allowed(('::ffff:192.168.1.7', 1234, 0, 0)))
+        self.assertFalse(tcp_server.is_allowed(('::ffff:10.0.0.1', 1234, 0, 0)))
+
+    def test_link_local_zone_id(self):
+        self.assertTrue(self._tcp_server(['fe80::/10']).is_allowed(('fe80::1%eth0', 1234, 0, 0)))
+        self.assertFalse(self._tcp_server(['::1']).is_allowed(('fe80::1%eth0', 1234, 0, 0)))
+
+    def test_invalid_client_address_is_refused(self):
+        tcp_server = self._tcp_server(['127.0.0.1'])
+        for address in ('', 'not an ip', '1.2.3', '127.0.0.1\n'):
+            self.assertFalse(tcp_server.is_allowed((address, 1234)), repr(address))
+
+
+class TestAllowedHostsIPv6(unittest.TestCase):
+    """Tests of allowed_hosts on a real IPv6 connection."""
+
+    def _connect(self, **server_kwargs):
+        server = ModbusServer(host='::1', port=0, ipv6=True, no_block=True, **server_kwargs)
+        host, port = server.start()
+        self.addCleanup(server.stop)
+        sock = socket.create_connection(('::1', port), timeout=5)
+        self.addCleanup(sock.close)
+        # read 1 holding register at address 0: MBAP (tid 1, pid 0, len 6, unit 1) + FC 3
+        sock.sendall(struct.pack('>HHHBBHH', 1, 0, 6, 1, 3, 0, 1))
+        try:
+            return sock.recv(64)
+        except ConnectionResetError:
+            return b''
+
+    @unittest.skipUnless(ipv6_available(), 'IPv6 loopback not available on this machine')
+    def test_listed_client_is_served(self):
+        self.assertEqual(self._connect(allowed_hosts=['::1']), struct.pack('>HHHBBBH', 1, 0, 5, 1, 3, 2, 0))
+
+    @unittest.skipUnless(ipv6_available(), 'IPv6 loopback not available on this machine')
+    def test_unlisted_client_is_closed(self):
+        with self.assertLogs('pyModbusTCP.server', level='WARNING'):
+            self.assertEqual(self._connect(allowed_hosts=['fd00::/8', '127.0.0.1']), b'')
 
 
 if __name__ == '__main__':
