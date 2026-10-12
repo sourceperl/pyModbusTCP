@@ -4,7 +4,7 @@ import operator
 import re
 import socket
 import struct
-from typing import Any, List, Sequence
+from typing import Any, Iterable, List, Sequence
 
 
 ###############
@@ -417,7 +417,7 @@ def _to_int(value: Any, name: str) -> int:
         raise TypeError(f"{name} must be an int") from None
 
 
-def _to_bool_list(values: Sequence[Any], name: str) -> List[bool]:
+def _to_bool_list(values: Iterable[Any], name: str) -> List[bool]:
     """Return values as a list of bool from boolean-like integers.
 
     :raises TypeError: if an item cannot be interpreted as a boolean
@@ -435,7 +435,7 @@ def _to_bool_list(values: Sequence[Any], name: str) -> List[bool]:
     raise TypeError(f"{name} items must be a bool or an integer")
 
 
-def _to_int_list(values: Sequence[Any], name: str) -> List[int]:
+def _to_int_list(values: Iterable[Any], name: str) -> List[int]:
     """Return values as a list of int, accept only int-like items (int, bool, numpy ints...).
 
     :raises TypeError: if an item can't be used as an integer (str, float...)
