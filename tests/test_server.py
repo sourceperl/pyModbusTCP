@@ -199,14 +199,17 @@ class TestModbusServerLimits(unittest.TestCase):
 
     def test_idle_timeout(self):
         """A session without request is closed after idle_timeout, an active one is kept."""
-        self._start_server(idle_timeout=0.25)
+        # keep a wide margin between the pause between requests (0.1 s) and idle_timeout: on a loaded CI runner
+        # (macOS especially) a 0.1 s sleep plus a request round trip can take more than 0.25 s
+        idle_timeout = 1.0
+        self._start_server(idle_timeout=idle_timeout)
         sock = self._connect()
-        for _ in range(5):  # 0.5 s of activity (more than idle_timeout)
-            self.assertEqual(len(self._request(sock)), self.RESP_LEN)
+        for i in range(15):  # about 1.5 s of activity (more than idle_timeout)
+            self.assertEqual(len(self._request(sock)), self.RESP_LEN, 'active session closed (request %d)' % i)
             time.sleep(0.1)
-        delay = self._closed_after(sock, 3.0)
+        delay = self._closed_after(sock, idle_timeout + 4.0)
         self.assertIsNotNone(delay, 'idle session is still open')
-        self.assertLess(delay, 2.0)  # type: ignore
+        self.assertLess(delay, idle_timeout + 3.0)  # type: ignore
 
     def test_idle_timeout_stops_when_request_starts(self):
         """idle_timeout is for a session without any data: a slow request is a matter for request_timeout."""
@@ -576,10 +579,12 @@ class TestModbusServerSpecFrames(unittest.TestCase):
 
     def _closed_by_server(self, frame):
         with socket.create_connection(('127.0.0.1', self.port), timeout=5) as sock:
-            sock.sendall(frame)
+            # a connection closed by the server may be reported as a reset (POSIX) or as an abort (WinError 10053
+            # on Windows) instead of an end of stream: ConnectionError covers both (and a broken pipe on send)
             try:
+                sock.sendall(frame)
                 return sock.recv(16) == b''
-            except ConnectionResetError:
+            except ConnectionError:
                 return True
 
     def test_malformed_requests_close_the_session(self):
@@ -990,10 +995,12 @@ class TestAllowedHostsIPv6(unittest.TestCase):
         sock = socket.create_connection(('::1', port), timeout=5)
         self.addCleanup(sock.close)
         # read 1 holding register at address 0: MBAP (tid 1, pid 0, len 6, unit 1) + FC 3
-        sock.sendall(struct.pack('>HHHBBHH', 1, 0, 6, 1, 3, 0, 1))
+        # a refused client may see a reset (POSIX), an abort (WinError 10053 on Windows) or a broken pipe on send,
+        # depending on the OS and on timing: ConnectionError covers them all, they all mean "closed by the server"
         try:
+            sock.sendall(struct.pack('>HHHBBHH', 1, 0, 6, 1, 3, 0, 1))
             return sock.recv(64)
-        except ConnectionResetError:
+        except ConnectionError:
             return b''
 
     @unittest.skipUnless(ipv6_available(), 'IPv6 loopback not available on this machine')
