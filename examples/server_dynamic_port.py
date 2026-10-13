@@ -4,7 +4,7 @@
 Modbus TCP server script with dynamic port allocation.
 
 The OS picks a free TCP port (port=0), so this example never collides with another service of the host.
-The chosen port is logged at startup and is available in server.bound_address.
+The chosen port is returned by server.start() (as a (host, port) tuple) and logged at startup.
 """
 
 import logging
@@ -22,8 +22,8 @@ logging.basicConfig(level=logging.INFO,
 logging.getLogger('pyModbusTCP.server').setLevel(logging.CRITICAL)
 
 # Server Configuration
-# For IPv4: host="0.0.0.0", use_ipv6=False
-# For IPv6 / Dual-stack: host="::", use_ipv6=True
+# For IPv4: host="0.0.0.0", ipv6=False
+# For IPv6 / Dual-stack: host="::", ipv6=True
 server = ModbusServer(host='0.0.0.0', port=0, no_block=True, ipv6=False)
 
 try:
