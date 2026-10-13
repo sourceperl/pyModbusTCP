@@ -52,7 +52,7 @@ Revision history for pyModbusTCP
     - fix ModbusServer: for functions 0x0F, 0x10 and 0x17 the byte count must exactly match the quantity.
     - fix ModbusServer: Read Device Identification (0x2B/0x0E) compliance with the spec (stream access restarts at the
                         first object of the category, an unknown object in individual access gets exception 0x02).
-    - fix ModbusServer: support MBAP header length from 2 to 253.
+    - fix ModbusServer: support MBAP header length from 2 to 254.
     - fix ModbusServer: limit client info to (address, port) for IPv6 peers.
     - fix DataBank: set_coils(), set_discrete_inputs(), set_holding_registers() and set_input_registers() now check
                     their input. Non-integer items (float, str, None...) raise a TypeError (numpy integers and
