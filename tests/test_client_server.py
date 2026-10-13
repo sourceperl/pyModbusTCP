@@ -5,7 +5,7 @@ import unittest
 from random import choice, getrandbits, randint
 from socket import IPPROTO_TCP, TCP_NODELAY
 from string import ascii_letters
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from pyModbusTCP.client import DeviceIdentificationResponse, ModbusClient
 from pyModbusTCP.constants import (
@@ -16,6 +16,7 @@ from pyModbusTCP.constants import (
     EXP_SLAVE_DEVICE_FAILURE,
     MB_EXCEPT_ERR,
     MB_NO_ERR,
+    MB_RECV_ERR,
     MB_SEND_ERR,
     MB_TIMEOUT_ERR,
     SUPPORTED_FUNCTION_CODES,
@@ -99,6 +100,24 @@ class TestClientServer(unittest.TestCase):
         self.assertIsNone(self.client.custom_request(b'\x55\x00'))
         self.assertEqual(self.client.last_except, EXP_ILLEGAL_FUNCTION)
         self.assertTrue(self.client.is_open)
+
+    def test_late_reply_is_never_taken_for_the_next_one(self):
+        """A reply left on the socket (on_tx_rx raised after the send) is detected by the next request."""
+        self.server.data_bank.set_holding_registers(0, [1])
+        # the user callback raises an exception just after the send: the reply of the server stays on the socket
+        self.client.on_tx_rx = Mock(side_effect=[RuntimeError('boom'), None, None, None])  # type: ignore
+        # worst case for a random transaction ID: the same value drawn twice
+        with patch('pyModbusTCP.client.random.randint', return_value=42):
+            with self.assertRaises(RuntimeError):
+                self.client.read_holding_registers(0)
+            self.server.data_bank.set_holding_registers(0, [2])
+            # the next request receives the late reply (value 1): it must be rejected, not returned as the current one
+            self.assertIsNone(self.client.read_holding_registers(0))
+        self.assertEqual(self.client.last_error, MB_RECV_ERR)
+        self.assertFalse(self.client.is_open)
+        # the connection is reopened (auto_open) and in sync
+        self.client.on_tx_rx = Mock()  # type: ignore
+        self.assertEqual(self.client.read_holding_registers(0), [2])
 
     def test_request_with_short_send(self):
         """Complete requests when a socket send accepts only a prefix."""

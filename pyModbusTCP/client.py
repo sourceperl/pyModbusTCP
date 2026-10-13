@@ -191,7 +191,8 @@ class ModbusClient:
         self._no_delay = _to_bool(no_delay, 'no_delay')
         # internal variables
         self._deadline = 0.0  # end of the current request (time.monotonic() value), see _send() and _recv()
-        self._transaction_id = 0  # MBAP transaction ID
+        # MBAP transaction ID: a counter incremented at each request
+        self._transaction_id = random.randint(0, 0xffff)
         self._version = VERSION  # this package version number
         self._last_error = MB_NO_ERR  # last error code
         self._last_except = EXP_NONE  # last except code
@@ -468,7 +469,9 @@ class ModbusClient:
 
         The reply must have the same function code (or the same with the exception flag): otherwise it is an error.
 
-        :param pdu: a modbus PDU (protocol data unit): function code (0 to 127) followed by the request data
+        :param pdu: a modbus PDU (protocol data unit) of 1 to 253 bytes: function code followed by the request data
+            (the function code is not checked, a code with the exception flag set (0x80 to 0xFF) is sent as is,
+            but its reply can't be accepted: it's always a function code mismatch error)
         :type pdu: bytes or bytearray
         :returns: modbus frame PDU or None if error
         :rtype: bytes or None
@@ -959,7 +962,9 @@ class ModbusClient:
         :rtype: bytes
         """
         # build MBAP
-        self._transaction_id = random.randint(0, 65535)
+        # next transaction ID (16 bits counter): it always differs from the previous request one, so a late reply
+        # of the previous request (left on the socket) is always detected as such and never taken for the current one
+        self._transaction_id = (self._transaction_id + 1) & 0xffff
         protocol_id = 0
         length = len(pdu) + 1
         mbap = struct.pack('>HHHB', self._transaction_id, protocol_id, length, self.unit_id)

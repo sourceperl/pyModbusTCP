@@ -167,7 +167,7 @@ class TestModbusClient(unittest.TestCase):
             for bad_type in bad_types:
                 with self.assertRaises(TypeError):
                     c.custom_request(bad_type)
-            # empty, too long (max PDU size is 253 bytes) or with the exception flag set
+            # empty or too long (max PDU size is 253 bytes)
             for bad_value in (b'', bytes(254), ):
                 with self.assertRaises(ValueError):
                     c.custom_request(bad_value)
@@ -177,6 +177,18 @@ class TestModbusClient(unittest.TestCase):
             self.assertEqual(c.custom_request(bytearray(b'\x03\x00\x00\x00\x01')), b'\x03\x02\x00\x01')
             for call in req_pdu.call_args_list:
                 self.assertIs(type(call.args[0]), bytes)
+
+    def test_transaction_id(self):
+        """The MBAP transaction ID is a 16 bits counter: two consecutive requests never have the same ID."""
+        c = ModbusClient()
+        start = c._transaction_id
+        self.assertTrue(0 <= start <= 0xffff)
+        tids = [struct.unpack('>H', c._add_mbap(b'\x03\x00\x00\x00\x01')[:2])[0] for _ in range(3)]
+        self.assertEqual(tids, [(start + i) & 0xffff for i in (1, 2, 3)])
+        # wrap around after 0xffff
+        c._transaction_id = 0xfffe
+        tids = [struct.unpack('>H', c._add_mbap(b'\x03\x00\x00\x00\x01')[:2])[0] for _ in range(3)]
+        self.assertEqual(tids, [0xffff, 0x0000, 0x0001])
 
     def test_decode_helpers(self):
         """Compare bits/regs decoding helpers with a naive reference implementation."""
