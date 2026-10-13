@@ -9,7 +9,8 @@ import time
 import unittest
 from unittest import mock
 
-from pyModbusTCP.server import DataBank, DeviceIdentification, ModbusServer
+from pyModbusTCP.constants import EXP_NONE
+from pyModbusTCP.server import DataBank, DataHandler, DeviceIdentification, ModbusServer
 from pyModbusTCP.utils import _to_bool_list
 
 
@@ -42,6 +43,12 @@ class TestModbusServer(unittest.TestCase):
         # check access by shortcut name (str) or object id (int) return same value
         self.assertEqual(device_id.vendor_name, device_id[0x00])
         self.assertEqual(device_id.user_application_name, device_id[0x06])
+        # "in" test for an object id (never raise a KeyError)
+        self.assertIn(0x80, device_id)
+        self.assertIn(0x06, device_id)
+        self.assertNotIn(0x07, device_id)
+        self.assertNotIn(0x81, device_id)
+        self.assertNotIn('vendor_name', device_id)
         # test __repr__
         device_id = DeviceIdentification(
             product_name=b'server', objects_id={42: b'this'})
@@ -514,6 +521,54 @@ class TestModbusServerSpecFrames(unittest.TestCase):
         self.assertEqual(len(resp), 2 * (2 + 250))
         self.assertEqual(self.exchange('17 0000 0001 0000 0079 f2' + '0000' * 121), '17020000')
 
+    def test_pdu_length(self):
+        """Missing bytes or a byte count that doesn't match the quantity: ILLEGAL DATA VALUE (03)."""
+        bad_requests = {
+            'read coils, missing byte': '01 0000 00',
+            'write single register, missing byte': '06 0000 12',
+            'write multiple coils, byte count too high': '0f 0000 000a 03 ff 03 00',
+            'write multiple coils, byte count too low': '0f 0000 000a 01 ff 03',
+            'write multiple coils, missing byte': '0f 0000 000a 02 ff',
+            'write multiple registers, byte count too high': '10 0000 0001 04 1234 5678',
+            'write multiple registers, missing byte': '10 0000 0002 04 1234 56',
+            'write/read multiple registers, missing byte': '17 0000 0001 0000 0002 04 1234',
+            'read device identification, missing byte': '2b 0e 01',
+        }
+        for name, pdu in bad_requests.items():
+            with self.subTest(name):
+                self.assertEqual(self.exchange(pdu), f'{bytes.fromhex(pdu)[0] | 0x80:02x}03')
+        # nothing is written and the session is still in sync
+        self.assertEqual(self.bank.get_coils(0, 16), [False] * 16)
+        self.assertEqual(self.bank.get_holding_registers(0, 2), [0, 0])
+        self.assertEqual(self.exchange('03 0000 0001'), '03020000')
+
+    def test_extra_bytes_are_ignored(self):
+        """Bytes after a complete and consistent request are ignored (the MBAP length keeps the stream in sync)."""
+        self.bank.set_holding_registers(0, [0x1234])
+        self.assertEqual(self.exchange('03 0000 0001 ffff'), '03021234')
+        self.assertEqual(self.exchange('06 0001 abcd 00'), '060001abcd')
+        self.assertEqual(self.exchange('0f 0010 000a 02 ff 03 ee'), '0f0010000a')
+        self.assertEqual(self.bank.get_coils(16, 11), [True] * 10 + [False])
+        self.assertEqual(self.exchange('10 0002 0001 02 5678 9abc'), '1000020001')
+        self.assertEqual(self.exchange('17 0000 0003 0003 0001 02 0042 ff'), '17061234abcd5678')
+        self.assertEqual(self.bank.get_holding_registers(0, 5), [0x1234, 0xabcd, 0x5678, 0x42, 0])
+
+    def test_handler_ok_without_data(self):
+        """A data handler that returns "ok" without data is a SLAVE DEVICE FAILURE (04), never an exception code 0."""
+        with mock.patch.object(self.server.data_hdl, 'read_h_regs', return_value=DataHandler.Return(EXP_NONE)):
+            for pdu in ('03 0000 0001', '17 0000 0001 0005 0001 02 1234'):
+                with self.subTest(pdu), self.assertLogs('pyModbusTCP.server', level='ERROR'):
+                    self.assertEqual(self.exchange(pdu), f'{bytes.fromhex(pdu)[0] | 0x80:02x}04')
+        # the write of function 0x17 is not done
+        self.assertEqual(self.bank.get_holding_registers(5, 1), [0])
+
+    def test_handler_bad_data_count(self):
+        """The first read of function 0x17 must also check the number of registers returned by the data handler."""
+        with mock.patch.object(self.server.data_hdl, 'read_h_regs', return_value=DataHandler.Return(EXP_NONE, [1])):
+            with self.assertLogs('pyModbusTCP.server', level='ERROR'):
+                self.assertEqual(self.exchange('17 0000 0002 0005 0001 02 1234'), '9704')
+        self.assertEqual(self.bank.get_holding_registers(5, 1), [0])
+
     def test_unsupported_function_without_parameter(self):
         # a request can be a function code only (like 0x07, 0x0B, 0x0C or 0x11): ILLEGAL FUNCTION, not a closed session
         for func in (0x07, 0x0b, 0x0c, 0x11):
@@ -530,6 +585,87 @@ class TestModbusServerSpecFrames(unittest.TestCase):
     def test_malformed_requests_close_the_session(self):
         # no function code at all (MBAP length 1)
         self.assertTrue(self._closed_by_server(b'\x00\x01\x00\x00\x00\x01\x01'))
+
+
+class TestReadDeviceIdentification(unittest.TestCase):
+    """Read Device Identification (function 0x2B, MEI type 0x0E) on raw frames."""
+
+    def setUp(self):
+        # basic objects 0 to 2, regular objects 3 to 6 (empty by default), extended objects 0x80 and 0x82
+        self.device_id = DeviceIdentification(vendor_name=b'v', product_code=b'p', major_minor_revision=b'1',
+                                              objects_id={0x80: b'x', 0x82: b'z'})
+        server = ModbusServer(host='127.0.0.1', port=0, no_block=True, device_id=self.device_id)
+        host, port = server.start()
+        self.addCleanup(server.stop)
+        self.sock = socket.create_connection((host, port), timeout=5)
+        self.addCleanup(self.sock.close)
+
+    def _recv(self, size):
+        data = b''
+        while len(data) < size:
+            chunk = self.sock.recv(size - len(data))
+            self.assertTrue(chunk, 'connection closed by server')
+            data += chunk
+        return data
+
+    def exchange(self, pdu_hex):
+        """Send a PDU (as hex string) in a frame to the server and return the response PDU as hex string."""
+        pdu = bytes.fromhex(pdu_hex)
+        self.sock.sendall(b'\x00\x01\x00\x00' + (len(pdu) + 1).to_bytes(2, 'big') + b'\x01' + pdu)
+        header = self._recv(7)
+        return self._recv(int.from_bytes(header[4:6], 'big') - 1).hex()
+
+    def objects(self, pdu_hex):
+        """Send a request, check the response format and return (object ids, more follows, next object id)."""
+        resp = bytes.fromhex(self.exchange(pdu_hex))
+        self.assertEqual(resp[:3], bytes.fromhex(pdu_hex)[:3], 'not a regular response')
+        ids = []
+        offset = 7
+        for _ in range(resp[6]):
+            ids.append(resp[offset])
+            offset += 2 + resp[offset + 1]
+        self.assertEqual(offset, len(resp))
+        return ids, resp[4], resp[5]
+
+    def test_stream_access(self):
+        self.assertEqual(self.objects('2b 0e 01 00'), ([0, 1, 2], 0, 0))
+        self.assertEqual(self.objects('2b 0e 01 01'), ([1, 2], 0, 0))
+        self.assertEqual(self.objects('2b 0e 02 03'), ([3, 4, 5, 6], 0, 0))
+        self.assertEqual(self.objects('2b 0e 02 05'), ([5, 6], 0, 0))
+        self.assertEqual(self.objects('2b 0e 03 80'), ([0x80, 0x82], 0, 0))
+        self.assertEqual(self.objects('2b 0e 03 82'), ([0x82], 0, 0))
+
+    def test_stream_access_restart(self):
+        """An object id that isn't a known object of the requested category: the stream restarts at its first one."""
+        for pdu, ids in (('2b 0e 01 05', [0, 1, 2]), ('2b 0e 01 ff', [0, 1, 2]),
+                         ('2b 0e 02 00', [3, 4, 5, 6]), ('2b 0e 02 50', [3, 4, 5, 6]),
+                         ('2b 0e 03 00', [0x80, 0x82]), ('2b 0e 03 81', [0x80, 0x82])):
+            with self.subTest(pdu):
+                self.assertEqual(self.objects(pdu), (ids, 0, 0))
+
+    def test_stream_access_more_follows(self):
+        """A stream that doesn't fit in a response is continued with the next object id given by the server."""
+        self.device_id[0x81] = b'a' * 200
+        self.device_id[0x82] = b'b' * 200
+        self.assertEqual(self.objects('2b 0e 03 00'), ([0x80, 0x81], 0xff, 0x82))
+        self.assertEqual(self.objects('2b 0e 03 82'), ([0x82], 0, 0))
+
+    def test_individual_access(self):
+        self.assertEqual(self.exchange('2b 0e 04 82'), '2b0e048300000182017a')
+        self.assertEqual(self.objects('2b 0e 04 05'), ([5], 0, 0))
+        # an unknown object is an ILLEGAL DATA ADDRESS (02)
+        for obj_id in ('07', '7f', '81', 'ff'):
+            with self.subTest(obj_id=obj_id):
+                self.assertEqual(self.exchange(f'2b 0e 04 {obj_id}'), 'ab02')
+        # the session is still in sync
+        self.assertEqual(self.objects('2b 0e 04 00'), ([0], 0, 0))
+
+    def test_bad_requests(self):
+        # unknown ReadDevId code: ILLEGAL DATA VALUE (03)
+        for code in ('00', '05', 'ff'):
+            self.assertEqual(self.exchange(f'2b 0e {code} 00'), 'ab03')
+        # another MEI type: ILLEGAL DATA ADDRESS (02), as before
+        self.assertEqual(self.exchange('2b 0d 01 00'), 'ab02')
 
 
 """Test safe start/stop sequences."""

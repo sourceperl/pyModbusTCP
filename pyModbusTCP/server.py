@@ -565,6 +565,11 @@ class DeviceIdentification:
         else:
             raise ValueError('key not in valid range (0 to 255)')
 
+    def __contains__(self, key: object) -> bool:
+        # without it, "in" would iterate with __getitem__(0, 1, 2...) until a KeyError escapes
+        with self._objs_lock:
+            return key in self._objs_d
+
     def __repr__(self) -> str:
         named_params = ''
         # add named parameters
@@ -664,6 +669,8 @@ class ModbusServer:
 
     # interval (in s) at which the main server loop checks for a stop request: this is the max latency of stop()
     _SERVE_POLL_INTERVAL: float = 0.05
+    # read device identification, stream access: ReadDevId code -> (first, last) object id of its category
+    _DEVICE_ID_STREAM_RANGES: Dict[int, Tuple[int, int]] = {1: (0x00, 0x02), 2: (0x03, 0x7f), 3: (0x80, 0xff)}
 
     class Error(Exception):
         """ Base exception for ModbusServer related errors. """
@@ -1473,9 +1480,10 @@ class ModbusServer:
         # decode pdu
         (start_addr, quantity_bits, byte_count) = recv_pdu.unpack('>HHB', from_byte=1, to_byte=6)
         # ok flags: some tests on pdu fields
+        # (byte count must match the quantity, the data must be complete, any extra bytes after them are ignored)
         qty_bits_ok = 0x0001 <= quantity_bits <= 0x07B0
-        b_count_ok = byte_count >= (quantity_bits + 7) // 8
-        pdu_len_ok = len(recv_pdu.raw[6:]) >= byte_count
+        b_count_ok = byte_count == (quantity_bits + 7) // 8
+        pdu_len_ok = len(recv_pdu) >= 6 + byte_count
         # test ok flags
         if qty_bits_ok and b_count_ok and pdu_len_ok:
             # bits list from rx frame
@@ -1503,13 +1511,14 @@ class ModbusServer:
         # decode pdu
         (start_addr, quantity_regs, byte_count) = recv_pdu.unpack('>HHB', from_byte=1, to_byte=6)
         # ok flags: some tests on pdu fields
+        # (byte count must match the quantity, the data must be complete, any extra bytes after them are ignored)
         qty_regs_ok = 0x0001 <= quantity_regs <= 0x007B
         b_count_ok = byte_count == quantity_regs * 2
-        pdu_len_ok = len(recv_pdu.raw[6:]) >= byte_count
+        pdu_len_ok = len(recv_pdu) >= 6 + byte_count
         # test ok flags
         if qty_regs_ok and b_count_ok and pdu_len_ok:
             # words list from rx frame
-            regs_l = list(recv_pdu.unpack('>%dH' % quantity_regs, from_byte=6, to_byte=6 + quantity_regs * 2))
+            regs_l = list(recv_pdu.unpack('>%dH' % quantity_regs, from_byte=6, to_byte=6 + byte_count))
             # data handler update request
             ret_hdl = self.data_hdl.write_h_regs(start_addr, regs_l, session_data.srv_info)
             # format regular or except response
@@ -1537,21 +1546,25 @@ class ModbusServer:
          write_quantity_regs,
          byte_count) = recv_pdu.unpack('>HHHHB', from_byte=1, to_byte=10)
         # ok flags: some tests on pdu fields
+        # (byte count must match the quantity, the data must be complete, any extra bytes after them are ignored)
         write_qty_regs_ok = 0x0001 <= write_quantity_regs <= 0x0079
         write_b_count_ok = byte_count == write_quantity_regs * 2
-        write_pdu_len_ok = len(recv_pdu.raw[10:]) >= byte_count
+        write_pdu_len_ok = len(recv_pdu) >= 10 + byte_count
         read_qty_regs_ok = 0x0001 <= read_quantity_regs <= 0x007D
         # test ok flags
         if not (write_qty_regs_ok and write_b_count_ok and write_pdu_len_ok and read_qty_regs_ok):
             send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
             return
         # words list from rx frame
-        regs_l = list(recv_pdu.unpack('>%dH' % write_quantity_regs,
-                                      from_byte=10, to_byte=10 + write_quantity_regs * 2))
+        regs_l = list(recv_pdu.unpack('>%dH' % write_quantity_regs, from_byte=10, to_byte=10 + byte_count))
         # gratuitous read to check error status (avoid to write if read fail)
         ret_hdl_read = self.data_hdl.read_h_regs(read_start_addr, read_quantity_regs, session_data.srv_info)
-        if not ret_hdl_read.ok or ret_hdl_read.data is None:
+        if not ret_hdl_read.ok:
             send_pdu.build_except(recv_pdu.func_code, ret_hdl_read.exp_code)
+            return
+        # a handler that returns "ok" without the requested data: never answer with the (invalid) exception code 0
+        if self._checked_read_data(recv_pdu.func_code, read_quantity_regs, ret_hdl_read.data) is None:
+            send_pdu.build_except(recv_pdu.func_code, EXP_SLAVE_DEVICE_FAILURE)
             return
         # do write
         ret_hdl_write = self.data_hdl.write_h_regs(write_start_addr, regs_l, session_data.srv_info)
@@ -1584,65 +1597,56 @@ class ModbusServer:
         send_pdu = session_data.response.pdu
         # decode pdu
         (mei_type,) = recv_pdu.unpack('B', from_byte=1, to_byte=2)
-        # MEI type: read device identification
-        if mei_type == MEI_TYPE_READ_DEVICE_ID:
-            # check device_id property is set (default is None)
-            if not self.device_id:
-                # return except 2 if unset
+        # MEI type: only read device identification is supported, return except 2 for an unknown one
+        if mei_type != MEI_TYPE_READ_DEVICE_ID:
+            send_pdu.build_except(recv_pdu.func_code, EXP_DATA_ADDRESS)
+            return
+        (device_id_code, object_id) = recv_pdu.unpack('BB', from_byte=2, to_byte=4)
+        # return except 3 for unknown device id code
+        if device_id_code not in (1, 2, 3, 4):
+            send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
+            return
+        # check device_id property is set (default is None), return except 2 if unset
+        if self.device_id is None:
+            send_pdu.build_except(recv_pdu.func_code, EXP_DATA_ADDRESS)
+            return
+        if device_id_code == 4:
+            # individual access: an unknown object is an illegal data address (except 2)
+            if object_id not in self.device_id:
                 send_pdu.build_except(recv_pdu.func_code, EXP_DATA_ADDRESS)
                 return
-            # list of requested objects
-            req_objects_l: List[Tuple[int, bytes]] = list()
-            (device_id_code, object_id) = recv_pdu.unpack('BB', from_byte=2, to_byte=4)
-            # get basic device id (object id from 0x00 to 0x02)
-            if device_id_code == 1:
-                start_id = object_id
-                req_objects_l.extend(self.device_id.items(start=start_id, end=0x2))
-            # get regular device id (object id 0x03 to 0x7f)
-            elif device_id_code == 2:
-                start_id = max(object_id, 0x03)
-                req_objects_l.extend(self.device_id.items(start=start_id, end=0x7f))
-            # get extended device id (object id 0x80 to 0xff)
-            elif device_id_code == 3:
-                start_id = max(object_id, 0x80)
-                req_objects_l.extend(self.device_id.items(start=start_id, end=0xff))
-            # get specific id object
-            elif device_id_code == 4:
-                start_id = object_id
-                req_objects_l.extend(self.device_id.items(start=start_id, end=start_id))
-            else:
-                # return except 3 for unknown device id code
-                send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
-                return
-            # init variables for response PDU build
-            conformity_level = 0x83
-            more_follow = 0
-            next_obj_id = 0
-            number_of_objs = 0
-            fmt_pdu_head = 'BBBBBBB'
-            # format objects data part = [[obj id, obj len, obj val], ...]
-            obj_data_part = b''
-            for req_obj_id, req_obj_value in req_objects_l:
-                fmt_obj_blk = 'BB%ds' % len(req_obj_value)
-                # skip if the next add to data part will exceed max PDU size of modbus frame
-                if struct.calcsize(fmt_pdu_head) + len(obj_data_part) + struct.calcsize(fmt_obj_blk) > MAX_PDU_SIZE:
-                    # turn on "more follow" field and set "next object id" field with next object id to ask
-                    more_follow = 0xff
-                    next_obj_id = req_obj_id
-                    break
-                # ensure bytes type for object value
-                if isinstance(req_obj_value, str):
-                    req_obj_value = req_obj_value.encode()
-                # add current object to data part
-                obj_data_part += struct.pack(fmt_obj_blk, req_obj_id, len(req_obj_value), req_obj_value)
-                number_of_objs += 1
-            # full PDU response = [PDU header] + [objects data part]
-            send_pdu.add_pack(fmt_pdu_head, recv_pdu.func_code, mei_type, device_id_code,
-                              conformity_level, more_follow, next_obj_id, number_of_objs)
-            send_pdu.raw += obj_data_part
+            req_objects_l = self.device_id.items(start=object_id, end=object_id)
         else:
-            # return except 2 for an unknown MEI type
-            send_pdu.build_except(recv_pdu.func_code, EXP_DATA_ADDRESS)
+            # stream access: basic (code 1), regular (code 2) or extended (code 3) objects
+            first_id, last_id = self._DEVICE_ID_STREAM_RANGES[device_id_code]
+            # an object id that is not a known object of the category: restart at its first object (as the spec
+            # requires for object 0)
+            if not (first_id <= object_id <= last_id and object_id in self.device_id):
+                object_id = first_id
+            req_objects_l = self.device_id.items(start=object_id, end=last_id)
+        # init variables for response PDU build
+        conformity_level = 0x83
+        more_follow = 0
+        next_obj_id = 0
+        number_of_objs = 0
+        fmt_pdu_head = 'BBBBBBB'
+        # format objects data part = [[obj id, obj len, obj val], ...]
+        obj_data_part = b''
+        for req_obj_id, req_obj_value in req_objects_l:
+            fmt_obj_blk = 'BB%ds' % len(req_obj_value)
+            # skip if the next add to data part will exceed max PDU size of modbus frame
+            if struct.calcsize(fmt_pdu_head) + len(obj_data_part) + struct.calcsize(fmt_obj_blk) > MAX_PDU_SIZE:
+                # turn on "more follow" field and set "next object id" field with next object id to ask
+                more_follow = 0xff
+                next_obj_id = req_obj_id
+                break
+            # add current object to data part (DeviceIdentification only stores bytes)
+            obj_data_part += struct.pack(fmt_obj_blk, req_obj_id, len(req_obj_value), req_obj_value)
+            number_of_objs += 1
+        # full PDU response = [PDU header] + [objects data part]
+        send_pdu.add_pack(fmt_pdu_head, recv_pdu.func_code, mei_type, device_id_code,
+                          conformity_level, more_follow, next_obj_id, number_of_objs)
+        send_pdu.raw += obj_data_part
 
     def start(self) -> Tuple[str, int]:
         """Start the server.
