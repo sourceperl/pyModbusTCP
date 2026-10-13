@@ -8,6 +8,7 @@ import math
 import socket
 import struct
 import time
+import warnings
 from socketserver import BaseRequestHandler, ThreadingTCPServer
 from threading import Lock, RLock, Thread, current_thread
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
@@ -1172,6 +1173,8 @@ class ModbusServer:
     @property
     def is_run(self) -> bool:
         """Deprecated: use is_running."""
+        warnings.warn('ModbusServer.is_run is deprecated, use is_running instead',
+                      DeprecationWarning, stacklevel=2)
         return self.is_running
 
     @property
