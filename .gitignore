@@ -1,9 +1,10 @@
-/MANIFEST
-/build/
-/dist/
-/lab/
+build/
+dist/
 *.pyc
 *.egg-info/
+
 /.idea/
 /.vscode/
+
 /venv/
+/lab/
