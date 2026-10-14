@@ -60,7 +60,7 @@ fi
 
 if [[ ! -d "$VENV_DIR" ]]; then
     echo "==> Creating venv: $VENV_DIR"
-    "$PYTHON" -m venv "$VENV_DIR"
+    "$PYTHON" -m venv --copies "$VENV_DIR"
 fi
 
 VENV_PY="$VENV_DIR/bin/python"

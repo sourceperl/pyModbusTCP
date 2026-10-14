@@ -32,6 +32,9 @@ HOW A REQUEST IS PROCESSED
 
 ERRORS SEEN BY THE TCP CLIENT
 -----------------------------
+- Request refused by the gateway filters (see ACCESS CONTROL): Modbus exception
+  0x01 "Illegal Function" (--read-only) or 0x0A "Gateway Path Unavailable"
+  (unit id 0 without --allow-broadcast, or reserved unit id 248 to 255).
 - No valid answer from the slave before the timeout (-t): Modbus exception
   0x0B "Gateway Target Device Failed To Respond".
 - More than 5 requests waiting, or serial worker unavailable: Modbus exception
@@ -47,24 +50,42 @@ The port must however be openable at startup, otherwise the gateway exits.
 Exit codes: 0 normal stop (Ctrl-C), 1 serial port cannot be opened at startup,
 2 Modbus server error.
 
+ACCESS CONTROL
+--------------
+Modbus has no authentication: any client that can reach the gateway can drive
+every slave of the serial line. The gateway handles each request itself (it is
+an "external engine" of ModbusServer), so it applies its own filters:
+- By default the server only listens on localhost; use -H to listen on the
+  address of the network interface that needs it (or 0.0.0.0 for all of them).
+- -A/--allow (repeatable) restricts the clients to some IP addresses or
+  networks (like -A 192.168.1.10 -A 10.0.0.0/24), others are disconnected.
+- --read-only only relays the read functions (0x01 to 0x04 and read device
+  identification 0x2B/0x0E), every other function gets exception 0x01.
+- Broadcast requests (unit id 0) are a write to every slave of the bus: they
+  are refused unless --allow-broadcast is set (and refused with --read-only).
+  Unit ids 248 to 255 are reserved on a serial line and always refused.
+
 LIMITATIONS
 -----------
-- Broadcast requests (unit id 0) are not supported: slaves never answer them,
-  so the client gets exception 0x0B.
+- Slaves never answer a broadcast request (--allow-broadcast): the client
+  gets exception 0x0B once the timeout has expired.
 - Throughput is limited by the serial line: requests are served one at a time.
-- By default the server only listens on localhost; use -H 0.0.0.0 to accept
-  connections from the network.
 
 USAGE
 -----
-Run this as root to listen on TCP privileged ports (<= 1024), or choose a
-higher port with -p.
+Port 502 (the default Modbus/TCP port) is a privileged port on Unix systems.
+Never run this script as root (or with sudo) to listen on it: give the
+CAP_NET_BIND_SERVICE capability to the interpreter of a dedicated virtual
+environment, or use a port above 1023 (-p 5020).
+See "Listen on the standard Modbus port 502 without root" in examples/README.md.
 
-Open /dev/ttyUSB0 at 115200 bauds and relay Modbus/TCP requests to RTU slave(s):
-$ sudo ./modbus_tcp_to_rtu_gw.py --baudrate 115200 /dev/ttyUSB0
+Open /dev/ttyUSB0 at 115200 bauds and relay Modbus/TCP requests (on localhost,
+port 5020) to RTU slave(s):
+$ ./modbus_tcp_to_rtu_gw.py -p 5020 --baudrate 115200 /dev/ttyUSB0
 
-Same, reachable from the network, 8E1 serial format, on TCP port 5020:
-$ ./modbus_tcp_to_rtu_gw.py -H 0.0.0.0 -p 5020 -b 19200 --parity E /dev/ttyUSB0
+Same, reachable from one network only, read-only, 8E1 serial format:
+$ ./modbus_tcp_to_rtu_gw.py -H 0.0.0.0 -p 5020 -A 192.168.1.0/24 --read-only \
+    -b 19200 --parity E /dev/ttyUSB0
 
 Add -d (--debug) to log every RTU frame exchanged on the serial line, as a
 hex dump (Tx = gateway to slave, Rx = slave to gateway), e.g.:
@@ -75,6 +96,7 @@ See --help for all options.
 """
 
 import argparse
+import ipaddress
 import logging
 import queue
 import struct
@@ -88,8 +110,15 @@ from typing import Optional, Tuple, Type
 from serial import PARITY_EVEN, PARITY_NONE, PARITY_ODD, Serial, serialutil
 
 from pyModbusTCP.constants import (
+    ENCAPSULATED_INTERFACE_TRANSPORT,
     EXP_GATEWAY_PATH_UNAVAILABLE,
     EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND,
+    EXP_ILLEGAL_FUNCTION,
+    MEI_TYPE_READ_DEVICE_ID,
+    READ_COILS,
+    READ_DISCRETE_INPUTS,
+    READ_HOLDING_REGISTERS,
+    READ_INPUT_REGISTERS,
 )
 from pyModbusTCP.server import ModbusServer
 from pyModbusTCP.utils import crc16
@@ -117,6 +146,22 @@ QUEUE_SIZE = 5
 # lower bound for the end-of-frame delay: USB-serial adapters add latency
 # (e.g. FTDI latency timer), so the theoretical 3.5 char time is too short
 MIN_EOF_DELAY = 0.02
+# functions relayed in read-only mode (a whitelist: an unknown function may write)
+# 0x2B is only allowed for MEI type 0x0E (read device identification), see ModbusSerialWorker.is_allowed()
+READ_ONLY_FUNCTIONS = (READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS,
+                       ENCAPSULATED_INTERFACE_TRANSPORT)
+# unit id 0 is the broadcast address of a serial line, 248 to 255 are reserved
+BROADCAST_ADDRESS = 0
+MAX_SLAVE_ADDRESS = 247
+
+
+def ip_or_network(value: str) -> str:
+    """argparse type for -A: check that value is an IP address or a network (like 10.0.0.0/24)."""
+    try:
+        ipaddress.ip_network(value.strip(), strict=False)
+    except ValueError:
+        raise argparse.ArgumentTypeError('%r is not an IP address or a network' % value) from None
+    return value
 
 
 def hexdump(data: bytes) -> str:
@@ -202,10 +247,14 @@ class RtuQuery:
 class ModbusSerialWorker:
     """A serial worker to manage I/O with RTU devices."""
 
-    def __init__(self, port: Serial, timeout: float = 1.0, end_of_frame: Optional[float] = None) -> None:
+    def __init__(self, port: Serial, timeout: float = 1.0, end_of_frame: Optional[float] = None,
+                 allow_broadcast: bool = False, read_only: bool = False) -> None:
         # public
         self.serial_port = port
         self.timeout = timeout
+        # request filters (see is_allowed())
+        self.allow_broadcast = allow_broadcast
+        self.read_only = read_only
         # silent interval between two frames on the bus
         self.interframe_delay = t35(port.baudrate, port.bytesize, port.parity, port.stopbits)
         # end of frame delay: auto-computed from baudrate if not set
@@ -330,12 +379,44 @@ class ModbusSerialWorker:
             rtu_query.completed.set()
             self.rtu_queries_q.task_done()
 
+    def is_allowed(self, unit_id: int, pdu: bytes) -> int:
+        """Apply the gateway filters to a request.
+
+        :param unit_id: unit id of the request (the RTU slave address)
+        :param pdu: request PDU (at least the function code)
+        :return: 0 if the request can be relayed, else the modbus exception code to return
+        """
+        # broadcast: a write to every slave of the bus (never allowed in read-only mode)
+        if unit_id == BROADCAST_ADDRESS and (self.read_only or not self.allow_broadcast):
+            return EXP_GATEWAY_PATH_UNAVAILABLE
+        # reserved addresses on a serial line
+        if unit_id > MAX_SLAVE_ADDRESS:
+            return EXP_GATEWAY_PATH_UNAVAILABLE
+        if self.read_only:
+            func_code = pdu[0]
+            if func_code not in READ_ONLY_FUNCTIONS:
+                return EXP_ILLEGAL_FUNCTION
+            # 0x2B: other MEI types (like CANopen general reference 0x0D) can write
+            if func_code == ENCAPSULATED_INTERFACE_TRANSPORT and pdu[1:2] != bytes([MEI_TYPE_READ_DEVICE_ID]):
+                return EXP_ILLEGAL_FUNCTION
+        return 0
+
     def srv_engine_entry(self, session_data: ModbusServer.SessionData) -> None:
         """Server engine entry point (pass request to serial worker queries queue).
 
         :param session_data: server session data
         :type session_data: ModbusServer.SessionData
         """
+        # gateway filters: refused requests never reach the serial line
+        unit_id = session_data.request.mbap.unit_id
+        req_pdu = session_data.request.pdu.raw
+        exp_status = self.is_allowed(unit_id, req_pdu)
+        if exp_status:
+            logger.info('Request refused (unit %d, function 0x%02X, exception 0x%02X) from %s',
+                        unit_id, req_pdu[0], exp_status, session_data.client.address)
+            # a request function code can't have the exception flag (bit 7) set
+            session_data.response.pdu.build_except(func_code=req_pdu[0] & 0x7F, exp_status=exp_status)
+            return
         # init a serial exchange from session data
         rtu_query = RtuQuery()
         rtu_query.request.build(raw_pdu=session_data.request.pdu.raw,
@@ -371,6 +452,13 @@ def main() -> int:
     parser.add_argument('device', type=str, help='serial device (like /dev/ttyUSB0)')
     parser.add_argument('-H', '--host', type=str, default='localhost', help='host (default: localhost)')
     parser.add_argument('-p', '--port', type=int, default=502, help='TCP port (default: 502)')
+    parser.add_argument('-A', '--allow', action='append', type=ip_or_network, metavar='IP_OR_NETWORK',
+                        help='allowed client IP address or network (like 10.0.0.0/24), repeatable '
+                             '(default: every client)')
+    parser.add_argument('--read-only', action='store_true',
+                        help='only relay read functions (0x01 to 0x04, 0x2B/0x0E)')
+    parser.add_argument('--allow-broadcast', action='store_true',
+                        help='relay broadcast requests (unit id 0) to every slave')
     parser.add_argument('-b', '--baudrate', type=int, default=9600, help='serial rate (default is 9600)')
     parser.add_argument('--bytesize', type=int, choices=(7, 8), default=8, help='data bits (default is 8)')
     parser.add_argument('--parity', choices=('N', 'E', 'O'), default='N', help='parity (default is N)')
@@ -398,13 +486,20 @@ def main() -> int:
                              stopbits=args.stopbits)
 
         # init serial worker
-        serial_worker = ModbusSerialWorker(serial_port, args.timeout, args.eof)
+        serial_worker = ModbusSerialWorker(serial_port, args.timeout, args.eof,
+                                           allow_broadcast=args.allow_broadcast, read_only=args.read_only)
         logger.debug('Interframe delay %.4f s, end of frame delay %.4f s',
                      serial_worker.interframe_delay, serial_worker.end_of_frame)
 
         # start modbus server with custom engine
         logger.info('Start modbus server (%s, %d)', args.host, args.port)
-        srv = ModbusServer(host=args.host, port=args.port, no_block=True, ext_engine=serial_worker.srv_engine_entry,)
+        # note: ModbusServer read_only has no effect with an external engine, the serial worker filters itself
+        srv = ModbusServer(host=args.host, port=args.port, no_block=True, ext_engine=serial_worker.srv_engine_entry,
+                           allowed_hosts=args.allow)
+        if args.allow:
+            logger.info('Allowed clients: %s', ', '.join(srv.allowed_hosts or []))
+        if args.read_only:
+            logger.info('Read-only mode: only read functions are relayed')
         srv.start()
 
         # start serial worker loop
@@ -417,6 +512,10 @@ def main() -> int:
         return 1
     except ModbusServer.Error as e:
         logger.critical('Modbus server error: %r', e)
+        return 2
+    except ValueError as e:
+        # invalid parameter value (like a baudrate refused by the serial port)
+        logger.critical('Invalid parameter: %s', e)
         return 2
     except KeyboardInterrupt:
         logger.info('Interrupted, shutting down')

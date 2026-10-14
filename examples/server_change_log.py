@@ -3,7 +3,16 @@
 """
 An example of Modbus/TCP server with a change logger.
 
-Run this as root to listen on TCP privileged ports (<= 1024).
+Port 502 (the default Modbus/TCP port) is a privileged port on Unix systems.
+Never run this script as root (or with sudo) to listen on it: give the
+CAP_NET_BIND_SERVICE capability to the interpreter of a dedicated virtual
+environment, or use a port above 1023 (-p 5020).
+See "Listen on the standard Modbus port 502 without root" in examples/README.md.
+
+The server listens on localhost by default. Add "--host" with the address of a
+network interface to accept remote clients (or 0.0.0.0 for all IPv4 interfaces,
+only if every network of the host is trusted).
+$ ./server.py --host 192.168.1.10 --port 5020
 """
 
 import argparse
@@ -42,4 +51,7 @@ if __name__ == '__main__':
 
     # init modbus server and start it
     server: ModbusServer = ModbusServer(host=args.host, port=args.port, data_bank=MyDataBank())
-    server.start()
+    try:
+        server.start()
+    except KeyboardInterrupt:
+        pass

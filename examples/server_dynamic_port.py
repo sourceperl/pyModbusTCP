@@ -22,9 +22,9 @@ logging.basicConfig(level=logging.INFO,
 logging.getLogger('pyModbusTCP.server').setLevel(logging.CRITICAL)
 
 # Server Configuration
-# For IPv4: host="0.0.0.0", ipv6=False
-# For IPv6 / Dual-stack: host="::", ipv6=True
-server = ModbusServer(host='0.0.0.0', port=0, no_block=True, ipv6=False)
+# listen on localhost only: to accept remote clients, use the address of a network interface
+# (or "0.0.0.0" for all IPv4 interfaces, "::" with ipv6=True for IPv6, only on trusted networks)
+server = ModbusServer(host='localhost', port=0, no_block=True, ipv6=False)
 
 try:
     host, port = server.start()
