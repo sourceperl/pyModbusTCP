@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+# This package contains no code: it only installs the commands of the tools of pyModbusTCP (module pyModbusTCP.tools)
+# and their optional dependency (pyserial). A plain "pip install pyModbusTCP" puts no command in the PATH.
+
+[project]
+name = "pyModbusTCP-tools"
+# version and dependencies: set by setup.py from the version of pyModbusTCP (../pyModbusTCP/constants.py), the two
+# packages are always released together with the same version
+dynamic = ["version", "dependencies"]
+description = "Command line tools for pyModbusTCP: Modbus/TCP server, client and Modbus TCP/RTU gateways"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Loic Lefebvre" }]
+license = "MIT"
+license-files = ["LICENSE*"]
+
+[project.scripts]
+mbtcp-server = "pyModbusTCP.tools._entry:run_server"
+mbtcp-client = "pyModbusTCP.tools._entry:run_client"
+mbtcp-tcp2rtu = "pyModbusTCP.tools._entry:run_tcp2rtu"
+mbtcp-rtu2tcp = "pyModbusTCP.tools._entry:run_rtu2tcp"
+
+[project.urls]
+Source = "https://github.com/sourceperl/pyModbusTCP"
+Issues = "https://github.com/sourceperl/pyModbusTCP/issues"
+
+[tool.setuptools]
+# no code in this package (see above)
+packages = []

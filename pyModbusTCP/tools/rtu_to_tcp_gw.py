@@ -1,8 +1,9 @@
-#!/usr/bin/env python3
-
 """
-Modbus/RTU -> Modbus/TCP gateway
-================================
+mbtcp-rtu2tcp: Modbus/RTU -> Modbus/TCP gateway
+===============================================
+
+Run it as "mbtcp-rtu2tcp" (pyModbusTCP-tools package) or "python -m pyModbusTCP.tools rtu2tcp".
+It needs pyserial: pip install "pyModbusTCP[serial]" (installed with pyModbusTCP-tools).
 
 WHAT IT DOES
 ------------
@@ -13,7 +14,7 @@ available on the network.
 The script is a Modbus/RTU *slave* on the serial side and a Modbus/TCP
 *client* on the network side. It translates each request from one protocol to
 the other and returns the answer to the master. It is the reverse of
-modbus_tcp_to_rtu_gw.py::
+mbtcp-tcp2rtu::
 
      serial line              this modbus gateway                     network
     -------------      -----------------------------------       -----------------
@@ -60,15 +61,15 @@ USAGE
 -----
 Open /dev/ttyUSB0 at 115200 bauds and relay RTU requests for slave address 30
 to the Modbus/TCP server running on localhost:502:
-$ ./modbus_rtu_to_tcp_gw.py --baudrate 115200 --address 30 /dev/ttyUSB0
+$ mbtcp-rtu2tcp --baudrate 115200 --address 30 /dev/ttyUSB0
 
 Same, with a server on the network (unit id 1), 8E1 serial format:
-$ ./modbus_rtu_to_tcp_gw.py -b 19200 --parity E -a 30 -H 192.168.1.10 -p 502 /dev/ttyUSB0
+$ mbtcp-rtu2tcp -b 19200 --parity E -a 30 -H 192.168.1.10 -p 502 /dev/ttyUSB0
 
 Add -d (--debug) to log every RTU frame exchanged on the serial line, as a
 hex dump (Rx = master to gateway, Tx = gateway to master), e.g.:
-    DEBUG [modbus_rtu_to_tcp_gw] RTU Rx [8 bytes] 1e 03 00 00 00 01 8f 8d (CRC OK)
-    DEBUG [modbus_rtu_to_tcp_gw] RTU Tx [7 bytes] 1e 03 02 12 34 4d f6
+    DEBUG [mbtcp-rtu2tcp       ] RTU Rx [8 bytes] 1e 03 00 00 00 01 8f 8d (CRC OK)
+    DEBUG [mbtcp-rtu2tcp       ] RTU Tx [7 bytes] 1e 03 02 12 34 4d f6
 
 See --help for all options.
 """
@@ -79,17 +80,29 @@ import struct
 import sys
 import time
 from threading import Event
-from typing import Optional, Tuple, Type
+from typing import List, Optional, Tuple, Type
 
-# pip install pyserial==3.5
-from serial import PARITY_EVEN, PARITY_NONE, PARITY_ODD, Serial, serialutil
+from ._common import (
+    SERIAL_MISSING_MSG,
+    add_version_arg,
+    tcp_port,
+)
 
-from pyModbusTCP.client import ModbusClient
-from pyModbusTCP.constants import (
+try:
+    from serial import PARITY_EVEN, PARITY_NONE, PARITY_ODD, Serial, serialutil
+except ModuleNotFoundError as _exc:
+    # pyserial is optional: give the way to install it instead of a bare "No module named 'serial'"
+    if _exc.name != 'serial':
+        raise
+    raise ModuleNotFoundError(SERIAL_MISSING_MSG, name='serial') from _exc
+
+from ..client import ModbusClient
+from ..constants import (
     EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND,
     MB_EXCEPT_ERR,
 )
-from pyModbusTCP.utils import crc16
+from ..utils import crc16
+
 
 # exceptions raised by the serial port when the device is lost (explicit type,
 # so both branches below have the same type for mypy)
@@ -103,7 +116,7 @@ try:
 except ImportError:
     pass
 
-logger = logging.getLogger("modbus_rtu_to_tcp_gw")
+logger = logging.getLogger("mbtcp-rtu2tcp")
 
 # delay between two attempts to reopen a lost serial port (seconds)
 RECONNECT_DELAY = 1.0
@@ -258,7 +271,7 @@ class SlaveSerialWorkerModel:
         port = self.serial_port
         # wait for the first byte of data (periodically wake up to check the stop flag)
         port.timeout = IDLE_POLL_DELAY
-        rx_raw = port.read(1)
+        rx_raw: bytes = port.read(1)
         # if ok, wait for the remaining until the line is silent for end of frame delay.
         # Note: pyserial ignores inter_byte_timeout on POSIX, and read(n) waits for n bytes
         # or the full timeout, so read what is already buffered (or 1 byte) in a loop.
@@ -370,9 +383,9 @@ class SerialModbusWorker(SlaveSerialWorkerModel):
             logger.debug('Frame for slave %d ignored (gateway is slave %d)', req.slave_addr, self.slave_addr)
 
 
-def main() -> int:
+def main(argv: Optional[List[str]] = None) -> int:
     # parse args
-    parser = argparse.ArgumentParser(description='Modbus/RTU to Modbus/TCP gateway')
+    parser = argparse.ArgumentParser(prog='mbtcp-rtu2tcp', description='Modbus/RTU to Modbus/TCP gateway')
     parser.add_argument('serial_device', type=str, help='serial device (like /dev/ttyUSB0)')
     parser.add_argument('-d', '--debug', action='store_true', help='debug mode')
     parser.add_argument('-a', '--address', type=int, default=1, help='slave address (default is 1)')
@@ -385,10 +398,11 @@ def main() -> int:
                         help='serial end of frame delay in s (default: computed from baudrate, min %.3f s)'
                         % MIN_EOF_DELAY)
     parser.add_argument('-H', '--host', type=str, default='localhost', help='server host (default: localhost)')
-    parser.add_argument('-p', '--port', type=int, default=502, help='server TCP port (default: 502)')
+    parser.add_argument('-p', '--port', type=tcp_port, default=502, help='server TCP port (default: 502)')
     parser.add_argument('-u', '--unit-id', type=int, default=1, help='server unit id (default: 1)')
     parser.add_argument('-t', '--timeout', type=float, default=1.0, help='server timeout delay in s (default: 1.0)')
-    args = parser.parse_args()
+    add_version_arg(parser)
+    args = parser.parse_args(argv)
 
     # init logging
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO,

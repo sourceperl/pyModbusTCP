@@ -22,6 +22,13 @@ Revision history for pyModbusTCP
 
     Changes:
 
+    - new module pyModbusTCP.tools: command line tools (Modbus/TCP server and client, TCP to RTU and RTU to TCP
+      gateways), run them with "python -m pyModbusTCP.tools {server,client,tcp2rtu,rtu2tcp}". The gateways need
+      pyserial, a new optional dependency: "pip install pyModbusTCP[serial]".
+    - new package pyModbusTCP-tools (directory of the same name, no code): installs the tools as the commands
+      mbtcp-server, mbtcp-client, mbtcp-tcp2rtu and mbtcp-rtu2tcp, with pyserial. Install it with
+      "pip install pyModbusTCP[tools]" or "pipx install pyModbusTCP-tools". A plain "pip install pyModbusTCP" puts
+      no command in the PATH and still has no dependency.
     - build: migrate from setup.py to pyproject.toml.
     - fix ModbusClient: is_open is now False only for a closed socket (file descriptor 0 is valid).
     - fix ModbusClient: non-integer arguments (float, str...) now raise a TypeError instead of an uncaught struct.error.
@@ -52,7 +59,7 @@ Revision history for pyModbusTCP
     - fix ModbusServer: for functions 0x0F, 0x10 and 0x17 the byte count must exactly match the quantity.
     - fix ModbusServer: Read Device Identification (0x2B/0x0E) compliance with the spec (stream access restarts at the
                         first object of the category, an unknown object in individual access gets exception 0x02).
-    - fix ModbusServer: support MBAP header length from 2 to 254.
+    - fix ModbusServer: support MBAP header length from 2 to 253.
     - fix ModbusServer: limit client info to (address, port) for IPv6 peers.
     - fix DataBank: set_coils(), set_discrete_inputs(), set_holding_registers() and set_input_registers() now check
                     their input. Non-integer items (float, str, None...) raise a TypeError (numpy integers and

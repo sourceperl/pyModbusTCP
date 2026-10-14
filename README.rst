@@ -134,3 +134,29 @@ A server open to the network, with some access restrictions (see `SECURITY
     # only the hosts of the 192.168.1.0/24 network can connect, every write request is refused
     server = ModbusServer(host='0.0.0.0', port=5020, allowed_hosts=['192.168.1.0/24'], read_only=True)
     server.start()
+
+Command line tools
+------------------
+
+The library comes with command line tools: a Modbus/TCP server, a Modbus/TCP client, and two gateways between
+Modbus/TCP and Modbus/RTU (serial line). They run from the library itself:
+
+.. code-block:: bash
+
+    python -m pyModbusTCP.tools server --help
+    python -m pyModbusTCP.tools client -H 192.168.1.10 read-holding 0 -n 4
+
+    # the gateways need pyserial (an optional dependency)
+    pip install "pyModbusTCP[serial]"
+    python -m pyModbusTCP.tools tcp2rtu --help
+    python -m pyModbusTCP.tools rtu2tcp --help
+
+To have them as commands in the PATH (``mbtcp-server``, ``mbtcp-client``, ``mbtcp-tcp2rtu`` and ``mbtcp-rtu2tcp``),
+install the optional package pyModbusTCP-tools. A plain ``pip install pyModbusTCP`` puts no command in the PATH.
+
+.. code-block:: bash
+
+    # in a virtual environment, with the library
+    pip install "pyModbusTCP[tools]"
+    # or as isolated command line tools
+    pipx install pyModbusTCP-tools

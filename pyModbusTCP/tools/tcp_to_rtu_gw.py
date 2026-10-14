@@ -1,8 +1,9 @@
-#!/usr/bin/env python3
-
 """
-Modbus/TCP -> Modbus/RTU gateway
-================================
+mbtcp-tcp2rtu: Modbus/TCP -> Modbus/RTU gateway
+===============================================
+
+Run it as "mbtcp-tcp2rtu" (pyModbusTCP-tools package) or "python -m pyModbusTCP.tools tcp2rtu".
+It needs pyserial: pip install "pyModbusTCP[serial]" (installed with pyModbusTCP-tools).
 
 WHAT IT DOES
 ------------
@@ -16,7 +17,7 @@ the other and returns the answer to the client::
        network                   this modbus gateway                serial line
     --------------       ------------------------------------      -------------
       TCP client    -->  [ModbusServer]  [ModbusSerialWorker]  -->   RTU slave
-                            tcp/502        to /dev/ttyUSB0
+                            tcp/5020       to /dev/ttyUSB0
 
 HOW A REQUEST IS PROCESSED
 --------------------------
@@ -73,30 +74,30 @@ LIMITATIONS
 
 USAGE
 -----
-Port 502 (the default Modbus/TCP port) is a privileged port on Unix systems.
-Never run this script as root (or with sudo) to listen on it: give the
-CAP_NET_BIND_SERVICE capability to the interpreter of a dedicated virtual
-environment, or use a port above 1023 (-p 5020).
-See "Listen on the standard Modbus port 502 without root" in examples/README.md.
+The default TCP port is 5020: port 502 (the standard Modbus/TCP port) is a
+privileged port on Unix systems. Never run this command as root (or with sudo)
+to listen on it: give the CAP_NET_BIND_SERVICE capability to the interpreter of
+a dedicated virtual environment (see "Listen on the standard Modbus port 502
+without root" in the pyModbusTCP examples README).
+The user also needs access to the serial port (on Debian: group "dialout").
 
 Open /dev/ttyUSB0 at 115200 bauds and relay Modbus/TCP requests (on localhost,
 port 5020) to RTU slave(s):
-$ ./modbus_tcp_to_rtu_gw.py -p 5020 --baudrate 115200 /dev/ttyUSB0
+$ mbtcp-tcp2rtu --baudrate 115200 /dev/ttyUSB0
 
 Same, reachable from one network only, read-only, 8E1 serial format:
-$ ./modbus_tcp_to_rtu_gw.py -H 0.0.0.0 -p 5020 -A 192.168.1.0/24 --read-only \
+$ mbtcp-tcp2rtu -H 0.0.0.0 -A 192.168.1.0/24 --read-only \
     -b 19200 --parity E /dev/ttyUSB0
 
 Add -d (--debug) to log every RTU frame exchanged on the serial line, as a
 hex dump (Tx = gateway to slave, Rx = slave to gateway), e.g.:
-    DEBUG [modbus_tcp_to_rtu_gw] RTU Tx [8 bytes] 01 03 00 00 00 01 84 0a
-    DEBUG [modbus_tcp_to_rtu_gw] RTU Rx [7 bytes] 01 03 02 12 34 b5 33
+    DEBUG [mbtcp-tcp2rtu       ] RTU Tx [8 bytes] 01 03 00 00 00 01 84 0a
+    DEBUG [mbtcp-tcp2rtu       ] RTU Rx [7 bytes] 01 03 02 12 34 b5 33
 
 See --help for all options.
 """
 
 import argparse
-import ipaddress
 import logging
 import queue
 import struct
@@ -104,12 +105,26 @@ import sys
 import time
 from queue import Queue
 from threading import Event
-from typing import Optional, Tuple, Type
+from typing import List, Optional, Tuple, Type
 
-# pip install pyserial==3.5
-from serial import PARITY_EVEN, PARITY_NONE, PARITY_ODD, Serial, serialutil
+from ._common import (
+    PORT_502_HELP,
+    SERIAL_MISSING_MSG,
+    add_version_arg,
+    ip_or_network,
+    is_permission_error,
+    tcp_port,
+)
 
-from pyModbusTCP.constants import (
+try:
+    from serial import PARITY_EVEN, PARITY_NONE, PARITY_ODD, Serial, serialutil
+except ModuleNotFoundError as _exc:
+    # pyserial is optional: give the way to install it instead of a bare "No module named 'serial'"
+    if _exc.name != 'serial':
+        raise
+    raise ModuleNotFoundError(SERIAL_MISSING_MSG, name='serial') from _exc
+
+from ..constants import (
     ENCAPSULATED_INTERFACE_TRANSPORT,
     EXP_GATEWAY_PATH_UNAVAILABLE,
     EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND,
@@ -120,8 +135,9 @@ from pyModbusTCP.constants import (
     READ_HOLDING_REGISTERS,
     READ_INPUT_REGISTERS,
 )
-from pyModbusTCP.server import ModbusServer
-from pyModbusTCP.utils import crc16
+from ..server import ModbusServer
+from ..utils import crc16
+
 
 # exceptions raised by the serial port when the device is lost (explicit type,
 # so both branches below have the same type for mypy)
@@ -135,7 +151,7 @@ try:
 except ImportError:
     pass
 
-logger = logging.getLogger("modbus_tcp_to_rtu_gw")
+logger = logging.getLogger("mbtcp-tcp2rtu")
 
 # delay between two attempts to reopen a lost serial port (seconds)
 RECONNECT_DELAY = 1.0
@@ -153,15 +169,6 @@ READ_ONLY_FUNCTIONS = (READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS,
 # unit id 0 is the broadcast address of a serial line, 248 to 255 are reserved
 BROADCAST_ADDRESS = 0
 MAX_SLAVE_ADDRESS = 247
-
-
-def ip_or_network(value: str) -> str:
-    """argparse type for -A: check that value is an IP address or a network (like 10.0.0.0/24)."""
-    try:
-        ipaddress.ip_network(value.strip(), strict=False)
-    except ValueError:
-        raise argparse.ArgumentTypeError('%r is not an IP address or a network' % value) from None
-    return value
 
 
 def hexdump(data: bytes) -> str:
@@ -320,7 +327,7 @@ class ModbusSerialWorker:
         logger.debug('RTU Tx %s', hexdump(request))
         # wait for the first byte of data until timeout delay
         port.timeout = self.timeout
-        rx_raw = port.read(1)
+        rx_raw: bytes = port.read(1)
         # if ok, wait for the remaining until the line is silent for end of frame delay.
         # Note: pyserial ignores inter_byte_timeout on POSIX, and read(n) waits for n bytes
         # or the full timeout, so read what is already buffered (or 1 byte) in a loop.
@@ -446,12 +453,13 @@ class ModbusSerialWorker:
         session_data.response.pdu.build_except(func_code=func_code, exp_status=exp_status)
 
 
-def main() -> int:
+def main(argv: Optional[List[str]] = None) -> int:
     # parse args
-    parser = argparse.ArgumentParser(description='Modbus/TCP to Modbus/RTU gateway')
+    parser = argparse.ArgumentParser(prog='mbtcp-tcp2rtu', description='Modbus/TCP to Modbus/RTU gateway',
+                                     epilog='Port 502 without root: ' + PORT_502_HELP)
     parser.add_argument('device', type=str, help='serial device (like /dev/ttyUSB0)')
     parser.add_argument('-H', '--host', type=str, default='localhost', help='host (default: localhost)')
-    parser.add_argument('-p', '--port', type=int, default=502, help='TCP port (default: 502)')
+    parser.add_argument('-p', '--port', type=tcp_port, default=5020, help='TCP port (default: 5020)')
     parser.add_argument('-A', '--allow', action='append', type=ip_or_network, metavar='IP_OR_NETWORK',
                         help='allowed client IP address or network (like 10.0.0.0/24), repeatable '
                              '(default: every client)')
@@ -467,7 +475,8 @@ def main() -> int:
     parser.add_argument('-e', '--eof', type=float, default=None,
                         help='end of frame delay (default: computed from baudrate, min %.3f s)' % MIN_EOF_DELAY)
     parser.add_argument('-d', '--debug', action='store_true', help='set debug mode')
-    args = parser.parse_args()
+    add_version_arg(parser)
+    args = parser.parse_args(argv)
 
     # init logging
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO,
@@ -512,6 +521,8 @@ def main() -> int:
         return 1
     except ModbusServer.Error as e:
         logger.critical('Modbus server error: %r', e)
+        if is_permission_error(e) and args.port < 1024:
+            logger.critical('Port %d is privileged: %s', args.port, PORT_502_HELP)
         return 2
     except ValueError as e:
         # invalid parameter value (like a baudrate refused by the serial port)
