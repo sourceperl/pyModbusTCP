@@ -103,18 +103,16 @@ from ..constants import (
 )
 from ..utils import crc16
 
-
 # exceptions raised by the serial port when the device is lost (explicit type,
 # so both branches below have the same type for mypy)
 SERIAL_IO_ERRORS: Tuple[Type[BaseException], ...] = (serialutil.SerialException, OSError)
-try:
-    import termios  # POSIX only
+# a sys.platform test (not a try/except ImportError) so that mypy knows termios is POSIX only
+if sys.platform != 'win32':
+    import termios
 
     # termios.error is neither a SerialException nor an OSError: pyserial lets it
     # escape from reset_input_buffer()/flush() when the adapter is unplugged
     SERIAL_IO_ERRORS += (termios.error,)
-except ImportError:
-    pass
 
 logger = logging.getLogger("mbtcp-rtu2tcp")
 
