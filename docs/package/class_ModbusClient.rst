@@ -10,6 +10,7 @@ class ModbusClient
 
 .. autoclass:: ModbusClient
    :members:
+   :inherited-members:
    :special-members: __init__
 
 class DeviceIdentificationResponse

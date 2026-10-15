@@ -8,9 +8,24 @@ dynamic = ["version"]
 description = "A simple Modbus/TCP library for Python"
 readme = "README.rst"
 requires-python = ">=3.10"
-authors = [{ name = "Loic Lefebvre" }]
+authors = [{ name = "Loïc Lefebvre" }]
 license = "MIT"
 license-files = ["LICENSE*"]
+keywords = ["modbus", "modbus-tcp", "client", "server", "industrial", "automation", "plc"]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Networking",
+    "Typing :: Typed",
+]
 
 [project.optional-dependencies]
 # serial line of the gateways of pyModbusTCP.tools (python -m pyModbusTCP.tools tcp2rtu/rtu2tcp)
@@ -20,13 +35,13 @@ serial = ["pyserial>=3.5,<4"]
 tools = ["pyModbusTCP-tools"]
 
 [project.urls]
+Documentation = "https://pymodbustcp.readthedocs.io/"
 Source = "https://github.com/sourceperl/pyModbusTCP"
 Issues = "https://github.com/sourceperl/pyModbusTCP/issues"
 Changelog = "https://github.com/sourceperl/pyModbusTCP/blob/master/CHANGES"
 
-[tool.setuptools]
-packages = ["pyModbusTCP", "pyModbusTCP.tools"]
-platforms = ["any"]
+[tool.setuptools.packages.find]
+include = ["pyModbusTCP", "pyModbusTCP.*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "pyModbusTCP.constants.VERSION" }
@@ -36,3 +51,5 @@ strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# -ra: summary of skipped/failed tests at the end, strict: a typo in a marker or in this config is an error
+addopts = ["-ra", "--strict-markers", "--strict-config"]

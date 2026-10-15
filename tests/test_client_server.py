@@ -107,7 +107,7 @@ class TestClientServer(unittest.TestCase):
         # the user callback raises an exception just after the send: the reply of the server stays on the socket
         self.client.on_tx_rx = Mock(side_effect=[RuntimeError('boom'), None, None, None])  # type: ignore
         # worst case for a random transaction ID: the same value drawn twice
-        with patch('pyModbusTCP.client.random.randint', return_value=42):
+        with patch('pyModbusTCP.client.modbus_client.random.randint', return_value=42):
             with self.assertRaises(RuntimeError):
                 self.client.read_holding_registers(0)
             self.server.data_bank.set_holding_registers(0, [2])

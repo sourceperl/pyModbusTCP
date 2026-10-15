@@ -22,6 +22,10 @@ Revision history for pyModbusTCP
 
     Changes:
 
+    - pyModbusTCP.client and pyModbusTCP.server are now packages (one module per concern: main class, Modbus
+      functions, TCP layer, argument checks...) with the same layout for both. No change for the users: same
+      imports, same logger names, nested names kept (ModbusServer.PDU, ModbusServer.NetworkError...). Exceptions
+      of the server are now shown as pyModbusTCP.server.errors.NetworkError (and so on) in tracebacks.
     - new module pyModbusTCP.tools: command line tools (Modbus/TCP server and client, TCP to RTU and RTU to TCP
       gateways), run them with "python -m pyModbusTCP.tools {server,client,tcp2rtu,rtu2tcp}". The gateways need
       pyserial, a new optional dependency: "pip install pyModbusTCP[serial]".
