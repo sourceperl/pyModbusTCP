@@ -2,8 +2,8 @@
 mbtcp-rtu2tcp: Modbus/RTU -> Modbus/TCP gateway
 ===============================================
 
-Run it as "mbtcp-rtu2tcp" (pyModbusTCP-tools package) or "python -m pyModbusTCP.tools rtu2tcp".
-It needs pyserial: pip install "pyModbusTCP[serial]" (installed with pyModbusTCP-tools).
+Run it as "mbtcp-rtu2tcp" (pyModbusTCP-cli package) or "python -m pyModbusTCP.tools rtu2tcp".
+It needs pyserial: pip install "pyModbusTCP[serial]" (installed with pyModbusTCP-cli).
 
 WHAT IT DOES
 ------------

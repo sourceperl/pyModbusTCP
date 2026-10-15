@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 # and their optional dependency (pyserial). A plain "pip install pyModbusTCP" puts no command in the PATH.
 
 [project]
-name = "pyModbusTCP-tools"
+name = "pyModbusTCP-cli"
 # version: the one of pyModbusTCP (../pyModbusTCP/constants.py, see [tool.hatch.version]), the two packages are always
 # released together with the same version; dependencies: exactly this release of pyModbusTCP (set by hatch_build.py)
 dynamic = ["version", "dependencies"]

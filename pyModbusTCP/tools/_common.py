@@ -9,7 +9,7 @@ from typing import Optional
 from ..constants import VERSION
 
 # the serial gateways need pyserial, an optional dependency of pyModbusTCP
-SERIAL_MISSING_MSG = 'this gateway needs pyserial: pip install "pyModbusTCP[serial]" (or pyModbusTCP-tools)'
+SERIAL_MISSING_MSG = 'this gateway needs pyserial: pip install "pyModbusTCP[serial]" (or pyModbusTCP-cli)'
 
 # README section about the privileged port 502
 PORT_502_HELP = ('see "Listen on the standard Modbus port 502 without root" in the pyModbusTCP examples README '

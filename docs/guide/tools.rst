@@ -8,7 +8,7 @@ pyModbusTCP comes with 4 command line tools, built on the library:
    :widths: 22 33 45
 
    * - Command
-     - Without pyModbusTCP-tools
+     - Without pyModbusTCP-cli
      - Role
    * - ``mbtcp-server``
      - ``python -m pyModbusTCP.tools server``
@@ -34,17 +34,17 @@ gateways need pyserial, an optional dependency:
     pip install "pyModbusTCP[serial]"
 
 A plain ``pip install pyModbusTCP`` puts no command in the PATH. The ``mbtcp-*`` commands come with the
-pyModbusTCP-tools package (it contains no code, only the commands and pyserial):
+pyModbusTCP-cli package (it contains no code, only the commands and pyserial):
 
 .. code-block:: bash
 
     # as isolated command line tools (recommended)
-    pipx install pyModbusTCP-tools
+    pipx install pyModbusTCP-cli
 
     # or in a virtual environment, with the library
     pip install "pyModbusTCP[tools]"
 
-pyModbusTCP-tools always has the version of the library it requires.
+pyModbusTCP-cli always has the version of the library it requires.
 
 .. note::
 
@@ -101,7 +101,7 @@ Port 502 without root
 .. note::
 
     This does not work with pipx, whose environments use links to the system interpreter (``setcap`` refuses them):
-    install pyModbusTCP-tools in a dedicated virtual environment created with ``--copies``, then run
+    install pyModbusTCP-cli in a dedicated virtual environment created with ``--copies``, then run
     ``venv/bin/mbtcp-server`` (the commands of the environment run its ``bin/python3``).
 
 Options

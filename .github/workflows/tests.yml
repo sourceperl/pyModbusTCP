@@ -49,7 +49,7 @@ jobs:
         pytest
 
   tools:
-    # command line tools: pyModbusTCP.tools (in the library) and the package in pyModbusTCP-tools/ (commands only)
+    # command line tools: pyModbusTCP.tools (in the library) and the package in pyModbusTCP-cli/ (commands only)
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
@@ -78,7 +78,7 @@ jobs:
       run: |
         python -m pip install build
         python -m build --outdir dist .
-        python -m build --outdir dist pyModbusTCP-tools
+        python -m build --outdir dist pyModbusTCP-cli
         ls dist
 
     - name: Library alone (no command, no pyserial, tools available with python -m)
@@ -86,7 +86,7 @@ jobs:
         python -m venv "$RUNNER_TEMP/lib-only"
         BIN="$RUNNER_TEMP/lib-only/bin"; [ -d "$BIN" ] || BIN="$RUNNER_TEMP/lib-only/Scripts"
         "$BIN/python" -m pip install dist/pymodbustcp-*.whl
-        if "$BIN/python" -m pip show pyModbusTCP-tools pyserial >/dev/null 2>&1; then echo "unexpected package"; exit 1; fi
+        if "$BIN/python" -m pip show pyModbusTCP-cli pyserial >/dev/null 2>&1; then echo "unexpected package"; exit 1; fi
         if ls "$BIN" | grep -q mbtcp; then echo "unexpected command"; exit 1; fi
         "$BIN/python" -m pyModbusTCP.tools server --version
         # a gateway without pyserial: exit status 2 with the way to install it
@@ -94,7 +94,7 @@ jobs:
         cat err.txt
         [ "$status" -eq 2 ] && grep -q 'pyModbusTCP\[serial\]' err.txt
 
-    - name: Library with the commands (pyModbusTCP-tools)
+    - name: Library with the commands (pyModbusTCP-cli)
       run: |
         python -m venv "$RUNNER_TEMP/with-tools"
         BIN="$RUNNER_TEMP/with-tools/bin"; [ -d "$BIN" ] || BIN="$RUNNER_TEMP/with-tools/Scripts"

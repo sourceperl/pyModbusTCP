@@ -33,7 +33,7 @@ classifiers = [
 serial = ["pyserial>=3.5,<4"]
 # commands mbtcp-* in the PATH: a separate package without code (console scripts can't depend on an extra, so a
 # plain install of the library puts no command in the PATH)
-tools = ["pyModbusTCP-tools"]
+tools = ["pyModbusTCP-cli"]
 
 [project.urls]
 Documentation = "https://pymodbustcp.readthedocs.io/"
@@ -42,12 +42,12 @@ Issues = "https://github.com/sourceperl/pyModbusTCP/issues"
 Changelog = "https://github.com/sourceperl/pyModbusTCP/blob/master/CHANGES"
 
 [tool.hatch.version]
-# VERSION in pyModbusTCP/constants.py (also the version of pyModbusTCP-tools, see its pyproject.toml)
+# VERSION in pyModbusTCP/constants.py (also the version of pyModbusTCP-cli, see its pyproject.toml)
 path = "pyModbusTCP/constants.py"
 
 [tool.hatch.build.targets.sdist]
 # the library and its changelog (pyproject.toml, README.md and LICENSE are always included), without the tests,
-# examples, docs, tools/ and the pyModbusTCP-tools package
+# examples, docs, tools/ and the pyModbusTCP-cli package
 include = ["/pyModbusTCP", "/CHANGES"]
 
 [tool.hatch.build.targets.wheel]

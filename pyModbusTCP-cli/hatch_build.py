@@ -1,7 +1,7 @@
-"""Build of pyModbusTCP-tools: require exactly the release of pyModbusTCP of the same version.
+"""Build of pyModbusTCP-cli: require exactly the release of pyModbusTCP of the same version.
 
 The version itself is read from ../pyModbusTCP/constants.py by hatchling ([tool.hatch.version] of pyproject.toml), so
-the two packages of the repository can't get out of sync. A build from the sdist of pyModbusTCP-tools (where the
+the two packages of the repository can't get out of sync. A build from the sdist of pyModbusTCP-cli (where the
 library sources are not available) takes the version and the dependencies from PKG-INFO, without this hook.
 """
 

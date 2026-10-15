@@ -19,7 +19,7 @@ Revision history for pyModbusTCP
                     CustomThreadingTCPServer, is_run is deprecated (use is_running).
     - examples: client_serial_gw.py and server_serial_gw.py are removed, replaced by the gateways of
                 pyModbusTCP.tools ("python -m pyModbusTCP.tools tcp2rtu/rtu2tcp", or the commands mbtcp-tcp2rtu and
-                mbtcp-rtu2tcp of pyModbusTCP-tools).
+                mbtcp-rtu2tcp of pyModbusTCP-cli).
 
     Changes:
 
@@ -36,9 +36,9 @@ Revision history for pyModbusTCP
     - new module pyModbusTCP.tools: command line tools (Modbus/TCP server and client, TCP to RTU and RTU to TCP
       gateways), run them with "python -m pyModbusTCP.tools {server,client,tcp2rtu,rtu2tcp}". The gateways need
       pyserial, a new optional dependency: "pip install pyModbusTCP[serial]".
-    - new package pyModbusTCP-tools (directory of the same name, no code): installs the tools as the commands
+    - new package pyModbusTCP-cli (directory of the same name, no code): installs the tools as the commands
       mbtcp-server, mbtcp-client, mbtcp-tcp2rtu and mbtcp-rtu2tcp, with pyserial. Install it with
-      "pip install pyModbusTCP[tools]" or "pipx install pyModbusTCP-tools". A plain "pip install pyModbusTCP" puts
+      "pip install pyModbusTCP[tools]" or "pipx install pyModbusTCP-cli". A plain "pip install pyModbusTCP" puts
       no command in the PATH and still has no dependency.
     - build: migrate from setup.py to pyproject.toml, with the hatchling build backend (no more MANIFEST.in, tests are
       no longer in the sdist).

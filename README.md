@@ -150,11 +150,11 @@ python -m pyModbusTCP.tools rtu2tcp --help
 ```
 
 To have them as commands in the PATH (`mbtcp-server`, `mbtcp-client`, `mbtcp-tcp2rtu` and `mbtcp-rtu2tcp`),
-install the optional package pyModbusTCP-tools. A plain `pip install pyModbusTCP` puts no command in the PATH.
+install the optional package pyModbusTCP-cli. A plain `pip install pyModbusTCP` puts no command in the PATH.
 
 ```bash
 # in a virtual environment, with the library
 pip install "pyModbusTCP[tools]==0.4.0a1"
 # or as isolated command line tools
-pipx install pyModbusTCP-tools
+pipx install pyModbusTCP-cli
 ```

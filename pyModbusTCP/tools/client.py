@@ -2,7 +2,7 @@
 mbtcp-client: a Modbus/TCP client for the command line
 ======================================================
 
-Run it as "mbtcp-client" (pyModbusTCP-tools package) or "python -m pyModbusTCP.tools client".
+Run it as "mbtcp-client" (pyModbusTCP-cli package) or "python -m pyModbusTCP.tools client".
 
 Send one Modbus/TCP request (read or write) and print the result: one line per item, "address value".
 

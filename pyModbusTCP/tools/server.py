@@ -2,7 +2,7 @@
 mbtcp-server: a Modbus/TCP server
 =================================
 
-Run it as "mbtcp-server" (pyModbusTCP-tools package) or "python -m pyModbusTCP.tools server".
+Run it as "mbtcp-server" (pyModbusTCP-cli package) or "python -m pyModbusTCP.tools server".
 
 A Modbus/TCP server with the default data bank of pyModbusTCP (65536 coils, discrete inputs, holding registers
 and input registers, all set to 0 at startup). Useful to test a Modbus client, a SCADA, a gateway...

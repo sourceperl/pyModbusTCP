@@ -8,7 +8,7 @@
 # Options:
 #   -p PYTHON    Python interpreter to use (default: python3)
 #   -d VENV_DIR  virtual environment directory (default: venv)
-#   -l           library only: no pyserial and no mbtcp-* commands (pyModbusTCP-tools/)
+#   -l           library only: no pyserial and no mbtcp-* commands (pyModbusTCP-cli/)
 #   -r           recreate the venv if it already exists
 #   -h           show this help
 
@@ -19,11 +19,11 @@ VENV_DIR="venv"
 RECREATE=0
 WITH_TOOLS=1
 
-# package pyModbusTCP-tools: the mbtcp-* commands of the tools of the library (pyModbusTCP.tools)
-TOOLS_DIR="pyModbusTCP-tools"
+# package pyModbusTCP-cli: the mbtcp-* commands of the tools of the library (pyModbusTCP.tools)
+TOOLS_DIR="pyModbusTCP-cli"
 
 # test and build tools (types-pyserial: type stubs of pyserial, for mypy on the gateways of pyModbusTCP.tools;
-# hatchling: the build backend, installed here only for mypy on pyModbusTCP-tools/hatch_build.py)
+# hatchling: the build backend, installed here only for mypy on pyModbusTCP-cli/hatch_build.py)
 DEV_PACKAGES=(build twine pytest flake8 mypy numpy types-pyserial hatchling)
 
 usage() {
@@ -112,7 +112,7 @@ EOF
 if [[ "$WITH_TOOLS" -eq 1 ]]; then
     cat <<EOF
 
-  Commands (package pyModbusTCP-tools, $TOOLS_DIR/):
+  Commands (package pyModbusTCP-cli, $TOOLS_DIR/):
     Commands:         mbtcp-server, mbtcp-client, mbtcp-tcp2rtu, mbtcp-rtu2tcp (--help for each)
     Build:            python -m build $TOOLS_DIR
     Check the build:  twine check $TOOLS_DIR/dist/*

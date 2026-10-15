@@ -1,4 +1,4 @@
-# pyModbusTCP-tools
+# pyModbusTCP-cli
 
 Command line tools built on [pyModbusTCP](https://github.com/sourceperl/pyModbusTCP):
 
@@ -17,13 +17,13 @@ command in the PATH and installs no dependency.
 
 ```bash
 # as isolated command line tools (recommended)
-pipx install pyModbusTCP-tools
+pipx install pyModbusTCP-cli
 
 # or in a virtual environment, with the library
 pip install "pyModbusTCP[tools]==0.4.0a1"
 ```
 
-**Alpha**: pyModbusTCP-tools is new with pyModbusTCP 0.4.0, only pre-releases exist for now. The commands, their
+**Alpha**: pyModbusTCP-cli is new with pyModbusTCP 0.4.0, only pre-releases exist for now. The commands, their
 options and their output may still change before the final release. Without a version or `--pre`,
 `pip install "pyModbusTCP[tools]"` installs the stable pyModbusTCP 0.3.1, without the tools.
 
@@ -73,7 +73,7 @@ environment dedicated to the tools instead:
 
 ```bash
 python3 -m venv --copies ~/mbtcp-venv          # --copies: real interpreter files, not links to the system one
-~/mbtcp-venv/bin/pip install pyModbusTCP-tools
+~/mbtcp-venv/bin/pip install pyModbusTCP-cli
 sudo setcap 'cap_net_bind_service=+ep' ~/mbtcp-venv/bin/python3
 ~/mbtcp-venv/bin/mbtcp-server -H 192.168.1.10 -p 502
 ```
@@ -87,5 +87,5 @@ See also the [security policy](https://github.com/sourceperl/pyModbusTCP/blob/ma
 
 ## Versions
 
-pyModbusTCP-tools has the version of pyModbusTCP and requires exactly this release of the library (where its code
+pyModbusTCP-cli has the version of pyModbusTCP and requires exactly this release of the library (where its code
 is).

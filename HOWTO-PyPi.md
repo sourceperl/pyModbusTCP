@@ -5,14 +5,14 @@ Here we use the twine tool to do the job, see [Twine setup](#twine-setup) to add
 
 ### build archive and wheel
 
-The two packages of the repository (the library and pyModbusTCP-tools) are built with hatchling (build backend set in
+The two packages of the repository (the library and pyModbusTCP-cli) are built with hatchling (build backend set in
 their pyproject.toml, installed automatically by `build`) and always released together with the same version: the
 version of both is `VERSION` in `pyModbusTCP/constants.py`.
 
 ```bash
 pip install build
 python -m build --outdir dist .
-python -m build --outdir dist pyModbusTCP-tools
+python -m build --outdir dist pyModbusTCP-cli
 twine check dist/*
 ```
 
@@ -34,10 +34,10 @@ the next number.
 ### upload archive and wheel to PyPi test server
 
 ```bash
-twine upload dist/pymodbustcp-x.x.x* dist/pymodbustcp_tools-x.x.x* -r pypitest
+twine upload dist/pymodbustcp-x.x.x* dist/pymodbustcp_cli-x.x.x* -r pypitest
 ```
 
-Check result at https://test.pypi.org/project/pyModbusTCP/ and https://test.pypi.org/project/pyModbusTCP-tools/,
+Check result at https://test.pypi.org/project/pyModbusTCP/ and https://test.pypi.org/project/pyModbusTCP-cli/,
 then test the install in a new venv (pyserial is not on TestPyPI: take it from PyPI):
 
 ```bash
@@ -49,7 +49,7 @@ mbtcp-client --version
 ### upload archive and wheel to PyPi server
 
 ```bash
-twine upload dist/pymodbustcp-x.x.x* dist/pymodbustcp_tools-x.x.x* -r pypi
+twine upload dist/pymodbustcp-x.x.x* dist/pymodbustcp_cli-x.x.x* -r pypi
 ```
 
 Check result at https://pypi.org/project/pyModbusTCP/.

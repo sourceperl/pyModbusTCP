@@ -1,4 +1,4 @@
-"""Entry points of the command line tools (console scripts of pyModbusTCP-tools and "python -m pyModbusTCP.tools").
+"""Entry points of the command line tools (console scripts of pyModbusTCP-cli and "python -m pyModbusTCP.tools").
 
 A tool module is only imported when it is run: the gateways import pyserial, an optional dependency, so a missing
 pyserial must only affect them, and with a clear message.
