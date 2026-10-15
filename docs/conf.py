@@ -1,6 +1,6 @@
 """Sphinx configuration of the pyModbusTCP documentation.
 
-Build it from the root of the repository:
+Build it with tools/build_docs.sh (in a temporary virtual environment), or by hand from the root of the repository:
 
     pip install -r docs/requirements.txt
     sphinx-build -W --keep-going -b html docs docs/_build/html
