@@ -133,6 +133,9 @@ server.start()
 
 ## Command line tools
 
+***The tools are new in 0.4.0 (only pre-releases for now): without a version or `--pre`, `pip install "pyModbusTCP"`
+installs the stable 0.3.1, without the tools (pip only shows a warning).***
+
 The library comes with command line tools: a Modbus/TCP server, a Modbus/TCP client, and two gateways between
 Modbus/TCP and Modbus/RTU (serial line). They run from the library itself:
 
@@ -155,6 +158,3 @@ pip install "pyModbusTCP[tools]==0.4.0a1"
 # or as isolated command line tools
 pipx install pyModbusTCP-tools
 ```
-
-The tools are new in 0.4.0 (only pre-releases for now): without a version or `--pre`, `pip install "pyModbusTCP[tools]"`
-installs the stable 0.3.1, without the tools (pip only shows a warning).
