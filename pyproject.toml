@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=77"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
 
 [project]
 name = "pyModbusTCP"
@@ -40,11 +40,18 @@ Source = "https://github.com/sourceperl/pyModbusTCP"
 Issues = "https://github.com/sourceperl/pyModbusTCP/issues"
 Changelog = "https://github.com/sourceperl/pyModbusTCP/blob/master/CHANGES"
 
-[tool.setuptools.packages.find]
-include = ["pyModbusTCP", "pyModbusTCP.*"]
+[tool.hatch.version]
+# VERSION in pyModbusTCP/constants.py (also the version of pyModbusTCP-tools, see its pyproject.toml)
+path = "pyModbusTCP/constants.py"
 
-[tool.setuptools.dynamic]
-version = { attr = "pyModbusTCP.constants.VERSION" }
+[tool.hatch.build.targets.sdist]
+# the library and its changelog (pyproject.toml, README.rst and LICENSE are always included), without the tests,
+# examples, docs, tools/ and the pyModbusTCP-tools package
+include = ["/pyModbusTCP", "/CHANGES"]
+
+[tool.hatch.build.targets.wheel]
+# the package and all its subpackages (client, server, tools)
+packages = ["pyModbusTCP"]
 
 [tool.mypy]
 strict = true

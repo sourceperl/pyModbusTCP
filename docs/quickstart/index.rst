@@ -36,8 +36,9 @@ from GitHub::
 
     git clone https://github.com/sourceperl/pyModbusTCP.git
     cd pyModbusTCP
-    # here change "python" by your python target(s) version(s) (like python3.9)
-    sudo python setup.py install
+    # in a virtual environment (here change "python" by your python target version, like python3.12)
+    python -m venv venv && source venv/bin/activate
+    python -m pip install .
 
 ModbusClient: init
 ------------------

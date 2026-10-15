@@ -1,14 +1,14 @@
 [build-system]
-requires = ["setuptools>=77"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
 
 # This package contains no code: it only installs the commands of the tools of pyModbusTCP (module pyModbusTCP.tools)
 # and their optional dependency (pyserial). A plain "pip install pyModbusTCP" puts no command in the PATH.
 
 [project]
 name = "pyModbusTCP-tools"
-# version and dependencies: set by setup.py from the version of pyModbusTCP (../pyModbusTCP/constants.py), the two
-# packages are always released together with the same version
+# version: the one of pyModbusTCP (../pyModbusTCP/constants.py, see [tool.hatch.version]), the two packages are always
+# released together with the same version; dependencies: exactly this release of pyModbusTCP (set by hatch_build.py)
 dynamic = ["version", "dependencies"]
 description = "Command line tools for pyModbusTCP: Modbus/TCP server, client and Modbus TCP/RTU gateways"
 readme = "README.md"
@@ -27,6 +27,13 @@ mbtcp-rtu2tcp = "pyModbusTCP.tools._entry:run_rtu2tcp"
 Source = "https://github.com/sourceperl/pyModbusTCP"
 Issues = "https://github.com/sourceperl/pyModbusTCP/issues"
 
-[tool.setuptools]
-# no code in this package (see above)
-packages = []
+[tool.hatch.version]
+# from the repository; a build from the sdist (no ../pyModbusTCP) reads the version and the dependencies in PKG-INFO
+path = "../pyModbusTCP/constants.py"
+
+[tool.hatch.metadata.hooks.custom]
+# hatch_build.py: requirement on exactly this release of pyModbusTCP
+
+[tool.hatch.build.targets.wheel]
+# no code in this package (see above): only the metadata and the commands
+bypass-selection = true

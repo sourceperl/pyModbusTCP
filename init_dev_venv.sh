@@ -22,8 +22,9 @@ WITH_TOOLS=1
 # package pyModbusTCP-tools: the mbtcp-* commands of the tools of the library (pyModbusTCP.tools)
 TOOLS_DIR="pyModbusTCP-tools"
 
-# test and build tools (types-pyserial: type stubs of pyserial, for mypy on the gateways of pyModbusTCP.tools)
-DEV_PACKAGES=(build twine pytest flake8 mypy numpy types-pyserial)
+# test and build tools (types-pyserial: type stubs of pyserial, for mypy on the gateways of pyModbusTCP.tools;
+# hatchling: the build backend, installed here only for mypy on pyModbusTCP-tools/hatch_build.py)
+DEV_PACKAGES=(build twine pytest flake8 mypy numpy types-pyserial hatchling)
 
 usage() {
     sed -n '3,13p' "$0" | sed 's/^# \{0,1\}//'
@@ -78,8 +79,8 @@ fi
 
 VENV_PY="$VENV_DIR/bin/python"
 
-echo "==> Upgrading pip, setuptools and wheel"
-"$VENV_PY" -m pip install --upgrade pip setuptools wheel
+echo "==> Upgrading pip"
+"$VENV_PY" -m pip install --upgrade pip
 
 echo "==> Installing dev tools: ${DEV_PACKAGES[*]}"
 "$VENV_PY" -m pip install --upgrade "${DEV_PACKAGES[@]}"

@@ -33,7 +33,8 @@ Revision history for pyModbusTCP
       mbtcp-server, mbtcp-client, mbtcp-tcp2rtu and mbtcp-rtu2tcp, with pyserial. Install it with
       "pip install pyModbusTCP[tools]" or "pipx install pyModbusTCP-tools". A plain "pip install pyModbusTCP" puts
       no command in the PATH and still has no dependency.
-    - build: migrate from setup.py to pyproject.toml.
+    - build: migrate from setup.py to pyproject.toml, with the hatchling build backend (no more MANIFEST.in, tests are
+      no longer in the sdist).
     - fix ModbusClient: is_open is now False only for a closed socket (file descriptor 0 is valid).
     - fix ModbusClient: non-integer arguments (float, str...) now raise a TypeError instead of an uncaught struct.error.
     - fix ModbusClient: treat socket.gaierror as MB_CONNECT_ERR (like any other connect error).
