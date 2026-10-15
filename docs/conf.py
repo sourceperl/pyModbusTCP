@@ -74,7 +74,8 @@ TOOLS = ('server', 'client', 'tcp2rtu', 'rtu2tcp')
 def write_tools_help() -> None:
     out_dir = os.path.join(DOCS_DIR, '_generated')
     os.makedirs(out_dir, exist_ok=True)
-    env = dict(os.environ, PYTHONPATH=ROOT_DIR, COLUMNS='100')
+    # 80 columns: fits the width of a page of the PDF without wrapping
+    env = dict(os.environ, PYTHONPATH=ROOT_DIR, COLUMNS='80')
     for tool in TOOLS:
         result = subprocess.run([sys.executable, '-m', 'pyModbusTCP.tools', tool, '--help'], env=env, cwd=ROOT_DIR,
                                 capture_output=True, text=True)

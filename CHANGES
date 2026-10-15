@@ -26,8 +26,8 @@ Revision history for pyModbusTCP
     - docs: Sphinx documentation rewritten: up to date quick start, user guides for the client (connection, errors,
       threads), the server (data bank, change callbacks, custom handler, access restrictions) and the data conversion
       functions, new pages for the command line tools (with their generated --help), the security policy, the
-      changelog and the constants, every example documented. tools/build_docs.sh builds it in a temporary venv, the
-      docs build is checked by the CI (warnings are errors).
+      changelog and the constants, every example documented. tools/build_docs.sh builds it (HTML, PDF...) in a
+      temporary venv, the docs build is checked by the CI (warnings are errors).
     - pyModbusTCP.client and pyModbusTCP.server are now packages (one module per concern: main class, Modbus
       functions, TCP layer, argument checks...) with the same layout for both. No change for the users: same
       imports, same logger names, nested names kept (ModbusServer.PDU, ModbusServer.NetworkError...). Exceptions

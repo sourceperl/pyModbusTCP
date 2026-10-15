@@ -7,11 +7,12 @@
 #
 # Options:
 #   -p PYTHON    Python interpreter to use, 3.12 or later (default: python3)
-#   -b BUILDER   Sphinx builder: html, epub, latex... (default: html)
+#   -b BUILDER   html, pdf, epub or any other Sphinx builder (default: html)
 #   -o OUT_DIR   output directory (default: docs/_build/BUILDER)
 #   -h           show this help
 #
 # The build is strict, like on Read the Docs and in the CI: any warning is an error.
+# The PDF is made with LaTeX: it needs a TeX distribution (see the error message if it's missing).
 
 set -euo pipefail
 
@@ -20,7 +21,7 @@ BUILDER="html"
 OUT_DIR=""
 
 usage() {
-    sed -n '3,14p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '3,15p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while getopts "p:b:o:h" opt; do
@@ -57,6 +58,21 @@ if ! "$PYTHON" -c 'import sys; sys.exit(sys.version_info < (3, 12))'; then
     exit 1
 fi
 
+# the PDF is made by LaTeX from the output of the Sphinx latex builder: check the TeX tools before any long step
+if [[ "$BUILDER" == "pdf" ]]; then
+    missing=()
+    for cmd in make latexmk pdflatex; do
+        command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
+    done
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        echo "Error: the PDF needs a TeX distribution, not found: ${missing[*]}" >&2
+        echo "  Debian/Ubuntu: sudo apt install make latexmk texlive-latex-recommended texlive-latex-extra \\" >&2
+        echo "                 texlive-fonts-recommended tex-gyre" >&2
+        echo "  macOS:         MacTeX (https://tug.org/mactex/)" >&2
+        exit 1
+    fi
+fi
+
 OUT_DIR="${OUT_DIR:-docs/_build/$BUILDER}"
 
 # temporary venv (and Sphinx cache), always removed, even on error or ctrl+c
@@ -75,10 +91,28 @@ echo "==> Installing the documentation requirements"
 # -d: Sphinx cache out of OUT_DIR (always a full build, and no cache files in an EPUB or an HTML zip)
 echo "==> Building the documentation ($BUILDER)"
 rm -rf "$OUT_DIR"
-"$VENV_PY" -m sphinx -W --keep-going -b "$BUILDER" -d "$TMP_DIR/doctrees" docs "$OUT_DIR"
+if [[ "$BUILDER" == "pdf" ]]; then
+    # LaTeX sources in the temporary directory, only the PDF goes to OUT_DIR
+    LATEX_DIR="$TMP_DIR/latex"
+    "$VENV_PY" -m sphinx -W --keep-going -b latex -d "$TMP_DIR/doctrees" docs "$LATEX_DIR"
+    echo "==> Compiling the PDF with LaTeX (log: $OUT_DIR/latex.log on error)"
+    if ! make -C "$LATEX_DIR" all-pdf LATEXMKOPTS="-interaction=nonstopmode -halt-on-error" \
+            > "$TMP_DIR/latex.log" 2>&1; then
+        mkdir -p "$OUT_DIR"
+        cp "$TMP_DIR/latex.log" "$OUT_DIR/latex.log"
+        grep -E '^!' -A 2 "$TMP_DIR/latex.log" >&2 || tail -n 20 "$TMP_DIR/latex.log" >&2
+        echo "Error: the LaTeX compilation failed, see $OUT_DIR/latex.log" >&2
+        exit 1
+    fi
+    mkdir -p "$OUT_DIR"
+    cp "$LATEX_DIR"/*.pdf "$OUT_DIR/"
+else
+    "$VENV_PY" -m sphinx -W --keep-going -b "$BUILDER" -d "$TMP_DIR/doctrees" docs "$OUT_DIR"
+fi
 
 echo ""
 echo "Documentation ready in $OUT_DIR/"
-if [[ "$BUILDER" == "html" ]]; then
-    echo "Open it: $OUT_DIR/index.html"
-fi
+case "$BUILDER" in
+    html) echo "Open it: $OUT_DIR/index.html" ;;
+    pdf) echo "Open it: $(ls "$OUT_DIR"/*.pdf)" ;;
+esac
