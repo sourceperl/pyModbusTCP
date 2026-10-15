@@ -1,162 +1,147 @@
-.. |badge_tests| image:: https://github.com/sourceperl/pyModbusTCP/actions/workflows/tests.yml/badge.svg?branch=master
-                :target: https://github.com/sourceperl/pyModbusTCP/actions/workflows/tests.yml
-
-.. |badge_docs| image:: https://readthedocs.org/projects/pymodbustcp/badge/?version=latest
-               :target: https://pymodbustcp.readthedocs.io/
-
-pyModbusTCP |badge_tests| |badge_docs|
-======================================
+# pyModbusTCP [![Tests](https://github.com/sourceperl/pyModbusTCP/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/sourceperl/pyModbusTCP/actions/workflows/tests.yml) [![Documentation](https://readthedocs.org/projects/pymodbustcp/badge/?version=latest)](https://pymodbustcp.readthedocs.io/)
 
 A simple Modbus/TCP client and server library for Python.
 
 pyModbusTCP is pure Python code without any extension or external module dependency.
 
-Tests
------
+## Tests
 
 The module is currently tested on Python 3.10, 3.11, 3.12, 3.13 and 3.14, on Linux, macOS and Windows.
 
-Documentation
--------------
+## Documentation
 
 Documentation of the last release is available online at https://pymodbustcp.readthedocs.io/.
 
-Security
---------
+## Security
 
 Modbus/TCP has no authentication and no encryption: never expose a Modbus/TCP server on the Internet or on an
-untrusted network. See `SECURITY <https://github.com/sourceperl/pyModbusTCP/blob/master/SECURITY.md>`_ for the
+untrusted network. See [SECURITY](https://github.com/sourceperl/pyModbusTCP/blob/master/SECURITY.md) for the
 protections of the client and the server, the deployment recommendations, the known limitations and how to report
 a vulnerability.
 
-Setup
------
+## Setup
 
 Install the package in a virtual environment:
 
-.. code-block:: bash
-
-    python3 -m venv venv
-    source venv/bin/activate
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
 
 From PyPI, the easy way:
 
-.. code-block:: bash
+```bash
+# install the last available release (stable)
+pip install pyModbusTCP
+```
 
-    # install the last available release (stable)
-    pip install pyModbusTCP
-
-.. code-block:: bash
-
-    # install a specific version (here release 0.3.1)
-    pip install pyModbusTCP==0.3.1
+```bash
+# install a specific version (here release 0.3.1)
+pip install pyModbusTCP==0.3.1
+```
 
 From GitHub:
 
-.. code-block:: bash
-
-    # install a specific version (here release 0.3.1) directly from github servers
-    pip install git+https://github.com/sourceperl/pyModbusTCP.git@v0.3.1
+```bash
+# install a specific version (here release 0.3.1) directly from github servers
+pip install git+https://github.com/sourceperl/pyModbusTCP.git@v0.3.1
+```
 
 Note on the use of versions:
 
 Over time, some things can change. So, it's a good practice to always use a specific version of a package for your
 project, instead of just relying on the default behavior: without it, the installation tools always install the latest
-available version of a package. For example, in pyModbusTCP, the automatic TCP open mode (``auto_open``) is on by
+available version of a package. For example, in pyModbusTCP, the automatic TCP open mode (`auto_open`) is on by
 default since version 0.2.0, it was off in the previous versions and doesn't exist before version 0.0.12. This can lead
 to some strange behavior of your application if you are not aware of the change. Look at
-`CHANGES <https://github.com/sourceperl/pyModbusTCP/blob/master/CHANGES>`_ for details on the available versions.
+[CHANGES](https://github.com/sourceperl/pyModbusTCP/blob/master/CHANGES) for details on the available versions.
 
-Usage example
--------------
+## Usage example
 
-See `examples/ <https://github.com/sourceperl/pyModbusTCP/tree/master/examples>`_ for full scripts.
+See [examples/](https://github.com/sourceperl/pyModbusTCP/tree/master/examples) for full scripts.
 
-Client
-~~~~~~
+### Client
 
-.. code-block:: python
+```python
+from pyModbusTCP.client import ModbusClient
 
-    from pyModbusTCP.client import ModbusClient
+# TCP connection is opened at the first request (auto_open is on by default) and kept open
+c = ModbusClient(host='localhost', port=502, unit_id=1)
 
-    # TCP connection is opened at the first request (auto_open is on by default) and kept open
-    c = ModbusClient(host='localhost', port=502, unit_id=1)
-
-    # or: TCP connection opened before each request and closed after it
-    c = ModbusClient(host='127.0.0.1', auto_close=True)
+# or: TCP connection opened before each request and closed after it
+c = ModbusClient(host='127.0.0.1', auto_close=True)
+```
 
 Read 2x 16 bits registers at modbus address 0:
 
-.. code-block:: python
+```python
+regs = c.read_holding_registers(0, 2)
 
-    regs = c.read_holding_registers(0, 2)
-
-    if regs:
-        print(regs)
-    else:
-        print('read error: %s' % c.last_error_as_txt)
+if regs:
+    print(regs)
+else:
+    print('read error: %s' % c.last_error_as_txt)
+```
 
 Write values 44 and 55 to registers at modbus address 10:
 
-.. code-block:: python
-
-    if c.write_multiple_registers(10, [44, 55]):
-        print('write ok')
-    else:
-        print('write error: %s' % c.last_error_as_txt)
+```python
+if c.write_multiple_registers(10, [44, 55]):
+    print('write ok')
+else:
+    print('write error: %s' % c.last_error_as_txt)
+```
 
 Use the client as a context manager (the TCP connection is closed at the end of the block):
 
-.. code-block:: python
+```python
+with ModbusClient(host='localhost', port=502) as c:
+    print(c.read_coils(0, 8))
+```
 
-    with ModbusClient(host='localhost', port=502) as c:
-        print(c.read_coils(0, 8))
+### Server
 
-Server
-~~~~~~
+```python
+from pyModbusTCP.server import ModbusServer
 
-.. code-block:: python
+# listen on localhost only (the default host), port 502 needs root privileges on Unix systems: use another one
+server = ModbusServer(host='localhost', port=5020, no_block=True)
+server.start()
 
-    from pyModbusTCP.server import ModbusServer
+# update the data seen by the clients from the application
+server.data_bank.set_holding_registers(0, [1, 2, 3])
+```
 
-    # listen on localhost only (the default host), port 502 needs root privileges on Unix systems: use another one
-    server = ModbusServer(host='localhost', port=5020, no_block=True)
-    server.start()
+A server open to the network, with some access restrictions (see
+[SECURITY](https://github.com/sourceperl/pyModbusTCP/blob/master/SECURITY.md)):
 
-    # update the data seen by the clients from the application
-    server.data_bank.set_holding_registers(0, [1, 2, 3])
+```python
+# only the hosts of the 192.168.1.0/24 network can connect, every write request is refused
+server = ModbusServer(host='0.0.0.0', port=5020, allowed_hosts=['192.168.1.0/24'], read_only=True)
+server.start()
+```
 
-A server open to the network, with some access restrictions (see `SECURITY
-<https://github.com/sourceperl/pyModbusTCP/blob/master/SECURITY.md>`_):
-
-.. code-block:: python
-
-    # only the hosts of the 192.168.1.0/24 network can connect, every write request is refused
-    server = ModbusServer(host='0.0.0.0', port=5020, allowed_hosts=['192.168.1.0/24'], read_only=True)
-    server.start()
-
-Command line tools
-------------------
+## Command line tools
 
 The library comes with command line tools: a Modbus/TCP server, a Modbus/TCP client, and two gateways between
 Modbus/TCP and Modbus/RTU (serial line). They run from the library itself:
 
-.. code-block:: bash
+```bash
+python -m pyModbusTCP.tools server --help
+python -m pyModbusTCP.tools client -H 192.168.1.10 read-holding 0 -n 4
 
-    python -m pyModbusTCP.tools server --help
-    python -m pyModbusTCP.tools client -H 192.168.1.10 read-holding 0 -n 4
+# the gateways need pyserial (an optional dependency)
+pip install "pyModbusTCP[serial]"
+python -m pyModbusTCP.tools tcp2rtu --help
+python -m pyModbusTCP.tools rtu2tcp --help
+```
 
-    # the gateways need pyserial (an optional dependency)
-    pip install "pyModbusTCP[serial]"
-    python -m pyModbusTCP.tools tcp2rtu --help
-    python -m pyModbusTCP.tools rtu2tcp --help
+To have them as commands in the PATH (`mbtcp-server`, `mbtcp-client`, `mbtcp-tcp2rtu` and `mbtcp-rtu2tcp`),
+install the optional package pyModbusTCP-tools. A plain `pip install pyModbusTCP` puts no command in the PATH.
 
-To have them as commands in the PATH (``mbtcp-server``, ``mbtcp-client``, ``mbtcp-tcp2rtu`` and ``mbtcp-rtu2tcp``),
-install the optional package pyModbusTCP-tools. A plain ``pip install pyModbusTCP`` puts no command in the PATH.
-
-.. code-block:: bash
-
-    # in a virtual environment, with the library
-    pip install "pyModbusTCP[tools]"
-    # or as isolated command line tools
-    pipx install pyModbusTCP-tools
+```bash
+# in a virtual environment, with the library
+pip install "pyModbusTCP[tools]"
+# or as isolated command line tools
+pipx install pyModbusTCP-tools
+```

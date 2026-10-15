@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "pyModbusTCP"
 dynamic = ["version"]
 description = "A simple Modbus/TCP library for Python"
-readme = "README.rst"
+readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Loïc Lefebvre" }]
 license = "MIT"
@@ -45,7 +45,7 @@ Changelog = "https://github.com/sourceperl/pyModbusTCP/blob/master/CHANGES"
 path = "pyModbusTCP/constants.py"
 
 [tool.hatch.build.targets.sdist]
-# the library and its changelog (pyproject.toml, README.rst and LICENSE are always included), without the tests,
+# the library and its changelog (pyproject.toml, README.md and LICENSE are always included), without the tests,
 # examples, docs, tools/ and the pyModbusTCP-tools package
 include = ["/pyModbusTCP", "/CHANGES"]
 

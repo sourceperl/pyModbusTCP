@@ -22,6 +22,7 @@ Revision history for pyModbusTCP
 
     Changes:
 
+    - docs: README.rst converted to Markdown (README.md), like the other docs of the repository.
     - pyModbusTCP.client and pyModbusTCP.server are now packages (one module per concern: main class, Modbus
       functions, TCP layer, argument checks...) with the same layout for both. No change for the users: same
       imports, same logger names, nested names kept (ModbusServer.PDU, ModbusServer.NetworkError...). Exceptions
