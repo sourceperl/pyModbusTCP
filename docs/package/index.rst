@@ -1,7 +1,7 @@
-pyModbusTCP modules documentation
-=================================
+API reference
+=============
 
-Contents:
+Everything a program needs is imported from these modules: the other modules of the package are internal.
 
 .. toctree::
    :maxdepth: 2
@@ -9,4 +9,4 @@ Contents:
    class_ModbusClient
    class_ModbusServer
    module_utils
-
+   module_constants

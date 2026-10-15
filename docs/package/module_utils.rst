@@ -1,7 +1,11 @@
-Module pyModbusTCP.utils
-========================
+pyModbusTCP.utils
+=================
 
-*This module provides a set of functions for Modbus data manipulation.*
+Functions for Modbus data conversion. See :doc:`../guide/utils` for an introduction.
+
+.. code-block:: python
+
+    from pyModbusTCP import utils
 
 .. automodule:: pyModbusTCP.utils
    :members:

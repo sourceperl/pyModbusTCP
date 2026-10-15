@@ -1,21 +1,25 @@
-Module pyModbusTCP.client
-=========================
+pyModbusTCP.client
+==================
 
-.. automodule:: pyModbusTCP.client
+.. module:: pyModbusTCP.client
 
-*This module provide the ModbusClient class used to deal with modbus server.*
+The Modbus/TCP client. See :doc:`../guide/client` for an introduction.
 
-class ModbusClient
-------------------
+.. code-block:: python
+
+    from pyModbusTCP.client import ModbusClient
+
+ModbusClient
+------------
 
 .. autoclass:: ModbusClient
    :members:
    :inherited-members:
-   :special-members: __init__
 
-class DeviceIdentificationResponse
-----------------------------------
+DeviceIdentificationResponse
+----------------------------
+
+The result of :meth:`ModbusClient.read_device_identification`.
 
 .. autoclass:: DeviceIdentificationResponse
    :members:
-   :special-members: __init__

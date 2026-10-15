@@ -1,221 +1,121 @@
-Quick start guide
-=================
+Quick start
+===========
 
-Overview of the package
------------------------
+Installation
+------------
 
-pyModbusTCP give access to modbus/TCP server through the ModbusClient object.
-This class is define in the client module.
+Install pyModbusTCP from PyPI in a virtual environment:
 
-Since version 0.1.0, a server is available as ModbusServer class. This server
-is currently in test (API can change at any time).
+.. code-block:: bash
 
-To deal with frequent need of modbus data mangling (for example convert 32 bits
-IEEE float to 2x16 bits words) a special module named utils provide some helpful
-functions.
+    python3 -m venv venv
+    source venv/bin/activate        # on Windows: venv\Scripts\activate
+    pip install pyModbusTCP
 
-**Package map:**
+The library has no dependency. Two optional extras add the :doc:`command line tools <../guide/tools>`:
 
-.. image:: map.png
-   :scale: 75 %
+.. code-block:: bash
 
-Package setup
--------------
+    pip install "pyModbusTCP[serial]"   # pyserial, for the Modbus TCP/RTU gateways
+    pip install "pyModbusTCP[tools]"    # the mbtcp-* commands in the PATH (with pyserial)
 
-from PyPi::
+.. tip::
 
-    # install the last available version (stable)
-    sudo pip3 install pyModbusTCP
-    # or upgrade from an older version
-    sudo pip3 install pyModbusTCP --upgrade
+    Pin the version in the requirements of your project (like ``pyModbusTCP==0.3.1``): the behavior of the library
+    can change between releases (see the :doc:`../changelog`). For example, the automatic TCP open mode
+    (``auto_open``) is on by default since version 0.2.0 and was off before.
 
-    # you can also install a specific version (here v0.1.10)
-    sudo pip3 install pyModbusTCP==v0.1.10
+To install the development version from GitHub:
 
-from GitHub::
+.. code-block:: bash
 
-    git clone https://github.com/sourceperl/pyModbusTCP.git
-    cd pyModbusTCP
-    # in a virtual environment (here change "python" by your python target version, like python3.12)
-    python -m venv venv && source venv/bin/activate
-    python -m pip install .
+    pip install git+https://github.com/sourceperl/pyModbusTCP.git
 
-ModbusClient: init
-------------------
+Package overview
+----------------
 
-Init module from constructor (raise ValueError if host/port error)::
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Module
+     - Content
+   * - :mod:`pyModbusTCP.client`
+     - :class:`~pyModbusTCP.client.ModbusClient`: the Modbus/TCP client.
+   * - :mod:`pyModbusTCP.server`
+     - :class:`~pyModbusTCP.server.ModbusServer`: the Modbus/TCP server, with its data space
+       (:class:`~pyModbusTCP.server.DataBank`) and the interface to customize it
+       (:class:`~pyModbusTCP.server.DataHandler`).
+   * - :mod:`pyModbusTCP.utils`
+     - Functions for Modbus data conversion: 32/64 bits values, IEEE floats, two's complement, bits.
+   * - :mod:`pyModbusTCP.constants`
+     - Function codes, Modbus exception codes, client error codes.
+   * - ``pyModbusTCP.tools``
+     - The :doc:`command line tools <../guide/tools>` (``python -m pyModbusTCP.tools``).
+
+A first client
+--------------
+
+Read 10 holding registers at address 0 of a Modbus/TCP server:
+
+.. code-block:: python
 
     from pyModbusTCP.client import ModbusClient
+
+    # the TCP connection is opened at the first request and kept open (auto_open mode)
+    c = ModbusClient(host='localhost', port=502, unit_id=1)
+
+    regs = c.read_holding_registers(0, 10)
+    if regs:
+        print(regs)
+    else:
+        print('read error: %s' % c.last_error_as_txt)
+
+A request never raises an exception for a network or a Modbus error: it returns ``None`` (read) or ``False``
+(write), and the cause is available in :attr:`~pyModbusTCP.client.ModbusClient.last_error`. See
+:doc:`../guide/client`.
+
+A first server
+--------------
+
+Start a server on port 5020 and update its data from the application:
+
+.. code-block:: python
+
+    import time
+
+    from pyModbusTCP.server import ModbusServer
+
+    # no_block: start() returns at once, the server runs in a background thread
+    server = ModbusServer(host='localhost', port=5020, no_block=True)
+    server.start()
 
     try:
-        c = ModbusClient(host='localhost', port=502)
-    except ValueError:
-        print("Error with host or port params")
+        while True:
+            # clients see the current time in the holding registers 0 and 1
+            now = time.localtime()
+            server.data_bank.set_holding_registers(0, [now.tm_hour, now.tm_min])
+            time.sleep(1.0)
+    finally:
+        server.stop()
 
-Or with properties::
+The server listens on ``localhost`` by default: set ``host`` to the address of a network interface to accept remote
+clients. See :doc:`../guide/server`.
 
-    from pyModbusTCP.client import ModbusClient
+Try it from the command line
+----------------------------
 
-    c = ModbusClient()
-    c.host = 'localhost'
-    c.port = 502
+The library comes with a server and a client for the command line. In a first terminal:
 
-ModbusClient: TCP link management
----------------------------------
+.. code-block:: bash
 
-Since version 0.2.0, "auto open" mode is the default behaviour to deal with TCP open/close.
+    python -m pyModbusTCP.tools server --log-changes
 
-The "auto open" mode keep the TCP connection always open, so the default constructor is::
+In a second one:
 
-        c = ModbusClient(host="localhost", auto_open=True, auto_close=False)
+.. code-block:: bash
 
-It's also possible to open/close TCP socket before and after each request::
+    python -m pyModbusTCP.tools client -p 5020 write-registers 0 100 200
+    python -m pyModbusTCP.tools client -p 5020 read-holding 0 -n 4
 
-        c = ModbusClient(host="localhost", auto_open=True, auto_close=True)
-
-Another way to deal with connection is to manually set it. Like this::
-
-        c = ModbusClient(host="localhost", auto_open=False, auto_close=False)
-
-        # open the socket for 2 reads then close it.
-        if c.open():
-            regs_list_1 = c.read_holding_registers(0, 10)
-            regs_list_2 = c.read_holding_registers(55, 10)
-            c.close()
-
-ModbusClient: available modbus requests functions
--------------------------------------------------
-
-See http://en.wikipedia.org/wiki/Modbus for full table.
-
-+------------+------------------------------+---------------+--------------------------------------------------------------------------+
-| Domain     | Function name                | Function code | ModbusClient function                                                    |
-+============+==============================+===============+==========================================================================+
-| Bit        | Read Discrete Inputs         | 2             | :py:meth:`~pyModbusTCP.client.ModbusClient.read_discrete_inputs`         |
-|            +------------------------------+---------------+--------------------------------------------------------------------------+
-|            | Read Coils                   | 1             | :py:meth:`~pyModbusTCP.client.ModbusClient.read_coils`                   |
-|            +------------------------------+---------------+--------------------------------------------------------------------------+
-|            | Write Single Coil            | 5             | :py:meth:`~pyModbusTCP.client.ModbusClient.write_single_coil`            |
-|            +------------------------------+---------------+--------------------------------------------------------------------------+
-|            | Write Multiple Coils         | 15            | :py:meth:`~pyModbusTCP.client.ModbusClient.write_multiple_coils`         |
-+------------+------------------------------+---------------+--------------------------------------------------------------------------+
-| Register   | Read Input Registers         | 4             | :py:meth:`~pyModbusTCP.client.ModbusClient.read_input_registers`         |
-|            +------------------------------+---------------+--------------------------------------------------------------------------+
-|            | Read Holding Registers       | 3             | :py:meth:`~pyModbusTCP.client.ModbusClient.read_holding_registers`       |
-|            +------------------------------+---------------+--------------------------------------------------------------------------+
-|            | Write Single Register        | 6             | :py:meth:`~pyModbusTCP.client.ModbusClient.write_single_register`        |
-|            +------------------------------+---------------+--------------------------------------------------------------------------+
-|            | Write Multiple Registers     | 16            | :py:meth:`~pyModbusTCP.client.ModbusClient.write_multiple_registers`     |
-|            +------------------------------+---------------+--------------------------------------------------------------------------+
-|            | Read/Write Multiple Registers| 23            | :py:meth:`~pyModbusTCP.client.ModbusClient.write_read_multiple_registers`|
-|            +------------------------------+---------------+--------------------------------------------------------------------------+
-|            | Mask Write Register          | 22            | n/a                                                                      |
-+------------+------------------------------+---------------+--------------------------------------------------------------------------+
-| File       | Read FIFO Queue              | 24            | n/a                                                                      |
-|            +------------------------------+---------------+--------------------------------------------------------------------------+
-|            | Read File Record             | 20            | n/a                                                                      |
-|            +------------------------------+---------------+--------------------------------------------------------------------------+
-|            | Write File Record            | 21            | n/a                                                                      |
-|            +------------------------------+---------------+--------------------------------------------------------------------------+
-|            | Read Exception Status        | 7             | n/a                                                                      |
-+------------+------------------------------+---------------+--------------------------------------------------------------------------+
-| Diagnostic | Diagnostic                   | 8             | n/a                                                                      |
-|            +------------------------------+---------------+--------------------------------------------------------------------------+
-|            | Get Com Event Counter        | 11            | n/a                                                                      |
-|            +------------------------------+---------------+--------------------------------------------------------------------------+
-|            | Get Com Event Log            | 12            | n/a                                                                      |
-|            +------------------------------+---------------+--------------------------------------------------------------------------+
-|            | Report Slave ID              | 17            | n/a                                                                      |
-|            +------------------------------+---------------+--------------------------------------------------------------------------+
-|            | Read Device Identification   | 43            | :py:meth:`~pyModbusTCP.client.ModbusClient.read_device_identification`   |
-+------------+------------------------------+---------------+--------------------------------------------------------------------------+
-
-ModbusClient: how-to debug
---------------------------
-
-If need, you can enable debug log for ModbusClient like this::
-
-    import logging
-
-    from pyModbusTCP.client import ModbusClient
-
-    # set debug level for pyModbusTCP.client to see frame exchanges
-    logging.basicConfig()
-    logging.getLogger('pyModbusTCP.client').setLevel(logging.DEBUG)
-
-    c = ModbusClient(host="localhost", port=502)
-
-when debug level is set, all debug messages are displayed on the console::
-
-    c.read_coils(0)
-
-will give us the following result::
-
-    DEBUG:pyModbusTCP.client:(localhost:502:1) Tx [8F 8A 00 00 00 06 01] 01 00 00 00 01
-    DEBUG:pyModbusTCP.client:(localhost:502:1) Rx [8F 8A 00 00 00 04 01] 01 01 00
-
-
-utils module: Modbus data mangling
-----------------------------------
-
-When we have to deal with the variety types of registers of PLC device, we often
-need some data mangling. Utils part of pyModbusTCP can help you in this task.
-Now, let's see some use cases.
-
-- deal with negative numbers (two's complement)::
-
-    from pyModbusTCP import utils
-
-    list_16_bits = [0x0000, 0xFFFF, 0x00FF, 0x8001]
-
-    # show "[0, -1, 255, -32767]"
-    print(utils.get_list_2comp(list_16_bits, 16))
-
-    # show "-1"
-    print(utils.get_2comp(list_16_bits[1], 16))
-
-More at http://en.wikipedia.org/wiki/Two%27s_complement
-
-- convert integer of val_size bits (default is 16) to an array of boolean::
-
-    from pyModbusTCP import utils
-
-    # show "[True, False, True, False, False, False, False, False]"
-    print(utils.get_bits_from_int(0x05, val_size=8))
-
-- read of 32 bits registers (also know as long format)::
-
-    from pyModbusTCP import utils
-
-    list_16_bits = [0x0123, 0x4567, 0xdead, 0xbeef]
-
-    # big endian sample (default)
-    list_32_bits = utils.word_list_to_long(list_16_bits)
-    # show "['0x1234567', '0xdeadbeef']"
-    print([hex(i) for i in list_32_bits])
-
-    # little endian sample
-    list_32_bits = utils.word_list_to_long(list_16_bits, big_endian=False)
-    # show "['0x45670123', '0xbeefdead']"
-    print([hex(i) for i in list_32_bits])
-
-- IEEE single/double precision floating-point::
-
-    from pyModbusTCP import utils
-
-    # 32 bits IEEE single precision
-    # encode : python float 0.3 -> int 0x3e99999a
-    # display "0x3e99999a"
-    print(hex(utils.encode_ieee(0.3)))
-    # decode: python int 0x3e99999a -> float 0.3
-    # show "0.300000011921" (it's not 0.3, precision leak with float...)
-    print(utils.decode_ieee(0x3e99999a))
-
-    # 64 bits IEEE double precision
-    # encode: python float 6.62606957e-34 -> int 0x390b860bb596a559
-    # display "0x390b860bb596a559"
-    print(hex(utils.encode_ieee(6.62606957e-34, double=True)))
-    # decode: python int 0x390b860bb596a559 -> float 6.62606957e-34
-    # display "6.62606957e-34"
-    print(utils.decode_ieee(0x390b860bb596a559, double=True))
-
+See :doc:`../guide/tools` for all the commands.

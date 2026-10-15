@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Set up a virtual environment for testing and building pyModbusTCP and its command line tools.
+# Set up a virtual environment for testing and building pyModbusTCP, its command line tools and its documentation.
 #
 # Usage:
 #   ./init_venv.sh [-p PYTHON] [-d VENV_DIR] [-l] [-r] [-h]
@@ -8,7 +8,7 @@
 # Options:
 #   -p PYTHON    Python interpreter to use (default: python3)
 #   -d VENV_DIR  virtual environment directory (default: venv)
-#   -l           library only: no pyserial and no mbtcp-* commands (pyModbusTCP-tools/)
+#   -l           library only: no pyserial, no mbtcp-* commands (pyModbusTCP-tools/) and no documentation tools
 #   -r           recreate the venv if it already exists
 #   -h           show this help
 
@@ -21,6 +21,9 @@ WITH_TOOLS=1
 
 # package pyModbusTCP-tools: the mbtcp-* commands of the tools of the library (pyModbusTCP.tools)
 TOOLS_DIR="pyModbusTCP-tools"
+
+# Sphinx documentation: its requirements include pyserial (help of the gateways), so not installed with -l
+DOCS_REQUIREMENTS="docs/requirements.txt"
 
 # test and build tools (types-pyserial: type stubs of pyserial, for mypy on the gateways of pyModbusTCP.tools;
 # hatchling: the build backend, installed here only for mypy on pyModbusTCP-tools/hatch_build.py)
@@ -51,6 +54,11 @@ fi
 
 if [[ "$WITH_TOOLS" -eq 1 && ! -f "$TOOLS_DIR/pyproject.toml" ]]; then
     echo "Error: $TOOLS_DIR/pyproject.toml not found (use -l to set up the library only)" >&2
+    exit 1
+fi
+
+if [[ "$WITH_TOOLS" -eq 1 && ! -f "$DOCS_REQUIREMENTS" ]]; then
+    echo "Error: $DOCS_REQUIREMENTS not found (use -l to set up the library only)" >&2
     exit 1
 fi
 
@@ -89,6 +97,8 @@ if [[ "$WITH_TOOLS" -eq 1 ]]; then
     # both in one call: the requirement of the tools package on pyModbusTCP is satisfied by this checkout, not by PyPI
     echo "==> Installing the library (with pyserial) and the mbtcp-* commands in editable mode"
     "$VENV_PY" -m pip install --editable ".[serial]" --editable "$TOOLS_DIR"
+    echo "==> Installing the documentation tools: $DOCS_REQUIREMENTS"
+    "$VENV_PY" -m pip install --requirement "$DOCS_REQUIREMENTS"
 else
     echo "==> Installing the library in editable mode"
     "$VENV_PY" -m pip install --editable .
@@ -116,5 +126,9 @@ if [[ "$WITH_TOOLS" -eq 1 ]]; then
     Commands:         mbtcp-server, mbtcp-client, mbtcp-tcp2rtu, mbtcp-rtu2tcp (--help for each)
     Build:            python -m build $TOOLS_DIR
     Check the build:  twine check $TOOLS_DIR/dist/*
+
+  Documentation (Sphinx, docs/):
+    Build:            sphinx-build -W --keep-going -b html docs docs/_build/html
+    Read it:          docs/_build/html/index.html
 EOF
 fi

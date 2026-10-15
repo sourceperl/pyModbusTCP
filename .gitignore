@@ -8,3 +8,7 @@ dist/
 
 /venv/
 /lab/
+
+# Sphinx documentation (built pages and generated help of the tools)
+/docs/_build/
+/docs/_generated/
