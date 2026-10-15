@@ -13,9 +13,17 @@ dynamic = ["version", "dependencies"]
 description = "Command line tools for pyModbusTCP: Modbus/TCP server, client and Modbus TCP/RTU gateways"
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "Loic Lefebvre" }]
+authors = [{ name = "Loïc Lefebvre" }]
 license = "MIT"
 license-files = ["LICENSE*"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: System :: Networking",
+]
 
 [project.scripts]
 mbtcp-server = "pyModbusTCP.tools._entry:run_server"

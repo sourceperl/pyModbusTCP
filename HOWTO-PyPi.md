@@ -16,8 +16,20 @@ python -m build --outdir dist pyModbusTCP-tools
 twine check dist/*
 ```
 
-`python -m build` builds the sdist, then the wheel from this sdist: a check that the sdist is complete. The content of
-the sdist of the library is set by `[tool.hatch.build.targets.sdist]` in `pyproject.toml` (no MANIFEST.in).
+### version numbers
+
+Set `VERSION` in `pyModbusTCP/constants.py` with a [PEP 440](https://peps.python.org/pep-0440/) version, and the same
+version (with the release date) at the top of `CHANGES`:
+
+- `0.4.0.dev0`: development version, never uploaded;
+- `0.4.0a1`, `0.4.0a2`...: alpha releases (the interface may still change), then `0.4.0b1`... and `0.4.0rc1`...;
+- `0.4.0`: final release.
+
+pip never installs a pre-release (a, b, rc, dev) unless asked for (`pip install pyModbusTCP==0.4.0a1` or `--pre`).
+Set the `Development Status` classifier of both `pyproject.toml` (`3 - Alpha`, `4 - Beta`, `5 - Production/Stable`).
+
+An uploaded version can never be uploaded again, even after its deletion: on a mistake, yank it on PyPI and release
+the next number.
 
 ### upload archive and wheel to PyPi test server
 
@@ -25,7 +37,14 @@ the sdist of the library is set by `[tool.hatch.build.targets.sdist]` in `pyproj
 twine upload dist/pymodbustcp-x.x.x* dist/pymodbustcp_tools-x.x.x* -r pypitest
 ```
 
-Check result at https://test.pypi.org/project/pyModbusTCP/.
+Check result at https://test.pypi.org/project/pyModbusTCP/ and https://test.pypi.org/project/pyModbusTCP-tools/,
+then test the install in a new venv (pyserial is not on TestPyPI: take it from PyPI):
+
+```bash
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ \
+    "pyModbusTCP[tools]==x.x.x"
+mbtcp-client --version
+```
 
 ### upload archive and wheel to PyPi server
 
@@ -33,7 +52,7 @@ Check result at https://test.pypi.org/project/pyModbusTCP/.
 twine upload dist/pymodbustcp-x.x.x* dist/pymodbustcp_tools-x.x.x* -r pypi
 ```
 
-Check result at https://pypi.python.org/project/pyModbusTCP/.
+Check result at https://pypi.org/project/pyModbusTCP/.
 
 
 ## Twine setup

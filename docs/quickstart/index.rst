@@ -25,6 +25,12 @@ The library has no dependency. Two optional extras add the :doc:`command line to
     can change between releases (see the :doc:`../changelog`). For example, the automatic TCP open mode
     (``auto_open``) is on by default since version 0.2.0 and was off before.
 
+.. note::
+
+    This documentation describes version 0.4.0, only available as a pre-release (alpha) for now: pip installs the
+    stable 0.3.1 by default. Ask for the pre-release explicitly, with ``pip install pyModbusTCP==0.4.0a1`` (or
+    ``"pyModbusTCP[tools]==0.4.0a1"``), or with ``pip install --pre pyModbusTCP``.
+
 To install the development version from GitHub:
 
 .. code-block:: bash

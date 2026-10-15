@@ -20,15 +20,19 @@ command in the PATH and installs no dependency.
 pipx install pyModbusTCP-tools
 
 # or in a virtual environment, with the library
-pip install pyModbusTCP[tools]
+pip install "pyModbusTCP[tools]==0.4.0a1"
 ```
+
+**Alpha**: pyModbusTCP-tools is new with pyModbusTCP 0.4.0, only pre-releases exist for now. The commands, their
+options and their output may still change before the final release. Without a version or `--pre`,
+`pip install "pyModbusTCP[tools]"` installs the stable pyModbusTCP 0.3.1, without the tools.
 
 Without this package, the tools can still be run from the library alone:
 
 ```bash
 python -m pyModbusTCP.tools server --help
 python -m pyModbusTCP.tools client --help
-pip install "pyModbusTCP[serial]"          # pyserial, only needed by the gateways
+pip install "pyModbusTCP[serial]==0.4.0a1" # pyserial, only needed by the gateways
 python -m pyModbusTCP.tools tcp2rtu --help
 python -m pyModbusTCP.tools rtu2tcp --help
 ```

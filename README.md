@@ -40,6 +40,16 @@ pip install pyModbusTCP
 pip install pyModbusTCP==0.3.1
 ```
 
+Pre-release (alpha) of the next version 0.4.0, to test it before the final release: the command line tools, their
+options and their output may still change. pip never installs a pre-release by default, ask for it explicitly:
+
+```bash
+# a specific pre-release
+pip install pyModbusTCP==0.4.0a1
+# or the latest release, pre-releases included
+pip install --pre pyModbusTCP
+```
+
 From GitHub:
 
 ```bash
@@ -141,7 +151,10 @@ install the optional package pyModbusTCP-tools. A plain `pip install pyModbusTCP
 
 ```bash
 # in a virtual environment, with the library
-pip install "pyModbusTCP[tools]"
+pip install "pyModbusTCP[tools]==0.4.0a1"
 # or as isolated command line tools
 pipx install pyModbusTCP-tools
 ```
+
+The tools are new in 0.4.0 (only pre-releases for now): without a version or `--pre`, `pip install "pyModbusTCP[tools]"`
+installs the stable 0.3.1, without the tools (pip only shows a warning).

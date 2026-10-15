@@ -3,7 +3,7 @@
 # Set up a virtual environment for testing and building pyModbusTCP and its command line tools.
 #
 # Usage:
-#   ./init_venv.sh [-p PYTHON] [-d VENV_DIR] [-l] [-r] [-h]
+#   ./init_dev_venv.sh [-p PYTHON] [-d VENV_DIR] [-l] [-r] [-h]
 #
 # Options:
 #   -p PYTHON    Python interpreter to use (default: python3)

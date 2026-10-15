@@ -3,16 +3,23 @@
 *After set this, we can directly test effect of editing a package files
 without need to fully reinstall it.*
 
-Turn on develop mode (add current package files to python path) in a virtual env:
+The easy way: `./init_dev_venv.sh` creates a venv (`venv/`) with the test and build tools, the library (with pyserial)
+and the `mbtcp-*` commands of pyModbusTCP-tools, all in editable mode (`-h` for its options).
+
+By hand, turn on develop mode (add current package files to python path) in a virtual env:
 
 ```bash
 python -m venv venv && source venv/bin/activate
+# the library only
 pip install --editable .
+# or the library, pyserial and the mbtcp-* commands (both in one call: the requirement of pyModbusTCP-tools on
+# pyModbusTCP is satisfied by this checkout, not by PyPI)
+pip install --editable ".[serial]" --editable pyModbusTCP-tools
 ```
 Turn off:
 
 ```bash
-pip uninstall pyModbusTCP
+pip uninstall pyModbusTCP pyModbusTCP-tools
 ```
 View the current python path:
 

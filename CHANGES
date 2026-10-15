@@ -1,6 +1,6 @@
 Revision history for pyModbusTCP
 
-0.4.0.dev0 xxxx-xx-xx
+0.4.0a1 xxxx-xx-xx (alpha: the command line tools, their options and output, may still change before 0.4.0)
 
     Breaking changes:
 
@@ -17,8 +17,9 @@ Revision history for pyModbusTCP
     - ModbusServer: start() raises a NetworkError if the server is already running (the call was silently ignored).
     - ModbusServer: the internal request handler class ModbusService is replaced by ModbusRequestHandler and
                     CustomThreadingTCPServer, is_run is deprecated (use is_running).
-    - examples: client_serial_gw.py and server_serial_gw.py are replaced by modbus_rtu_to_tcp_gw.py and
-                modbus_tcp_to_rtu_gw.py.
+    - examples: client_serial_gw.py and server_serial_gw.py are removed, replaced by the gateways of
+                pyModbusTCP.tools ("python -m pyModbusTCP.tools tcp2rtu/rtu2tcp", or the commands mbtcp-tcp2rtu and
+                mbtcp-rtu2tcp of pyModbusTCP-tools).
 
     Changes:
 
@@ -105,7 +106,7 @@ Revision history for pyModbusTCP
     - improve DeviceIdentification: support the "in" operator, an object value over 244 bytes raises a ValueError.
     - improve typing: type hints on the whole package and add py.typed (PEP 561).
     - add SECURITY.md (threat model, deployment recommendations, server and client protections).
-    - add tools/ (benchmark, server fuzzing, code audit) and init_venv.sh (test and build venv).
+    - add tools/ (benchmark, server fuzzing, code audit) and init_dev_venv.sh (test and build venv).
     - examples: add server_dynamic_port.py, add type hints to examples.
 
 0.3.1 2026-09-29

@@ -13,6 +13,7 @@ license = "MIT"
 license-files = ["LICENSE*"]
 keywords = ["modbus", "modbus-tcp", "client", "server", "industrial", "automation", "plc"]
 classifiers = [
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
