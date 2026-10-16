@@ -13,4 +13,4 @@ from hatchling.metadata.plugin.interface import MetadataHookInterface
 class CustomMetadataHook(MetadataHookInterface):
     def update(self, metadata: dict[str, Any]) -> None:
         # the code of the commands is in the library: exactly the same release
-        metadata['dependencies'] = ['pyModbusTCP[serial]==%s' % metadata['version']]
+        metadata['dependencies'] = [f"pyModbusTCP[serial]=={metadata['version']}"]

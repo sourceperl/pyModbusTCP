@@ -6,13 +6,13 @@ import ipaddress
 import logging
 import time
 from threading import Lock
-from typing import Any, Union
+from typing import Any
 
 # all the server modules log under the historical name "pyModbusTCP.server" (used by applications to tune it)
 logger = logging.getLogger('pyModbusTCP.server')
 
 # an IPv4 or IPv6 network (an address is a network with a full prefix)
-_IPNetwork = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
+_IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
 
 # an IPv6 client is counted by /64 network: a host usually gets a whole /64, so one address per connection is easy
 HOST_IPV6_PREFIX = 64

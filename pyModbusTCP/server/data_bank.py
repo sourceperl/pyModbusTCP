@@ -71,8 +71,8 @@ class DataBank:
             if isinstance(attr_name, str) and not attr_name.startswith('_'):
                 if attrs_str:
                     attrs_str += ', '
-                attrs_str += '%s=%r' % (attr_name, self.__dict__[attr_name])
-        return 'DataBank(%s)' % attrs_str
+                attrs_str += f'{attr_name}={self.__dict__[attr_name]!r}'
+        return f'DataBank({attrs_str})'
 
     def get_coils(self, address: int, number: int = 1,
                   srv_info: ServerInfo | None = None) -> list[bool] | None:
@@ -129,8 +129,8 @@ class DataBank:
         # on server update
         if srv_info:
             # notify changes with on change method (after atomic update)
-            for address, from_value, to_value in changes_list:
-                self.on_coils_change(address, from_value, to_value, srv_info)
+            for changed_address, from_value, to_value in changes_list:
+                self.on_coils_change(changed_address, from_value, to_value, srv_info)
         return True
 
     def get_discrete_inputs(self, address: int, number: int = 1,
@@ -234,8 +234,8 @@ class DataBank:
         # on server update
         if srv_info:
             # notify changes with on change method (after atomic update)
-            for address, from_value, to_value in changes_list:
-                self.on_holding_registers_change(address, from_value, to_value, srv_info)
+            for changed_address, from_value, to_value in changes_list:
+                self.on_holding_registers_change(changed_address, from_value, to_value, srv_info)
         return True
 
     def get_input_registers(self, address: int, number: int = 1,

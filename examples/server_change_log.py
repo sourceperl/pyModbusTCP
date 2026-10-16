@@ -20,6 +20,8 @@ import logging
 
 from pyModbusTCP.server import DataBank, ModbusServer
 
+logger = logging.getLogger(__name__)
+
 
 class MyDataBank(DataBank):
     """A custom ModbusServerDataBank for override on_xxx_change methods."""
@@ -29,14 +31,14 @@ class MyDataBank(DataBank):
         """Call by server when change occur on coils space."""
         msg = 'change in coil space [{0!r:^5} > {1!r:^5}] at @ 0x{2:04X} from ip: {3:<15}'
         msg = msg.format(from_value, to_value, address, srv_info.client.address)
-        logging.info(msg)
+        logger.info(msg)
 
     def on_holding_registers_change(self, address: int, from_value: int, to_value: int,
                                     srv_info: ModbusServer.ServerInfo) -> None:
         """Call by server when change occur on holding registers space[cite: 3]."""
         msg = 'change in hreg space [{0!r:^5} > {1!r:^5}] at @ 0x{2:04X} from ip: {3:<15}'
         msg = msg.format(from_value, to_value, address, srv_info.client.address)
-        logging.info(msg)
+        logger.info(msg)
 
 
 if __name__ == '__main__':

@@ -65,7 +65,7 @@ class DeviceIdentification:
             if not isinstance(value, bytes):
                 raise TypeError('this object is of type bytes only')
             if len(value) > self.MAX_OBJECT_SIZE:
-                raise ValueError('object value is too long (max %d bytes)' % self.MAX_OBJECT_SIZE)
+                raise ValueError(f'object value is too long (max {self.MAX_OBJECT_SIZE} bytes)')
             with self._objs_lock:
                 self._objs_d[key] = value
         else:
@@ -85,12 +85,12 @@ class DeviceIdentification:
             if prop_value:
                 if named_params:
                     named_params += ', '
-                named_params += '%s=%r' % (prop_name, getattr(self, prop_name))
+                named_params += f'{prop_name}={getattr(self, prop_name)!r}'
         # add parameters without shortcut name
         objs_id_d_str = ''
         for _id in range(0x07, 0x100):
             try:
-                obj_id_item = '%r: %r' % (_id, self[_id])
+                obj_id_item = f'{_id!r}: {self[_id]!r}'
                 if objs_id_d_str:
                     objs_id_d_str += ', '
                 objs_id_d_str += obj_id_item
@@ -101,8 +101,8 @@ class DeviceIdentification:
         if objs_id_d_str:
             if class_args:
                 class_args += ', '
-            class_args += 'objects_id={%s}' % objs_id_d_str
-        return '%s(%s)' % (self.__class__.__name__, class_args)
+            class_args += f'objects_id={{{objs_id_d_str}}}'
+        return f'{self.__class__.__name__}({class_args})'
 
     @property
     def vendor_name(self) -> bytes:

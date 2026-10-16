@@ -68,7 +68,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('-H', '--host', default='localhost',
                         help='listen address (default: localhost), 0.0.0.0 for every IPv4 interface')
     parser.add_argument('-p', '--port', type=tcp_port, default=DEFAULT_PORT,
-                        help='TCP port (default: %d)' % DEFAULT_PORT)
+                        help=f'TCP port (default: {DEFAULT_PORT})')
     parser.add_argument('-6', '--ipv6', action='store_true', help='use IPv6 (like -6 -H ::1)')
     parser.add_argument('-A', '--allow', action='append', type=ip_or_network, metavar='IP_OR_NETWORK',
                         help='allowed client IP address or network (like 10.0.0.0/24), repeatable '

@@ -7,6 +7,7 @@ import subprocess
 import sys
 import time
 import unittest
+from typing import ClassVar
 from unittest import mock
 
 from pyModbusTCP.constants import EXP_NONE
@@ -22,10 +23,7 @@ class TestModbusServer(unittest.TestCase):
         # should raise exception
         self.assertRaises(TypeError, ModbusServer, device_id=object())
         # shouldn't raise exception
-        try:
-            ModbusServer(device_id=DeviceIdentification())
-        except Exception as e:
-            self.fail(f'ModbusServer raised exception "{e!r}" unexpectedly')
+        ModbusServer(device_id=DeviceIdentification())
         # init a DeviceIdentification class for test it
         device_id = DeviceIdentification()
         # should raise exception
@@ -34,12 +32,9 @@ class TestModbusServer(unittest.TestCase):
         with self.assertRaises(TypeError):
             device_id[0] = 42  # type: ignore
         # shouldn't raise exception
-        try:
-            device_id.vendor_name = b'me'
-            device_id.user_application_name = b'unittest'
-            device_id[0x80] = b'feed'
-        except Exception as e:
-            self.fail(f'DeviceIdentification raised exception "{e!r}" unexpectedly')
+        device_id.vendor_name = b'me'
+        device_id.user_application_name = b'unittest'
+        device_id[0x80] = b'feed'
         # check access by shortcut name (str) or object id (int) return same value
         self.assertEqual(device_id.vendor_name, device_id[0x00])
         self.assertEqual(device_id.user_application_name, device_id[0x06])
@@ -180,7 +175,7 @@ class TestModbusServerLimits(unittest.TestCase):
             sock = self._connect()
             sock.sendall(self.REQ_FRAME[:sent_len])
             delay = self._closed_after(sock, 3.0)
-            self.assertIsNotNone(delay, 'stalled request (%d bytes sent): session is still open' % sent_len)
+            self.assertIsNotNone(delay, f'stalled request ({sent_len} bytes sent): session is still open')
             self.assertLess(delay, 2.0)  # type: ignore
         # server is still serving others
         self.assertEqual(len(self._request(self._connect())), self.RESP_LEN)
@@ -208,7 +203,7 @@ class TestModbusServerLimits(unittest.TestCase):
         self._start_server(idle_timeout=idle_timeout)
         sock = self._connect()
         for i in range(15):  # about 1.5 s of activity (more than idle_timeout)
-            self.assertEqual(len(self._request(sock)), self.RESP_LEN, 'active session closed (request %d)' % i)
+            self.assertEqual(len(self._request(sock)), self.RESP_LEN, f'active session closed (request {i})')
             time.sleep(0.1)
         delay = self._closed_after(sock, idle_timeout + 4.0)
         self.assertIsNotNone(delay, 'idle session is still open')
@@ -704,9 +699,9 @@ class TestModbusServerSpecFrames(unittest.TestCase):
 
     def test_handler_bad_data_count(self):
         """The first read of function 0x17 must also check the number of registers returned by the data handler."""
-        with mock.patch.object(self.server.data_hdl, 'read_h_regs', return_value=DataHandler.Return(EXP_NONE, [1])):
-            with self.assertLogs('pyModbusTCP.server', level='ERROR'):
-                self.assertEqual(self.exchange('17 0000 0002 0005 0001 02 1234'), '9704')
+        with (mock.patch.object(self.server.data_hdl, 'read_h_regs', return_value=DataHandler.Return(EXP_NONE, [1])),
+              self.assertLogs('pyModbusTCP.server', level='ERROR')):
+            self.assertEqual(self.exchange('17 0000 0002 0005 0001 02 1234'), '9704')
         self.assertEqual(self.bank.get_holding_registers(5, 1), [0])
 
     def test_unsupported_function_without_parameter(self):
@@ -932,7 +927,7 @@ class TestReadOnlyOption(unittest.TestCase):
     """The requests that write data (0x05, 0x06, 0x0F, 0x10 and 0x17) are refused with an ILLEGAL FUNCTION exception."""
 
     # request PDU (as hex string) of every function that writes data
-    WRITE_REQUESTS = {
+    WRITE_REQUESTS: ClassVar[dict[str, str]] = {
         'write single coil': '05 0001 ff00',
         'write single register': '06 0005 002a',
         'write multiple coils': '0f 0000 0002 01 03',

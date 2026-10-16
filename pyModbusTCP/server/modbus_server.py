@@ -210,7 +210,7 @@ class ModbusServer(ServerFunctionsMixin):
                 self.ext_engine(session_data)
             except Exception as e:
                 logger.exception('External engine raise an exception, close session')
-                raise Error('external engine raise an exception: %r' % e) from e
+                raise Error(f'external engine raise an exception: {e!r}') from e
         else:
             self._internal_engine(session_data)
 
@@ -250,7 +250,7 @@ class ModbusServer(ServerFunctionsMixin):
         except Error:
             # network error or other frame error: let the session handler close the connection
             raise
-        except Exception:
+        except Exception:  # noqa: BLE001
             # unexpected error (like an exception raised by a user callback): log it and keep the session alive
             logger.exception('Unexpected error during processing of function 0x%02X from %s', func_code, client)
             send_pdu.build_except(func_code, EXP_SLAVE_DEVICE_FAILURE)

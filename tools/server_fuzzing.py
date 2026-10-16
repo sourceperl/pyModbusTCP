@@ -182,6 +182,6 @@ if __name__ == "__main__":
 
     try:
         do_fuzzing(fuzzer_config, logger)
-    except Exception as e:
-        logger.exception(f"Unexpected error: {e}")
+    except Exception:
+        logger.exception("Unexpected error")
         sys.exit(1)

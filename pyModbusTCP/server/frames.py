@@ -26,7 +26,7 @@ class MBAP:
                                self.protocol_id, self.length,
                                self.unit_id)
         except struct.error as e:
-            raise DataFormatError('MBAP raw encode pack error: %s' % e)
+            raise DataFormatError(f'MBAP raw encode pack error: {e}')
 
     @raw.setter
     def raw(self, value: bytes) -> None:
@@ -88,7 +88,7 @@ class PDU:
         try:
             self.raw += struct.pack(fmt, *args)
         except struct.error:
-            err_msg = 'unable to format PDU message (fmt: %s, values: %s)' % (fmt, args)
+            err_msg = f'unable to format PDU message (fmt: {fmt}, values: {args})'
             raise DataFormatError(err_msg)
 
     def unpack(self, fmt: str, from_byte: int | None = None, to_byte: int | None = None) -> tuple[Any, ...]:
@@ -96,7 +96,7 @@ class PDU:
         try:
             return struct.unpack(fmt, raw_section)
         except struct.error:
-            err_msg = "unable to decode PDU message  (fmt: '%s', values: %r)" % (fmt, raw_section)
+            err_msg = f"unable to decode PDU message  (fmt: '{fmt}', values: {raw_section!r})"
             raise PDUDecodeError(err_msg)
 
 

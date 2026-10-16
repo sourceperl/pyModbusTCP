@@ -45,7 +45,7 @@ def int_value(value: str) -> int:
     try:
         return int(value, 0)
     except ValueError:
-        raise argparse.ArgumentTypeError('%r is not an integer' % value) from None
+        raise argparse.ArgumentTypeError(f'{value!r} is not an integer') from None
 
 
 def bool_value(value: str) -> bool:
@@ -54,7 +54,7 @@ def bool_value(value: str) -> bool:
         return True
     if value.lower() in _FALSE_WORDS:
         return False
-    raise argparse.ArgumentTypeError('%r is not a coil value (use 1/0, on/off or true/false)' % value)
+    raise argparse.ArgumentTypeError(f'{value!r} is not a coil value (use 1/0, on/off or true/false)')
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -77,7 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
     for name, help_txt, max_nb in reads:
         p = sub.add_parser(name, help=help_txt, description=help_txt)
         p.add_argument('address', type=int_value, help='first address (0 to 65535)')
-        p.add_argument('-n', '--number', type=int_value, default=1, help='number of items (1 to %d)' % max_nb)
+        p.add_argument('-n', '--number', type=int_value, default=1, help=f'number of items (1 to {max_nb})')
         if 'coils' not in name and 'inputs' not in name:
             p.add_argument('--hex', action='store_true', help='print values in hexadecimal')
             p.add_argument('--signed', action='store_true', help='print values as signed 16 bits integers')
@@ -129,7 +129,7 @@ def format_value(value: object, args: argparse.Namespace) -> str:
         return '1' if value else '0'
     if isinstance(value, int):
         if getattr(args, 'hex', False):
-            return '0x%04X' % value
+            return f'0x{value:04X}'
         if getattr(args, 'signed', False):
             return str(to_signed(value))
     return str(value)
@@ -146,7 +146,7 @@ def do_read(client: ModbusClient, args: argparse.Namespace) -> bool:
     if values is None:
         return False
     for offset, value in enumerate(values):
-        print('%d %s' % (args.address + offset, format_value(value, args)))
+        print(f'{args.address + offset} {format_value(value, args)}')
     return True
 
 
@@ -167,18 +167,18 @@ def do_device_id(client: ModbusClient, args: argparse.Namespace) -> bool:
     for obj_id, value in sorted(response.objects_by_id.items()):
         # objects are bytes sent by the server: never print raw control chars on the terminal
         text = value.decode('ascii', errors='backslashreplace')
-        text = ''.join(c if c.isprintable() else '\\x%02x' % ord(c) for c in text)
-        print('0x%02X %s' % (obj_id, text))
+        text = ''.join(c if c.isprintable() else f'\\x{ord(c):02x}' for c in text)
+        print(f'0x{obj_id:02X} {text}')
     if response.more_follows:
-        print('# more objects available: use -o 0x%02X' % response.next_object_id, file=sys.stderr)
+        print(f'# more objects available: use -o 0x{response.next_object_id:02X}', file=sys.stderr)
     return True
 
 
 def print_error(client: ModbusClient) -> None:
     msg = client.last_error_as_txt
     if client.last_except:
-        msg += ': exception 0x%02X (%s)' % (client.last_except, client.last_except_as_txt)
-    print('error: %s' % msg, file=sys.stderr)
+        msg += f': exception 0x{client.last_except:02X} ({client.last_except_as_txt})'
+    print(f'error: {msg}', file=sys.stderr)
 
 
 def run_command(client: ModbusClient, args: argparse.Namespace) -> bool:

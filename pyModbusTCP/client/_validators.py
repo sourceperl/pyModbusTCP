@@ -11,11 +11,11 @@ def check_addr_nb(addr: int, nb: int, max_nb: int, addr_name: str, nb_name: str,
     :raises ValueError: if address, number of items or the end of the area is out of range
     """
     if not 0 <= addr <= 0xffff:
-        raise ValueError('%s out of range (valid from 0 to 65535)' % addr_name)
+        raise ValueError(f'{addr_name} out of range (valid from 0 to 65535)')
     if not 1 <= nb <= max_nb:
-        raise ValueError('%s out of range (valid from 1 to %d)' % (nb_name, max_nb))
+        raise ValueError(f'{nb_name} out of range (valid from 1 to {max_nb})')
     if addr + nb > 0x10000:
-        raise ValueError('%s after end of modbus address space' % action)
+        raise ValueError(f'{action} after end of modbus address space')
 
 
 def check_regs_values(values: list[int], name: str) -> None:
@@ -24,7 +24,7 @@ def check_regs_values(values: list[int], name: str) -> None:
     :raises ValueError: if a value is out of the 0 to 65535 range
     """
     if min(values) < 0 or max(values) > 0xffff:
-        raise ValueError('%s list contains out of range values' % name)
+        raise ValueError(f'{name} list contains out of range values')
 
 
 def validate_host(value: object) -> str:

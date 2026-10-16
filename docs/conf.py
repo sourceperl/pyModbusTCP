@@ -24,7 +24,7 @@ import pyModbusTCP
 
 project = 'pyModbusTCP'
 author = 'Loïc Lefebvre'
-copyright = '2014-%d, %s' % (datetime.date.today().year, author)
+copyright = f'2014-{datetime.date.today().year}, {author}'
 # full version (like 0.4.0.dev0) and short X.Y version
 release = pyModbusTCP.__version__
 version = '.'.join(release.split('.')[:2])
@@ -52,7 +52,7 @@ autoclass_content = 'both'
 
 html_theme = 'sphinx_rtd_theme'
 html_theme_options = {'navigation_depth': 3}
-html_title = '%s %s documentation' % (project, release)
+html_title = f'{project} {release} documentation'
 html_show_sourcelink = False
 
 # -- Other outputs (Read the Docs also builds PDF, EPUB and HTML zip) ----------
@@ -78,10 +78,10 @@ def write_tools_help() -> None:
     env = dict(os.environ, PYTHONPATH=ROOT_DIR, COLUMNS='80')
     for tool in TOOLS:
         result = subprocess.run([sys.executable, '-m', 'pyModbusTCP.tools', tool, '--help'], env=env, cwd=ROOT_DIR,
-                                capture_output=True, text=True)
+                                capture_output=True, text=True, check=False)
         if result.returncode != 0:
-            raise RuntimeError('"python -m pyModbusTCP.tools %s --help" failed:\n%s' % (tool, result.stderr))
-        with open(os.path.join(out_dir, 'help_%s.txt' % tool), 'w', encoding='utf-8') as f:
+            raise RuntimeError(f'"python -m pyModbusTCP.tools {tool} --help" failed:\n{result.stderr}')
+        with open(os.path.join(out_dir, f'help_{tool}.txt'), 'w', encoding='utf-8') as f:
             f.write(result.stdout)
 
 

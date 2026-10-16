@@ -18,5 +18,5 @@ class ModbusExcept(InternalError):
     """ Modbus exception returned by the server: code is an EXP_xxx constant. """
 
     def __init__(self, code: int):
-        super().__init__('modbus exception 0x%02X' % code)
+        super().__init__(f'modbus exception 0x{code:02X}')
         self.code = code

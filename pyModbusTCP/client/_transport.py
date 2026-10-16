@@ -61,7 +61,7 @@ class ClientTransportMixin:
             addr_infos = socket.getaddrinfo(self.host, self.port, AF_UNSPEC, SOCK_STREAM)
         except socket.gaierror as e:
             # name resolution failure: report it like any other connect error (no exception for the caller)
-            raise NetworkError(MB_CONNECT_ERR, 'host name resolution error: %s' % e)
+            raise NetworkError(MB_CONNECT_ERR, f'host name resolution error: {e}')
         # try each address in turn, keep the last failure reason for the error message
         last_err: OSError | None = None
         for af, sock_type, proto, _canon_name, sa in addr_infos:
@@ -83,7 +83,7 @@ class ClientTransportMixin:
             break
         # check connect status
         if not self.is_open:
-            reason = 'connection refused' if last_err is None else 'connect error: %s' % last_err
+            reason = 'connection refused' if last_err is None else f'connect error: {last_err}'
             raise NetworkError(MB_CONNECT_ERR, reason)
 
     def close(self) -> None:
@@ -245,8 +245,8 @@ class ClientTransportMixin:
         # extract function code: it must be the one of the request (with or without the exception flag)
         rx_fc = rx_pdu[0]
         if rx_fc & 0x7f != func_code:
-            raise NetworkError(MB_RECV_ERR, 'function code mismatch (0x%02X for a 0x%02X request)'
-                               % (rx_fc, func_code))
+            raise NetworkError(MB_RECV_ERR,
+                               f'function code mismatch (0x{rx_fc:02X} for a 0x{func_code:02X} request)')
         # check except status
         if rx_fc >= 0x80:
             exp_code = rx_pdu[1]

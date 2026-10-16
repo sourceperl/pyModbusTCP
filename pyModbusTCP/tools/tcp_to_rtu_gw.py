@@ -188,7 +188,7 @@ MAX_SLAVE_ADDRESS = 247
 
 def hexdump(data: bytes) -> str:
     """Format a raw frame for logs, like "[8 bytes] 01 03 00 00 00 01 84 0a"."""
-    return '[%d bytes] %s' % (len(data), data.hex(' '))
+    return f"[{len(data)} bytes] {data.hex(' ')}"
 
 
 def t35(baudrate: int, bytesize: int, parity: str, stopbits: float) -> float:
@@ -534,7 +534,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--stopbits', type=float, choices=(1, 1.5, 2), default=1, help='stop bits (default: 1)')
     parser.add_argument('-t', '--timeout', type=float, default=1.0, help='serial timeout in s (default: 1.0)')
     parser.add_argument('-e', '--eof', type=float, default=None,
-                        help='serial end of frame delay in s (default: computed from baudrate, min %.3f s)' % MIN_EOF_DELAY)
+                        help='serial end of frame delay in s (default: computed from baudrate, '
+                             f'min {MIN_EOF_DELAY:.3f} s)')
     parser.add_argument('-d', '--debug', action='store_true', help='debug mode')
     add_version_arg(parser)
     args = parser.parse_args(argv)

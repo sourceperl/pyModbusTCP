@@ -24,7 +24,7 @@ def run_tool(module_name: str, argv: list[str] | None = None) -> int:
     except ModuleNotFoundError as e:
         if e.name != 'serial':
             raise
-        print('error: %s' % e, file=sys.stderr)
+        print(f'error: {e}', file=sys.stderr)
         return 2
     main: Callable[[list[str] | None], int] = module.main
     return main(argv)
@@ -53,13 +53,14 @@ def run_rtu2tcp() -> int:
 def main(argv: list[str] | None = None) -> int:
     """python -m pyModbusTCP.tools COMMAND [ARGS...]"""
     args = sys.argv[1:] if argv is None else argv
-    usage = 'usage: python -m pyModbusTCP.tools {%s} [-h] [ARGS...]' % ','.join(COMMANDS)
+    commands = ','.join(COMMANDS)
+    usage = f'usage: python -m pyModbusTCP.tools {{{commands}}} [-h] [ARGS...]'
     if not args or args[0] in ('-h', '--help'):
         print(usage)
         print('\nRun a pyModbusTCP command line tool, "COMMAND --help" for its options.')
         return 0 if args else 2
     if args[0] not in COMMANDS:
         print(usage, file=sys.stderr)
-        print('error: unknown command %r' % args[0], file=sys.stderr)
+        print(f'error: unknown command {args[0]!r}', file=sys.stderr)
         return 2
     return run_tool(COMMANDS[args[0]], args[1:])

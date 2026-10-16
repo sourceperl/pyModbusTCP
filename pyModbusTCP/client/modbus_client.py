@@ -3,7 +3,7 @@
 import random
 import socket
 from types import TracebackType
-from typing import TypeAlias
+from typing import TYPE_CHECKING, TypeAlias
 
 from ..constants import (
     EXP_DETAILS,
@@ -19,6 +19,10 @@ from . import _errors, _validators
 from ._errors import ModbusExcept, NetworkError
 from ._functions import ClientFunctionsMixin
 from ._transport import ClientTransportMixin
+
+if TYPE_CHECKING:
+    # typing.Self needs Python 3.11: its backport is only used by the type checkers (mypy installs it)
+    from typing_extensions import Self
 
 
 class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
@@ -82,7 +86,7 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         if hasattr(self, '_sock'):
             self.close()
 
-    def __enter__(self) -> 'ModbusClient':
+    def __enter__(self) -> 'Self':
         """Context manager: the connection is closed on exit (it is opened at first request with auto_open)."""
         return self
 
@@ -244,13 +248,13 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
     @property
     def last_except_as_txt(self) -> str:
         """Short human-readable text that describe last modbus exception."""
-        default_str = 'unreferenced exception 0x%X' % self._last_except
+        default_str = f'unreferenced exception 0x{self._last_except:X}'
         return EXP_TXT.get(self._last_except, default_str)
 
     @property
     def last_except_as_full_txt(self) -> str:
         """Verbose human-readable text that describe last modbus exception."""
-        default_str = 'unreferenced exception 0x%X' % self._last_except
+        default_str = f'unreferenced exception 0x{self._last_except:X}'
         return EXP_DETAILS.get(self._last_except, default_str)
 
     def _req_pdu(self, tx_pdu: bytes, rx_min_len: int = 2) -> bytes:

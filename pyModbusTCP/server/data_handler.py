@@ -39,7 +39,7 @@ class DataHandler:
         self.data_bank = data_bank or DataBank()
 
     def __repr__(self) -> str:
-        return 'ModbusServerDataHandler(data_bank=%s)' % self.data_bank
+        return f'ModbusServerDataHandler(data_bank={self.data_bank})'
 
     def read_coils(self, address: int, count: int, srv_info: ServerInfo) -> DataHandler.Return:
         """Call by server for reading in coils space

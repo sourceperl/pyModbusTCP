@@ -41,9 +41,9 @@ def validate_timeout(value: float | None, name: str) -> float | None:
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError('%s must be a number or None' % name)
+        raise TypeError(f'{name} must be a number or None')
     if not math.isfinite(value) or value <= 0:
-        raise ValueError('%s must be a finite number greater than 0 (or None to disable it)' % name)
+        raise ValueError(f'{name} must be a finite number greater than 0 (or None to disable it)')
     return float(value)
 
 
@@ -51,9 +51,9 @@ def validate_max_connections(max_connections: int | None, name: str = 'max_conne
     if max_connections is None:
         return None
     if isinstance(max_connections, bool) or not isinstance(max_connections, int):
-        raise TypeError('%s must be an int or None' % name)
+        raise TypeError(f'{name} must be an int or None')
     if max_connections < 1:
-        raise ValueError('%s must be at least 1 (or None for no limit)' % name)
+        raise ValueError(f'{name} must be at least 1 (or None for no limit)')
     return max_connections
 
 
@@ -79,11 +79,11 @@ def validate_allowed_hosts(allowed_hosts: Iterable[str] | None) -> tuple[_IPNetw
     networks: list[_IPNetwork] = []
     for host in hosts:
         if not isinstance(host, str):
-            raise TypeError('allowed_hosts items must be str, got %s' % type(host).__name__)
+            raise TypeError(f'allowed_hosts items must be str, got {type(host).__name__}')
         try:
             # strict=False: "192.168.1.5/24" is accepted as the network 192.168.1.0/24
             networks.append(ipaddress.ip_network(host.strip(), strict=False))
         except ValueError:
-            raise ValueError('allowed_hosts item %r is not an IP address or a network (hostnames are not '
-                             'supported)' % host) from None
+            raise ValueError(f'allowed_hosts item {host!r} is not an IP address or a network (hostnames are not '
+                             'supported)') from None
     return tuple(networks)

@@ -42,7 +42,7 @@ from .device_id import DeviceIdentificationResponse
 
 def _decode_regs(data: bytes, reg_nb: int) -> list[int]:
     """Decode the first reg_nb big-endian 16 bits registers of a modbus registers field."""
-    return list(struct.unpack('>%dH' % reg_nb, data[:2 * reg_nb]))
+    return list(struct.unpack(f'>{reg_nb}H', data[:2 * reg_nb]))
 
 
 class ClientFunctionsMixin:
@@ -74,7 +74,7 @@ class ClientFunctionsMixin:
             raise TypeError('pdu must be a bytes-like object')
         pdu = bytes(pdu)
         if not 1 <= len(pdu) <= MAX_PDU_SIZE:
-            raise ValueError('pdu length out of range (valid from 1 to %d bytes)' % MAX_PDU_SIZE)
+            raise ValueError(f'pdu length out of range (valid from 1 to {MAX_PDU_SIZE} bytes)')
         # make request
         try:
             return self._req_pdu(pdu)
@@ -341,7 +341,7 @@ class ClientFunctionsMixin:
         check_addr_nb(regs_addr, len(regs_value), MAX_WRITE_REGS, 'regs_addr', 'number of registers', 'write')
         check_regs_values(regs_value, 'regs_value')
         # build PDU: header + registers part (pack all registers in one call)
-        pdu_regs_part = struct.pack('>%dH' % len(regs_value), *regs_value)
+        pdu_regs_part = struct.pack(f'>{len(regs_value)}H', *regs_value)
         tx_pdu = struct.pack('>BHHB', WRITE_MULTIPLE_REGISTERS, regs_addr, len(regs_value), len(pdu_regs_part))
         tx_pdu += pdu_regs_part
         # make request
@@ -374,7 +374,7 @@ class ClientFunctionsMixin:
         # make request
         try:
             # build PDU: header + registers part (pack all registers in one call)
-            pdu_regs_part = struct.pack('>%dH' % len(write_values), *write_values)
+            pdu_regs_part = struct.pack(f'>{len(write_values)}H', *write_values)
             tx_pdu = struct.pack('>BHHHHB', WRITE_READ_MULTIPLE_REGISTERS, read_addr, read_nb,
                                  write_addr, len(write_values), len(pdu_regs_part))
             tx_pdu += pdu_regs_part

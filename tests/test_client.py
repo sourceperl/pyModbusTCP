@@ -389,7 +389,7 @@ class TestModbusClient(unittest.TestCase):
             for nb in (1, 2, 50, 123):
                 regs = [rnd.randrange(0x10000) for _ in range(nb)]
                 self.assertTrue(c.write_multiple_registers(20, regs))
-                self.assertEqual(sent[-1], struct.pack('>BHHB', 0x10, 20, nb, 2 * nb) + struct.pack('>%dH' % nb, *regs))
+                self.assertEqual(sent[-1], struct.pack('>BHHB', 0x10, 20, nb, 2 * nb) + struct.pack(f'>{nb}H', *regs))
             # int-like items (bool) and edge values are accepted
             self.assertTrue(c.write_multiple_registers(0, [0, 0xffff, True, False]))
             self.assertEqual(sent[-1][6:], struct.pack('>4H', 0, 0xffff, 1, 0))

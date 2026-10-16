@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import struct
 from collections.abc import Callable
-from typing import Any
+from typing import Any, ClassVar
 
 from ..constants import (
     ENCAPSULATED_INTERFACE_TRANSPORT,
@@ -37,7 +37,7 @@ class ServerFunctionsMixin:
     """
 
     # read device identification, stream access: ReadDevId code -> (first, last) object id of its category
-    _DEVICE_ID_STREAM_RANGES: dict[int, tuple[int, int]] = {1: (0x00, 0x02), 2: (0x03, 0x7f), 3: (0x80, 0xff)}
+    _DEVICE_ID_STREAM_RANGES: ClassVar[dict[int, tuple[int, int]]] = {1: (0x00, 0x02), 2: (0x03, 0x7f), 3: (0x80, 0xff)}
 
     # set by ModbusServer.__init__()
     data_hdl: DataHandler
@@ -100,7 +100,7 @@ class ServerFunctionsMixin:
                     # pack data bank bits in bytes
                     bytes_b = _pack_bits(bits_l)
                     # build pdu
-                    send_pdu.add_pack('BB%ds' % len(bytes_b), recv_pdu.func_code, len(bytes_b), bytes_b)
+                    send_pdu.add_pack(f'BB{len(bytes_b)}s', recv_pdu.func_code, len(bytes_b), bytes_b)
         else:
             send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
 
@@ -133,7 +133,7 @@ class ServerFunctionsMixin:
                 else:
                     # build pdu
                     # (header + requested words in a single pack: avoid an intermediate bytes copy)
-                    send_pdu.add_pack('>BB%dH' % len(words_l), recv_pdu.func_code, quantity_regs * 2, *words_l)
+                    send_pdu.add_pack(f'>BB{len(words_l)}H', recv_pdu.func_code, quantity_regs * 2, *words_l)
         else:
             send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
 
@@ -234,7 +234,7 @@ class ServerFunctionsMixin:
         # test ok flags
         if qty_regs_ok and b_count_ok and pdu_len_ok:
             # words list from rx frame
-            regs_l = list(recv_pdu.unpack('>%dH' % quantity_regs, from_byte=6, to_byte=6 + byte_count))
+            regs_l = list(recv_pdu.unpack(f'>{quantity_regs}H', from_byte=6, to_byte=6 + byte_count))
             # data handler update request
             ret_hdl = self.data_hdl.write_h_regs(start_addr, regs_l, session_data.srv_info)
             # format regular or except response
@@ -272,7 +272,7 @@ class ServerFunctionsMixin:
             send_pdu.build_except(recv_pdu.func_code, EXP_DATA_VALUE)
             return
         # words list from rx frame
-        regs_l = list(recv_pdu.unpack('>%dH' % write_quantity_regs, from_byte=10, to_byte=10 + byte_count))
+        regs_l = list(recv_pdu.unpack(f'>{write_quantity_regs}H', from_byte=10, to_byte=10 + byte_count))
         # gratuitous read to check error status (avoid to write if read fail)
         ret_hdl_read = self.data_hdl.read_h_regs(read_start_addr, read_quantity_regs, session_data.srv_info)
         if not ret_hdl_read.ok:
@@ -299,7 +299,7 @@ class ServerFunctionsMixin:
         # build pdu
         send_pdu.add_pack('BB', recv_pdu.func_code, read_quantity_regs * 2)
         # add_pack requested words
-        send_pdu.add_pack('>%dH' % len(read_words_l), *read_words_l)
+        send_pdu.add_pack(f'>{len(read_words_l)}H', *read_words_l)
 
     def _encapsulated_interface_transport(self, session_data: SessionData) -> None:
         """
@@ -349,7 +349,7 @@ class ServerFunctionsMixin:
         # format objects data part = [[obj id, obj len, obj val], ...]
         obj_data_part = b''
         for req_obj_id, req_obj_value in req_objects_l:
-            fmt_obj_blk = 'BB%ds' % len(req_obj_value)
+            fmt_obj_blk = f'BB{len(req_obj_value)}s'
             # skip if the next add to data part will exceed max PDU size of modbus frame
             if struct.calcsize(fmt_pdu_head) + len(obj_data_part) + struct.calcsize(fmt_obj_blk) > MAX_PDU_SIZE:
                 # turn on "more follow" field and set "next object id" field with next object id to ask

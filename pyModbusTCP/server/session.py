@@ -13,7 +13,7 @@ class ClientInfo:
         self.port = port
 
     def __repr__(self) -> str:
-        return 'ClientInfo(address=%r, port=%r)' % (self.address, self.port)
+        return f'ClientInfo(address={self.address!r}, port={self.port!r})'
 
 
 class ServerInfo:

@@ -54,6 +54,10 @@ include = ["/pyModbusTCP", "/CHANGES"]
 # the package and all its subpackages (client, server, tools)
 packages = ["pyModbusTCP"]
 
+[tool.ruff.lint]
+# N999: "pyModbusTCP" is the public name of the package (import pyModbusTCP), it can't change
+ignore = ["N999"]
+
 [tool.mypy]
 strict = true
 

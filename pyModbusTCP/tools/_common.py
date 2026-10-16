@@ -32,7 +32,7 @@ def ip_or_network(value: str) -> str:
     try:
         ipaddress.ip_network(value.strip(), strict=False)
     except ValueError:
-        raise argparse.ArgumentTypeError('%r is not an IP address or a network' % value) from None
+        raise argparse.ArgumentTypeError(f'{value!r} is not an IP address or a network') from None
     return value
 
 
@@ -41,7 +41,7 @@ def tcp_port(value: str) -> int:
     try:
         port = int(value)
     except ValueError:
-        raise argparse.ArgumentTypeError('%r is not a port number' % value) from None
+        raise argparse.ArgumentTypeError(f'{value!r} is not a port number') from None
     if not 1 <= port <= 65535:
         raise argparse.ArgumentTypeError('port must be between 1 and 65535')
     return port
@@ -52,7 +52,7 @@ def positive_float(value: str) -> float:
     try:
         f_value = float(value)
     except ValueError:
-        raise argparse.ArgumentTypeError('%r is not a number' % value) from None
+        raise argparse.ArgumentTypeError(f'{value!r} is not a number') from None
     if not f_value > 0:
         raise argparse.ArgumentTypeError('value must be greater than 0')
     return f_value
