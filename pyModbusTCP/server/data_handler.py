@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any
 
 from ..constants import EXP_DATA_ADDRESS, EXP_NONE
 from .data_bank import DataBank
@@ -16,7 +16,7 @@ class DataHandler:
     """
 
     class Return:
-        def __init__(self, exp_code: int, data: Optional[List[Any]] = None) -> None:
+        def __init__(self, exp_code: int, data: list[Any] | None = None) -> None:
             self.exp_code = exp_code
             self.data = data
 
@@ -24,7 +24,7 @@ class DataHandler:
         def ok(self) -> bool:
             return self.exp_code == EXP_NONE
 
-    def __init__(self, data_bank: Optional[DataBank] = None) -> None:
+    def __init__(self, data_bank: DataBank | None = None) -> None:
         """Constructor
 
         Modbus server data handler constructor.
@@ -60,7 +60,7 @@ class DataHandler:
         else:
             return DataHandler.Return(exp_code=EXP_DATA_ADDRESS)
 
-    def write_coils(self, address: int, bits_l: List[bool], srv_info: ServerInfo) -> DataHandler.Return:
+    def write_coils(self, address: int, bits_l: list[bool], srv_info: ServerInfo) -> DataHandler.Return:
         """Call by server for writing in the coils space
 
         :param address: start address
@@ -117,7 +117,7 @@ class DataHandler:
         else:
             return DataHandler.Return(exp_code=EXP_DATA_ADDRESS)
 
-    def write_h_regs(self, address: int, words_l: List[int], srv_info: ServerInfo) -> DataHandler.Return:
+    def write_h_regs(self, address: int, words_l: list[int], srv_info: ServerInfo) -> DataHandler.Return:
         """Call by server for writing in the holding registers space
 
         :param address: start address

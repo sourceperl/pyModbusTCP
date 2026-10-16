@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import math
-from typing import Callable, Iterable, List, Optional, Tuple, Union
+from collections.abc import Callable, Iterable
 
 from ._common import _IPNetwork
 from .data_bank import DataBank
@@ -13,7 +13,7 @@ from .device_id import DeviceIdentification
 from .session import SessionData
 
 
-def validate_data_bank_and_handler(data_bank: Optional[DataBank], data_hdl: Optional[DataHandler]) -> None:
+def validate_data_bank_and_handler(data_bank: DataBank | None, data_hdl: DataHandler | None) -> None:
     if data_bank and not isinstance(data_bank, DataBank):
         raise TypeError('data_bank is not a DataBank instance')
     if data_hdl and not isinstance(data_hdl, DataHandler):
@@ -22,12 +22,12 @@ def validate_data_bank_and_handler(data_bank: Optional[DataBank], data_hdl: Opti
         raise ValueError('when data_hdl is set, you must define data_bank in it')
 
 
-def validate_ext_engine(ext_engine: Optional[Callable[[SessionData], None]]) -> None:
+def validate_ext_engine(ext_engine: Callable[[SessionData], None] | None) -> None:
     if ext_engine and not callable(ext_engine):
         raise TypeError('ext_engine must be callable')
 
 
-def validate_device_id(device_id: Optional[DeviceIdentification]) -> Optional[DeviceIdentification]:
+def validate_device_id(device_id: DeviceIdentification | None) -> DeviceIdentification | None:
     if device_id is None:
         return None
     if not isinstance(device_id, DeviceIdentification):
@@ -36,7 +36,7 @@ def validate_device_id(device_id: Optional[DeviceIdentification]) -> Optional[De
     return device_id
 
 
-def validate_timeout(value: Optional[Union[int, float]], name: str) -> Optional[float]:
+def validate_timeout(value: float | None, name: str) -> float | None:
     """Check an optional timeout (None or a number of seconds > 0) and return it as a float (or None)."""
     if value is None:
         return None
@@ -47,7 +47,7 @@ def validate_timeout(value: Optional[Union[int, float]], name: str) -> Optional[
     return float(value)
 
 
-def validate_max_connections(max_connections: Optional[int], name: str = 'max_connections') -> Optional[int]:
+def validate_max_connections(max_connections: int | None, name: str = 'max_connections') -> int | None:
     if max_connections is None:
         return None
     if isinstance(max_connections, bool) or not isinstance(max_connections, int):
@@ -63,7 +63,7 @@ def validate_read_only(read_only: bool) -> bool:
     return read_only
 
 
-def validate_allowed_hosts(allowed_hosts: Optional[Iterable[str]]) -> Optional[Tuple[_IPNetwork, ...]]:
+def validate_allowed_hosts(allowed_hosts: Iterable[str] | None) -> tuple[_IPNetwork, ...] | None:
     """Check the whitelist (None or an iterable of IP addresses/networks) and return it as networks (or None)."""
     if allowed_hosts is None:
         return None
@@ -76,7 +76,7 @@ def validate_allowed_hosts(allowed_hosts: Optional[Iterable[str]]) -> Optional[T
         raise TypeError('allowed_hosts must be an iterable of str or None') from None
     if not hosts:
         raise ValueError('allowed_hosts must not be empty (use None to allow every host)')
-    networks: List[_IPNetwork] = []
+    networks: list[_IPNetwork] = []
     for host in hosts:
         if not isinstance(host, str):
             raise TypeError('allowed_hosts items must be str, got %s' % type(host).__name__)

@@ -3,7 +3,6 @@
 
 class InternalError(Exception):
     """ Base of the internal errors of a request (turned into last_error by the client). """
-    pass
 
 
 class NetworkError(InternalError):

@@ -3,9 +3,17 @@
 import random
 import socket
 from types import TracebackType
-from typing import Optional, Type, TypeAlias
+from typing import TypeAlias
 
-from ..constants import EXP_DETAILS, EXP_NONE, EXP_TXT, MB_ERR_TXT, MB_EXCEPT_ERR, MB_NO_ERR, VERSION
+from ..constants import (
+    EXP_DETAILS,
+    EXP_NONE,
+    EXP_TXT,
+    MB_ERR_TXT,
+    MB_EXCEPT_ERR,
+    MB_NO_ERR,
+    VERSION,
+)
 from ..utils import _to_bool
 from . import _errors, _validators
 from ._errors import ModbusExcept, NetworkError
@@ -47,7 +55,7 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         """
         # private
         # set _sock first: __del__() always needs it, even if a validation below fails
-        self._sock: Optional[socket.socket] = None
+        self._sock: socket.socket | None = None
         # constructor arguments: validate them
         self._host = _validators.validate_host(host)
         self._port = _validators.validate_port(port)
@@ -78,8 +86,8 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         """Context manager: the connection is closed on exit (it is opened at first request with auto_open)."""
         return self
 
-    def __exit__(self, exc_type: Optional[Type[BaseException]], exc_value: Optional[BaseException],
-                 traceback: Optional[TracebackType]) -> None:
+    def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None,
+                 traceback: TracebackType | None) -> None:
         self.close()
 
     @property

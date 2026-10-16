@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from threading import Lock
-from typing import List, Optional
 
 from ..utils import _to_bool_list, _to_int_list
 from .session import ServerInfo
@@ -76,7 +75,7 @@ class DataBank:
         return 'DataBank(%s)' % attrs_str
 
     def get_coils(self, address: int, number: int = 1,
-                  srv_info: Optional[ServerInfo] = None) -> Optional[List[bool]]:
+                  srv_info: ServerInfo | None = None) -> list[bool] | None:
         """Read data on server coils space
 
         :param address: start address
@@ -95,8 +94,8 @@ class DataBank:
             else:
                 return None
 
-    def set_coils(self, address: int, bit_list: List[bool],
-                  srv_info: Optional[ServerInfo] = None) -> Optional[bool]:
+    def set_coils(self, address: int, bit_list: list[bool],
+                  srv_info: ServerInfo | None = None) -> bool | None:
         """Write data to server coils space
 
         :param address: start address
@@ -135,7 +134,7 @@ class DataBank:
         return True
 
     def get_discrete_inputs(self, address: int, number: int = 1,
-                            srv_info: Optional[ServerInfo] = None) -> Optional[List[bool]]:
+                            srv_info: ServerInfo | None = None) -> list[bool] | None:
         """Read data on server discrete inputs space
 
         :param address: start address
@@ -155,7 +154,7 @@ class DataBank:
             else:
                 return None
 
-    def set_discrete_inputs(self, address: int, bit_list: List[bool]) -> Optional[bool]:
+    def set_discrete_inputs(self, address: int, bit_list: list[bool]) -> bool | None:
         """Write data to server discrete inputs space
 
         :param address: start address
@@ -178,7 +177,7 @@ class DataBank:
         return True
 
     def get_holding_registers(self, address: int, number: int = 1,
-                              srv_info: Optional[ServerInfo] = None) -> Optional[List[int]]:
+                              srv_info: ServerInfo | None = None) -> list[int] | None:
         """Read data on server holding registers space
 
         :param address: start address
@@ -197,8 +196,8 @@ class DataBank:
             else:
                 return None
 
-    def set_holding_registers(self, address: int, word_list: List[int],
-                              srv_info: Optional[ServerInfo] = None) -> Optional[bool]:
+    def set_holding_registers(self, address: int, word_list: list[int],
+                              srv_info: ServerInfo | None = None) -> bool | None:
         """Write data to server holding registers space
 
         :param address: start address
@@ -240,7 +239,7 @@ class DataBank:
         return True
 
     def get_input_registers(self, address: int, number: int = 1,
-                            srv_info: Optional[ServerInfo] = None) -> Optional[List[int]]:
+                            srv_info: ServerInfo | None = None) -> list[int] | None:
         """Read data on server input registers space
 
         :param address: start address
@@ -259,7 +258,7 @@ class DataBank:
             else:
                 return None
 
-    def set_input_registers(self, address: int, word_list: List[int]) -> Optional[bool]:
+    def set_input_registers(self, address: int, word_list: list[int]) -> bool | None:
         """Write data to server input registers space
 
         :param address: start address
@@ -299,7 +298,6 @@ class DataBank:
         :param srv_info: some server info
         :type srv_info: ModbusServerInfo
         """
-        pass
 
     def on_holding_registers_change(self, address: int, from_value: int, to_value: int,
                                     srv_info: ServerInfo) -> None:
@@ -316,4 +314,3 @@ class DataBank:
         :param srv_info: some server info
         :type srv_info: ModbusServerInfo
         """
-        pass

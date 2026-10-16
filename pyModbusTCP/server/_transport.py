@@ -5,9 +5,10 @@ from __future__ import annotations
 import socket
 import sys
 import time
+from collections.abc import Callable
 from socketserver import BaseRequestHandler, ThreadingTCPServer
 from threading import Lock
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 from ._common import LogThrottle, _IPNetwork, client_ip, host_key, logger
 from .errors import Error, NetworkError
@@ -28,21 +29,21 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
     # retransmission (1 s or more) as soon as the accept loop is a bit late
     request_queue_size: int = 128
     # these 4 settings are set by ModbusServer.start() (see ModbusServer.__init__() for a description)
-    max_connections: Optional[int] = None
-    max_connections_per_host: Optional[int] = None
-    idle_timeout: Optional[float] = None
-    request_timeout: Optional[float] = None
+    max_connections: int | None = None
+    max_connections_per_host: int | None = None
+    idle_timeout: float | None = None
+    request_timeout: float | None = None
     # whitelist of allowed client networks (None: every client is allowed), set by ModbusServer.start()
-    allowed_networks: Optional[Tuple[_IPNetwork, ...]] = None
+    allowed_networks: tuple[_IPNetwork, ...] | None = None
     engine: Callable[[SessionData], None]
 
     def __init__(self, *args: Any, ipv6: bool = False, **kwargs: Any) -> None:
         # must be set before ThreadingTCPServer.__init__(), which creates the socket from it
         self.address_family = socket.AF_INET6 if ipv6 else socket.AF_INET
         # active sessions (a session = a client TCP connection with its thread): socket -> client address
-        self._active_sessions: Dict[socket.socket, Any] = {}
+        self._active_sessions: dict[socket.socket, Any] = {}
         # number of active sessions of each client host (see host_key()), protected by the sessions lock
-        self._host_sessions: Dict[str, int] = {}
+        self._host_sessions: dict[str, int] = {}
         self._sessions_lock = Lock()
         # refused connections: the first one is logged at once, then one message per 10 s at most (a connection
         # flood must not flood the log)
@@ -62,7 +63,7 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
         """Number of active sessions."""
         return len(self._active_sessions)
 
-    def active_sessions(self) -> List[Tuple[socket.socket, Any]]:
+    def active_sessions(self) -> list[tuple[socket.socket, Any]]:
         """Return a snapshot of the active sessions as a list of (socket, client address)."""
         with self._sessions_lock:
             return list(self._active_sessions.items())
@@ -159,12 +160,12 @@ class ModbusRequestHandler(BaseRequestHandler):
     def _send_all(self, data: bytes) -> None:
         try:
             self.request.sendall(data)
-        except socket.timeout:
+        except TimeoutError:
             # sendall() may have sent only a part of the frame, the TCP stream is now out of sync:
             # raise an error to close this session (see handle())
             raise NetworkError('timeout on send, close session')
 
-    def _check_and_update_timeout(self, deadline: Optional[float], timeout_msg: str) -> bool:
+    def _check_and_update_timeout(self, deadline: float | None, timeout_msg: str) -> bool:
         """Check the deadline (on a system call is only needed when it is near)"""
         sock_timeout_changed = False
         if deadline is not None:
@@ -176,8 +177,8 @@ class ModbusRequestHandler(BaseRequestHandler):
                 sock_timeout_changed = True
         return sock_timeout_changed
 
-    def _recv_chunk(self, size: int, data_len: int, deadline: Optional[float], timeout_msg: str,
-                    request_timeout: Optional[float]) -> Tuple[bytes, Optional[float], str, bool]:
+    def _recv_chunk(self, size: int, data_len: int, deadline: float | None, timeout_msg: str,
+                    request_timeout: float | None) -> tuple[bytes, float | None, str, bool]:
         sock_timeout_changed = self._check_and_update_timeout(deadline, timeout_msg)
 
         # recv all data or a chunk of it
@@ -193,8 +194,8 @@ class ModbusRequestHandler(BaseRequestHandler):
         else:
             raise NetworkError('recv return null')
 
-    def _recv_all(self, size: int, deadline: Optional[float] = None, timeout_msg: str = 'recv timeout',
-                  request_timeout: Optional[float] = None) -> bytes:
+    def _recv_all(self, size: int, deadline: float | None = None, timeout_msg: str = 'recv timeout',
+                  request_timeout: float | None = None) -> bytes:
         """Receive size bytes (loop until all bytes are received).
 
         :param deadline: limit for the end of reception (a time.monotonic() value), None for no limit
@@ -215,7 +216,7 @@ class ModbusRequestHandler(BaseRequestHandler):
                     if timeout_changed:
                         sock_timeout_changed = True
                     data += data_chunk
-                except socket.timeout:
+                except TimeoutError:
                     # just redo main server run test, deadline test and recv operations on timeout
                     pass
         finally:
@@ -259,7 +260,7 @@ class ModbusRequestHandler(BaseRequestHandler):
                 self.server.engine(session_data)
                 # send the tx pdu with the last rx mbap (only length field change)
                 self._send_all(session_data.response.raw)
-        except (Error, OSError, socket.error) as e:
+        except (Error, OSError) as e:
             # debug message
             logger.debug('Exception %r for %r', e, session_data.client)
             # on main loop except: exit from it and cleanly close the current socket

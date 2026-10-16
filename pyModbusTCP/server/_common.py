@@ -6,7 +6,7 @@ import ipaddress
 import logging
 import time
 from threading import Lock
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 # all the server modules log under the historical name "pyModbusTCP.server" (used by applications to tune it)
 logger = logging.getLogger('pyModbusTCP.server')
@@ -18,7 +18,7 @@ _IPNetwork = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
 HOST_IPV6_PREFIX = 64
 
 
-def client_ip(client_address: Any) -> Optional[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]:
+def client_ip(client_address: Any) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
     """Return the IP address of a client (from a socket address tuple), None if it can't be decoded.
 
     The zone id of a link-local IPv6 address (like "fe80::1%eth0") is dropped, and an IPv4 client on a dual-stack
@@ -58,7 +58,7 @@ class LogThrottle:
         self.level = level
         self.interval = interval
         self._count = 0
-        self._last_time: Optional[float] = None
+        self._last_time: float | None = None
         self._lock = Lock()
 
     def event(self, msg: str, *args: Any) -> None:

@@ -10,7 +10,6 @@ Exit with ctrl+c.
 
 import time
 from threading import Lock, Thread
-from typing import List
 
 from pyModbusTCP.client import ModbusClient
 
@@ -18,7 +17,7 @@ SERVER_HOST = "localhost"
 SERVER_PORT = 502
 
 # set global
-regs: List[int] = []
+regs: list[int] = []
 
 # init a thread lock
 regs_lock = Lock()

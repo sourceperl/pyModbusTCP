@@ -6,7 +6,7 @@ import struct
 import threading
 import time
 import unittest
-from typing import Any, Tuple
+from typing import Any
 from unittest import mock
 
 from pyModbusTCP.client import ModbusClient, _decode_regs
@@ -79,7 +79,7 @@ class TestModbusClient(unittest.TestCase):
         self.assertIsInstance(ModbusClient(timeout=5).timeout, float)
         # bad types: the message is about timeout (not about another param)
         # bad values are typed Any: they are deliberately not of the annotated type
-        bad_types: Tuple[Any, ...] = ('1', None, [1.0])
+        bad_types: tuple[Any, ...] = ('1', None, [1.0])
         for bad_type in bad_types:
             with self.assertRaisesRegex(TypeError, 'timeout'):
                 ModbusClient(timeout=bad_type)
@@ -119,9 +119,8 @@ class TestModbusClient(unittest.TestCase):
             self.assertTrue(c.is_open)
         self.assertFalse(c.is_open)
         c2 = ModbusClient()
-        with self.assertRaises(RuntimeError):
-            with c2:
-                raise RuntimeError('boom')
+        with self.assertRaises(RuntimeError), c2:
+            raise RuntimeError('boom')
         self.assertFalse(c2.is_open)
 
     def test_params_type_check(self):
@@ -163,7 +162,7 @@ class TestModbusClient(unittest.TestCase):
         c = ModbusClient()
         with mock.patch.object(c, '_req_pdu', side_effect=AssertionError('no request expected')):
             # bad values are typed Any: they are deliberately not of the annotated type
-            bad_types: Tuple[Any, ...] = ('\x03\x00', [3, 0], None, 3)
+            bad_types: tuple[Any, ...] = ('\x03\x00', [3, 0], None, 3)
             for bad_type in bad_types:
                 with self.assertRaises(TypeError):
                     c.custom_request(bad_type)

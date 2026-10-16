@@ -23,7 +23,7 @@ while True:
             print('coil #%s: unable to write %s' % (ad, bit))
         time.sleep(0.5)
 
-    print('')
+    print()
     time.sleep(1)
 
     # read 4 bits in modbus address 0 to 3
@@ -38,5 +38,5 @@ while True:
     # toggle
     bit = not bit
     # sleep 2s before next polling
-    print('')
+    print()
     time.sleep(2)

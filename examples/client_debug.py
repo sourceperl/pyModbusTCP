@@ -5,8 +5,8 @@
 import logging
 import time
 
-from pyModbusTCP.server import ModbusServer
 from pyModbusTCP.client import ModbusClient
+from pyModbusTCP.server import ModbusServer
 
 # a logger for this script
 logger = logging.getLogger(__name__)

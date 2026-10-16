@@ -29,10 +29,9 @@ import argparse
 import logging
 import sys
 import time
-from typing import Callable, Dict, List, Optional, Sequence
+from collections.abc import Callable, Sequence
 
 from ..client import ModbusClient
-
 from ._common import add_version_arg, positive_float, tcp_port
 
 logger = logging.getLogger('mbtcp-client')
@@ -137,7 +136,7 @@ def format_value(value: object, args: argparse.Namespace) -> str:
 
 
 def do_read(client: ModbusClient, args: argparse.Namespace) -> bool:
-    read_funcs: Dict[str, Callable[[int, int], Optional[Sequence[object]]]] = {
+    read_funcs: dict[str, Callable[[int, int], Sequence[object] | None]] = {
         'read-coils': client.read_coils,
         'read-inputs': client.read_discrete_inputs,
         'read-holding': client.read_holding_registers,
@@ -197,7 +196,7 @@ def run_command(client: ModbusClient, args: argparse.Namespace) -> bool:
     return do_device_id(client, args)
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.WARNING, format='%(message)s')

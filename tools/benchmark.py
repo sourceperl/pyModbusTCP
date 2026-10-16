@@ -2,7 +2,7 @@
 
 import socket
 import time
-from typing import Callable
+from collections.abc import Callable
 
 from pyModbusTCP import __version__ as VERSION
 from pyModbusTCP.client import ModbusClient

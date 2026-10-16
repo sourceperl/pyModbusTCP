@@ -64,7 +64,7 @@ class TestModbusServer(unittest.TestCase):
         """A timeout on send can leave a partial frame on the wire: session must be closed."""
         class TimeoutSock:
             def sendall(self, _data):
-                raise socket.timeout()
+                raise TimeoutError()
 
         class OkSock:
             def sendall(self, _data):
@@ -130,7 +130,7 @@ class TestModbusServerLimits(unittest.TestCase):
         start = time.monotonic()
         try:
             data = sock.recv(1)
-        except socket.timeout:
+        except TimeoutError:
             return None
         except ConnectionError:
             data = b''
@@ -562,12 +562,12 @@ class TestDataBankValidation(unittest.TestCase):
             def __index__(self):
                 return self.value
 
-        self.assertIs(self.db.set_coils(0, [IntLike(1), IntLike(0), True]), True)
+        self.assertIs(self.db.set_coils(0, [IntLike(1), IntLike(0), True]), True)  # type: ignore
         self.assertEqual(self.db.get_coils(0, 3), [True, False, True])
-        self.assertIs(self.db.set_holding_registers(0, (IntLike(1), IntLike(65535))), True)
+        self.assertIs(self.db.set_holding_registers(0, (IntLike(1), IntLike(65535))), True)  # type: ignore
         self.assertEqual(self.db.get_holding_registers(0, 2), [1, 65535])
         with self.assertRaises(ValueError):
-            self.db.set_holding_registers(0, [IntLike(65536)])
+            self.db.set_holding_registers(0, [IntLike(65536)])  # type: ignore
 
 
 class TestModbusServerSpecFrames(unittest.TestCase):

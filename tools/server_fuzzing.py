@@ -13,7 +13,6 @@ import sys
 import time
 from dataclasses import dataclass
 from random import randint
-from typing import Optional
 
 
 @dataclass
@@ -75,7 +74,7 @@ def generate_frame(config: FuzzerConfig) -> bytearray:
     return frame
 
 
-def create_socket(config: FuzzerConfig) -> Optional[socket.socket]:
+def create_socket(config: FuzzerConfig) -> socket.socket | None:
     """Create and configure a TCP socket."""
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -105,7 +104,7 @@ def send_and_receive(sock: socket.socket, frame: bytearray, request_num: int,
                 return False
             logger.info(f"[{request_num:>8}] recv: {format_frame(recv_frame, config.display_limit)}")
             return True
-        except socket.timeout:
+        except TimeoutError:
             logger.info(f"[{request_num:>8}] recv: timeout (no response)")
             return True
 

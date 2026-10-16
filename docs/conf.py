@@ -18,7 +18,7 @@ DOCS_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(DOCS_DIR)
 sys.path.insert(0, ROOT_DIR)
 
-import pyModbusTCP  # noqa: E402 (after the sys.path setup)
+import pyModbusTCP
 
 # -- Project information -------------------------------------------------------
 

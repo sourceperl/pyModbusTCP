@@ -1,7 +1,6 @@
 """ pyModbusTCP client: DeviceIdentificationResponse, result of the read device identification function. """
 
 from dataclasses import dataclass, field
-from typing import Dict, Optional
 
 
 @dataclass
@@ -20,32 +19,32 @@ class DeviceIdentificationResponse:
     conformity_level: int = 0
     more_follows: int = 0
     next_object_id: int = 0
-    objects_by_id: Dict[int, bytes] = field(default_factory=dict)
+    objects_by_id: dict[int, bytes] = field(default_factory=dict)
 
     @property
-    def vendor_name(self) -> Optional[bytes]:
+    def vendor_name(self) -> bytes | None:
         return self.objects_by_id.get(0x00)
 
     @property
-    def product_code(self) -> Optional[bytes]:
+    def product_code(self) -> bytes | None:
         return self.objects_by_id.get(0x01)
 
     @property
-    def major_minor_revision(self) -> Optional[bytes]:
+    def major_minor_revision(self) -> bytes | None:
         return self.objects_by_id.get(0x02)
 
     @property
-    def vendor_url(self) -> Optional[bytes]:
+    def vendor_url(self) -> bytes | None:
         return self.objects_by_id.get(0x03)
 
     @property
-    def product_name(self) -> Optional[bytes]:
+    def product_name(self) -> bytes | None:
         return self.objects_by_id.get(0x04)
 
     @property
-    def model_name(self) -> Optional[bytes]:
+    def model_name(self) -> bytes | None:
         return self.objects_by_id.get(0x05)
 
     @property
-    def user_application_name(self) -> Optional[bytes]:
+    def user_application_name(self) -> bytes | None:
         return self.objects_by_id.get(0x06)

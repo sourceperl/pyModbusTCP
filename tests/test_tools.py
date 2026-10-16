@@ -8,7 +8,7 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Iterator, List, Tuple
+from collections.abc import Iterator
 
 import pytest
 
@@ -29,7 +29,7 @@ def free_port() -> int:
 
 
 @pytest.fixture
-def server() -> Iterator[Tuple[ModbusServer, int]]:
+def server() -> Iterator[tuple[ModbusServer, int]]:
     """A Modbus/TCP server on localhost (port chosen by the OS), with a device identification."""
     srv = ModbusServer(host='127.0.0.1', port=0, no_block=True,
                        device_id=DeviceIdentification(vendor_name=b'ACME', product_code=b'X\x1b[31m'))
@@ -38,7 +38,7 @@ def server() -> Iterator[Tuple[ModbusServer, int]]:
     srv.stop()
 
 
-def run_client(capsys: pytest.CaptureFixture[str], args: List[str]) -> Tuple[int, str, str]:
+def run_client(capsys: pytest.CaptureFixture[str], args: list[str]) -> tuple[int, str, str]:
     """Run mbtcp-client, return (exit status, stdout, stderr)."""
     try:
         status = cli_tool.main(args)
@@ -50,7 +50,7 @@ def run_client(capsys: pytest.CaptureFixture[str], args: List[str]) -> Tuple[int
 
 # --- mbtcp-client ---
 
-def test_client_read_write_registers(server: Tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
+def test_client_read_write_registers(server: tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
     _, port = server
     base = ['-H', '127.0.0.1', '-p', str(port)]
     assert run_client(capsys, base + ['write-registers', '10', '1', '0x1234', '-1'])[0] == 0
@@ -62,7 +62,7 @@ def test_client_read_write_registers(server: Tuple[ModbusServer, int], capsys: p
     assert run_client(capsys, base + ['read-holding', '12', '--signed'])[1] == '12 -1\n'
 
 
-def test_client_coils(server: Tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
+def test_client_coils(server: tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
     srv, port = server
     base = ['-H', '127.0.0.1', '-p', str(port)]
     assert run_client(capsys, base + ['write-coil', '5', 'on'])[0] == 0
@@ -72,7 +72,7 @@ def test_client_coils(server: Tuple[ModbusServer, int], capsys: pytest.CaptureFi
         ['5', '1', '6', '1', '7', '0', '8', '1']
 
 
-def test_client_device_id_is_sanitized(server: Tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
+def test_client_device_id_is_sanitized(server: tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
     _, port = server
     status, out, _ = run_client(capsys, ['-H', '127.0.0.1', '-p', str(port), 'device-id'])
     assert status == 0
@@ -80,7 +80,7 @@ def test_client_device_id_is_sanitized(server: Tuple[ModbusServer, int], capsys:
     assert out.splitlines() == ['0x00 ACME', '0x01 X\\x1b[31m', '0x02 ']
 
 
-def test_client_errors(server: Tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
+def test_client_errors(server: tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
     srv, port = server
     base = ['-H', '127.0.0.1', '-p', str(port)]
     # modbus exception: exit status 1
@@ -222,7 +222,7 @@ def test_tcp2rtu_fair_share(caplog: pytest.LogCaptureFixture) -> None:
     srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, ext_engine=worker.srv_engine_entry)
     _, tcp_port = srv.start()
     stop = threading.Event()
-    flood_excepts: List[int] = []
+    flood_excepts: list[int] = []
     request = struct.pack('>HHHBBHH', 1, 0, 6, 1, 0x03, 0, 1)
 
     def flood(sock: socket.socket) -> None:
@@ -234,7 +234,7 @@ def test_tcp2rtu_fair_share(caplog: pytest.LogCaptureFixture) -> None:
                 return
             flood_excepts.append(resp[8])
 
-    flood_socks: List[socket.socket] = []
+    flood_socks: list[socket.socket] = []
     try:
         flood_socks = [connect_from('127.0.0.2', tcp_port) for _ in range(8)]
         with caplog.at_level('WARNING', logger='mbtcp-tcp2rtu'):
@@ -301,7 +301,7 @@ def rtu_frame(slave: int, pdu: bytes) -> bytes:
 
 
 @pytest.mark.skipif(os.name == 'nt', reason='needs a pseudo-terminal (POSIX only)')
-def test_rtu2tcp_relay(server: Tuple[ModbusServer, int]) -> None:
+def test_rtu2tcp_relay(server: tuple[ModbusServer, int]) -> None:
     """A RTU master on a pseudo-terminal reads and writes the TCP server through the gateway (slave 30)."""
     serial = pytest.importorskip('serial')
     from pyModbusTCP.tools import rtu_to_tcp_gw

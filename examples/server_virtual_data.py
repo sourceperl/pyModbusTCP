@@ -22,7 +22,6 @@ $ ./server.py --host 192.168.1.10 --port 5020
 
 import argparse
 from datetime import datetime
-from typing import List, Optional
 
 from pyModbusTCP.server import DataBank, ModbusServer
 
@@ -36,7 +35,7 @@ class MyDataBank(DataBank):
         super().__init__(virtual_mode=True)
 
     def get_holding_registers(self, address: int, number: int = 1,
-                              srv_info: Optional[ModbusServer.ServerInfo] = None) -> Optional[List[int]]:
+                              srv_info: ModbusServer.ServerInfo | None = None) -> list[int] | None:
         """Get virtual holding registers."""
         # populate virtual registers dict with current datetime values
         now = datetime.now()

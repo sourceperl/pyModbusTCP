@@ -6,7 +6,6 @@ import struct
 import time
 from binascii import hexlify
 from socket import AF_UNSPEC, IPPROTO_TCP, SOCK_STREAM, TCP_NODELAY
-from typing import Optional
 
 from ..constants import (
     MB_CONNECT_ERR,
@@ -36,7 +35,7 @@ class ClientTransportMixin:
     auto_open: bool
     auto_close: bool
     _no_delay: bool
-    _sock: Optional[socket.socket]
+    _sock: socket.socket | None
     _deadline: float
     _transaction_id: int
 
@@ -64,7 +63,7 @@ class ClientTransportMixin:
             # name resolution failure: report it like any other connect error (no exception for the caller)
             raise NetworkError(MB_CONNECT_ERR, 'host name resolution error: %s' % e)
         # try each address in turn, keep the last failure reason for the error message
-        last_err: Optional[OSError] = None
+        last_err: OSError | None = None
         for af, sock_type, proto, _canon_name, sa in addr_infos:
             try:
                 self._sock = socket.socket(af, sock_type, proto)
@@ -141,7 +140,7 @@ class ClientTransportMixin:
             # restore the full timeout (it's reduced by _recv() to the time remaining in the previous request)
             self._set_sock_timeout(self.timeout)
             self._sock.sendall(frame)
-        except socket.timeout:
+        except TimeoutError:
             self.close()
             raise NetworkError(MB_TIMEOUT_ERR, 'timeout error')
         except OSError:
@@ -184,7 +183,7 @@ class ClientTransportMixin:
         try:
             self._set_sock_timeout(remaining)
             r_buffer = self._sock.recv(size)
-        except socket.timeout:
+        except TimeoutError:
             self.close()
             raise NetworkError(MB_TIMEOUT_ERR, 'timeout error')
         except OSError:
@@ -292,4 +291,3 @@ class ClientTransportMixin:
 
     def on_tx_rx(self, frame: bytes, is_tx: bool) -> None:
         """Call for each Tx/Rx (for user purposes)."""
-        pass

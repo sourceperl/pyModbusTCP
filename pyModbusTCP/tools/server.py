@@ -32,10 +32,8 @@ import logging
 import signal
 import sys
 from types import FrameType
-from typing import List, Optional
 
 from ..server import DataBank, ModbusServer
-
 from ._common import (
     PORT_502_HELP,
     add_version_arg,
@@ -93,7 +91,7 @@ def serve(server: ModbusServer, args: argparse.Namespace) -> int:
     """Run the server until Ctrl-C or SIGTERM, return the exit status."""
 
     # SIGTERM (systemd, docker stop, kill...): stop the server cleanly, like Ctrl-C
-    def on_sigterm(_signum: int, _frame: Optional[FrameType]) -> None:
+    def on_sigterm(_signum: int, _frame: FrameType | None) -> None:
         logger.info('SIGTERM received, shutting down')
         server.stop()
 
@@ -112,7 +110,7 @@ def serve(server: ModbusServer, args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     setup_logging(args.debug)
     if not args.debug:

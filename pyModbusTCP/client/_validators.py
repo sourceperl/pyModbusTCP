@@ -1,7 +1,6 @@
 """ pyModbusTCP client: checks of the ModbusClient settings and of the request arguments. """
 
 import math
-from typing import List
 
 from ..utils import valid_host
 
@@ -19,7 +18,7 @@ def check_addr_nb(addr: int, nb: int, max_nb: int, addr_name: str, nb_name: str,
         raise ValueError('%s after end of modbus address space' % action)
 
 
-def check_regs_values(values: List[int], name: str) -> None:
+def check_regs_values(values: list[int], name: str) -> None:
     """Check that every register value fit in 16 bits (values is a non-empty list of int).
 
     :raises ValueError: if a value is out of the 0 to 65535 range

@@ -17,14 +17,13 @@ $ ./server.py --host 192.168.1.10 --port 5020
 """
 
 import argparse
-from typing import List
 
 from pyModbusTCP.constants import EXP_ILLEGAL_FUNCTION
 from pyModbusTCP.server import DataHandler, ModbusServer
 
 # some const
-ALLOW_R_L: List[str] = ['127.0.0.1', '192.168.0.10']
-ALLOW_W_L: List[str] = ['127.0.0.1']
+ALLOW_R_L: list[str] = ['127.0.0.1', '192.168.0.10']
+ALLOW_W_L: list[str] = ['127.0.0.1']
 
 
 # a custom data handler with IPs filter
@@ -53,13 +52,13 @@ class MyDataHandler(DataHandler):
         else:
             return DataHandler.Return(exp_code=EXP_ILLEGAL_FUNCTION)
 
-    def write_coils(self, address: int, bits_l: List[bool], srv_info: ModbusServer.ServerInfo) -> DataHandler.Return:
+    def write_coils(self, address: int, bits_l: list[bool], srv_info: ModbusServer.ServerInfo) -> DataHandler.Return:
         if srv_info.client.address in ALLOW_W_L:
             return super().write_coils(address, bits_l, srv_info)
         else:
             return DataHandler.Return(exp_code=EXP_ILLEGAL_FUNCTION)
 
-    def write_h_regs(self, address: int, words_l: List[int], srv_info: ModbusServer.ServerInfo) -> DataHandler.Return:
+    def write_h_regs(self, address: int, words_l: list[int], srv_info: ModbusServer.ServerInfo) -> DataHandler.Return:
         if srv_info.client.address in ALLOW_W_L:
             return super().write_h_regs(address, words_l, srv_info)
         else:

@@ -136,7 +136,7 @@ class TestClientServer(unittest.TestCase):
 
     def test_request_send_errors(self):
         """Send failures keep their error codes and close the connection."""
-        for error, code in [(socket.timeout(), MB_TIMEOUT_ERR), (OSError(), MB_SEND_ERR)]:
+        for error, code in [(TimeoutError(), MB_TIMEOUT_ERR), (OSError(), MB_SEND_ERR)]:
             with self.subTest(error=type(error).__name__):
                 self.assertTrue(self.client.open())
                 sock = Mock(wraps=self.client._sock)

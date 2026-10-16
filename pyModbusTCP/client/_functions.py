@@ -1,7 +1,8 @@
 """ pyModbusTCP client: the Modbus functions (build the request PDU, decode the reply PDU). """
 
 import struct
-from typing import TYPE_CHECKING, Iterable, List, Optional, Union
+from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 from ..constants import (
     ENCAPSULATED_INTERFACE_TRANSPORT,
@@ -18,14 +19,28 @@ from ..constants import (
     WRITE_SINGLE_COIL,
     WRITE_SINGLE_REGISTER,
 )
-from ..utils import _pack_bits, _to_bool, _to_bool_list, _to_int, _to_int_list, _unpack_bits, byte_length
-from ._common import MAX_READ_BITS, MAX_READ_REGS, MAX_WRITE_BITS, MAX_WRITE_READ_REGS, MAX_WRITE_REGS
+from ..utils import (
+    _pack_bits,
+    _to_bool,
+    _to_bool_list,
+    _to_int,
+    _to_int_list,
+    _unpack_bits,
+    byte_length,
+)
+from ._common import (
+    MAX_READ_BITS,
+    MAX_READ_REGS,
+    MAX_WRITE_BITS,
+    MAX_WRITE_READ_REGS,
+    MAX_WRITE_REGS,
+)
 from ._errors import InternalError, NetworkError
 from ._validators import check_addr_nb, check_regs_values
 from .device_id import DeviceIdentificationResponse
 
 
-def _decode_regs(data: bytes, reg_nb: int) -> List[int]:
+def _decode_regs(data: bytes, reg_nb: int) -> list[int]:
     """Decode the first reg_nb big-endian 16 bits registers of a modbus registers field."""
     return list(struct.unpack('>%dH' % reg_nb, data[:2 * reg_nb]))
 
@@ -42,7 +57,7 @@ class ClientFunctionsMixin:
         def _req_pdu(self, tx_pdu: bytes, rx_min_len: int = 2) -> bytes: ...
         def _req_except_handler(self, _except: Exception) -> None: ...
 
-    def custom_request(self, pdu: Union[bytes, bytearray]) -> Optional[bytes]:
+    def custom_request(self, pdu: bytes | bytearray) -> bytes | None:
         """Send a custom modbus request.
 
         The reply must have the same function code (or the same with the exception flag): otherwise it is an error.
@@ -68,7 +83,7 @@ class ClientFunctionsMixin:
             self._req_except_handler(e)
             return None
 
-    def _read_bits_req(self, func_code: int, bit_addr: int, bit_nb: int) -> Optional[List[bool]]:
+    def _read_bits_req(self, func_code: int, bit_addr: int, bit_nb: int) -> list[bool] | None:
         """Common part of READ_COILS and READ_DISCRETE_INPUTS (params are already checked)."""
         try:
             tx_pdu = struct.pack('>BHH', func_code, bit_addr, bit_nb)
@@ -87,7 +102,7 @@ class ClientFunctionsMixin:
             self._req_except_handler(e)
             return None
 
-    def _read_regs_req(self, func_code: int, reg_addr: int, reg_nb: int) -> Optional[List[int]]:
+    def _read_regs_req(self, func_code: int, reg_addr: int, reg_nb: int) -> list[int] | None:
         """Common part of READ_HOLDING_REGISTERS and READ_INPUT_REGISTERS (params are already checked)."""
         try:
             tx_pdu = struct.pack('>BHH', func_code, reg_addr, reg_nb)
@@ -99,7 +114,7 @@ class ClientFunctionsMixin:
             return None
 
     @staticmethod
-    def _decode_regs_reply(rx_pdu: bytes, reg_nb: int) -> List[int]:
+    def _decode_regs_reply(rx_pdu: bytes, reg_nb: int) -> list[int]:
         """Decode a [func code, byte count, registers...] reply PDU (functions 0x03, 0x04 and 0x17)."""
         # extract field "byte count"
         byte_count = rx_pdu[1]
@@ -124,7 +139,7 @@ class ClientFunctionsMixin:
             self._req_except_handler(e)
             return False
 
-    def read_coils(self, bit_addr: int, bit_nb: int = 1) -> Optional[List[bool]]:
+    def read_coils(self, bit_addr: int, bit_nb: int = 1) -> list[bool] | None:
         """Modbus function READ_COILS (0x01).
 
         :param bit_addr: bit address (0 to 65535)
@@ -141,7 +156,7 @@ class ClientFunctionsMixin:
         # make request
         return self._read_bits_req(READ_COILS, bit_addr, bit_nb)
 
-    def read_discrete_inputs(self, bit_addr: int, bit_nb: int = 1) -> Optional[List[bool]]:
+    def read_discrete_inputs(self, bit_addr: int, bit_nb: int = 1) -> list[bool] | None:
         """Modbus function READ_DISCRETE_INPUTS (0x02).
 
         :param bit_addr: bit address (0 to 65535)
@@ -158,7 +173,7 @@ class ClientFunctionsMixin:
         # make request
         return self._read_bits_req(READ_DISCRETE_INPUTS, bit_addr, bit_nb)
 
-    def read_holding_registers(self, reg_addr: int, reg_nb: int = 1) -> Optional[List[int]]:
+    def read_holding_registers(self, reg_addr: int, reg_nb: int = 1) -> list[int] | None:
         """Modbus function READ_HOLDING_REGISTERS (0x03).
 
         :param reg_addr: register address (0 to 65535)
@@ -175,7 +190,7 @@ class ClientFunctionsMixin:
         # make request
         return self._read_regs_req(READ_HOLDING_REGISTERS, reg_addr, reg_nb)
 
-    def read_input_registers(self, reg_addr: int, reg_nb: int = 1) -> Optional[List[int]]:
+    def read_input_registers(self, reg_addr: int, reg_nb: int = 1) -> list[int] | None:
         """Modbus function READ_INPUT_REGISTERS (0x04).
 
         :param reg_addr: register address (0 to 65535)
@@ -193,7 +208,7 @@ class ClientFunctionsMixin:
         return self._read_regs_req(READ_INPUT_REGISTERS, reg_addr, reg_nb)
 
     def read_device_identification(self, read_code: int = 1,
-                                   object_id: int = 0) -> Optional[DeviceIdentificationResponse]:
+                                   object_id: int = 0) -> DeviceIdentificationResponse | None:
         """Modbus function Read Device Identification (0x2B/0x0E).
 
         :param read_code: read device id code, 1 to 3 for respectively: basic, regular and extended stream access,
@@ -333,7 +348,7 @@ class ClientFunctionsMixin:
         return self._write_req(tx_pdu, regs_addr, len(regs_value))
 
     def write_read_multiple_registers(self, write_addr: int, write_values: Iterable[int],
-                                      read_addr: int, read_nb: int = 1) -> Optional[List[int]]:
+                                      read_addr: int, read_nb: int = 1) -> list[int] | None:
         """Modbus function WRITE_READ_MULTIPLE_REGISTERS (0x17).
 
         :param write_addr: write registers address (0 to 65535)

@@ -119,7 +119,6 @@ import sys
 import time
 from queue import Queue
 from threading import Event, Lock
-from typing import Dict, List, Optional, Tuple, Type
 
 from ._common import (
     PORT_502_HELP,
@@ -155,7 +154,7 @@ from ..utils import crc16
 
 # exceptions raised by the serial port when the device is lost (explicit type,
 # so both branches below have the same type for mypy)
-SERIAL_IO_ERRORS: Tuple[Type[BaseException], ...] = (serialutil.SerialException, OSError)
+SERIAL_IO_ERRORS: tuple[type[BaseException], ...] = (serialutil.SerialException, OSError)
 # a sys.platform test (not a try/except ImportError) so that mypy knows termios is POSIX only
 if sys.platform != 'win32':
     import termios
@@ -270,7 +269,7 @@ class RtuQuery:
 class ModbusSerialWorker:
     """A serial worker to manage I/O with RTU devices."""
 
-    def __init__(self, port: Serial, timeout: float = 1.0, end_of_frame: Optional[float] = None,
+    def __init__(self, port: Serial, timeout: float = 1.0, end_of_frame: float | None = None,
                  allow_broadcast: bool = False, read_only: bool = False) -> None:
         # public
         self.serial_port = port
@@ -286,9 +285,9 @@ class ModbusSerialWorker:
         self.end_of_frame = end_of_frame
         # internal request queue
         # accept QUEUE_SIZE simultaneous requests before overloaded exception is return
-        self.rtu_queries_q: 'Queue[RtuQuery]' = Queue(maxsize=QUEUE_SIZE)
+        self.rtu_queries_q: Queue[RtuQuery] = Queue(maxsize=QUEUE_SIZE)
         # pending requests of each client host (see host_key()) and its lock (session threads)
-        self._host_pending: Dict[str, int] = {}
+        self._host_pending: dict[str, int] = {}
         self._host_pending_lock = Lock()
         # refused requests are logged at most once per 10 s (a request flood must not flood the log)
         self._refused_log = LogThrottle(logger, level=logging.INFO)
@@ -389,7 +388,7 @@ class ModbusSerialWorker:
                 logger.error('Serial I/O error: %r (port %s)', e, self.serial_port.port)
                 rtu_query.response.raw = b''
                 self._close_port()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 # safety net: the worker must survive, or every client would hang
                 logger.exception('Unexpected error in serial worker')
                 rtu_query.response.raw = b''
@@ -511,7 +510,7 @@ class ModbusSerialWorker:
         return EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     # parse args
     parser = argparse.ArgumentParser(prog='mbtcp-tcp2rtu', description='Modbus/TCP to Modbus/RTU gateway',
                                      epilog='Port 502 without root: ' + PORT_502_HELP)

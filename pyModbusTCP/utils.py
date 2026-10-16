@@ -4,13 +4,14 @@ import operator
 import re
 import socket
 import struct
-from typing import Any, Iterable, List, Sequence
+from collections.abc import Iterable, Sequence
+from typing import Any
 
 
 ###############
 # bits function
 ###############
-def get_bits_from_int(val_int: int, val_size: int = 16) -> List[bool]:
+def get_bits_from_int(val_int: int, val_size: int = 16) -> list[bool]:
     """Get the list of bits of val_int integer (default size is 16 bits).
 
     Return bits list, the least significant bit first. Use list.reverse() for msb first.
@@ -104,7 +105,7 @@ def toggle_bit(value: int, offset: int) -> int:
 ########################
 # Word convert functions
 ########################
-def word_list_to_long(val_list: List[int], big_endian: bool = True, long_long: bool = False) -> List[int]:
+def word_list_to_long(val_list: list[int], big_endian: bool = True, long_long: bool = False) -> list[int]:
     """Word list (16 bits) to long (32 bits) or long long (64 bits) list.
 
     By default, word_list_to_long() use big endian order. For use little endian, set
@@ -145,7 +146,7 @@ def word_list_to_long(val_list: List[int], big_endian: bool = True, long_long: b
 words2longs = word_list_to_long
 
 
-def long_list_to_word(val_list: List[int], big_endian: bool = True, long_long: bool = False) -> List[int]:
+def long_list_to_word(val_list: list[int], big_endian: bool = True, long_long: bool = False) -> list[int]:
     """Long (32 bits) or long long (64 bits) list to word (16 bits) list.
 
     By default long_list_to_word() use big endian order. For use little endian, set
@@ -211,7 +212,7 @@ def get_2comp(val_int: int, val_size: int = 16) -> int:
 twos_c = get_2comp
 
 
-def get_list_2comp(val_list: List[int], val_size: int = 16) -> List[int]:
+def get_list_2comp(val_list: list[int], val_size: int = 16) -> list[int]:
     """Get the 2's complement of Python list val_list.
 
     :param val_list: list of int value to apply 2's complement
@@ -313,13 +314,13 @@ def valid_host(host_str: str) -> bool:
     try:
         socket.inet_pton(socket.AF_INET, host_str)
         return True
-    except socket.error:
+    except OSError:
         pass
     # IPv6 valid address ?
     try:
         socket.inet_pton(socket.AF_INET6, host_str)
         return True
-    except socket.error:
+    except OSError:
         pass
     # valid hostname ?
     if len(host_str) > 255:
@@ -362,7 +363,7 @@ def _pack_bits(bits: Sequence[Any]) -> bytes:
     return int(digits, 2).to_bytes(byte_length(len(digits)), 'little') if digits else b''
 
 
-def _unpack_bits(data: bytes, bit_nb: int) -> List[bool]:
+def _unpack_bits(data: bytes, bit_nb: int) -> list[bool]:
     """Unpack the first bit_nb bits of bytes (modbus order: LSB first in each byte) as a list of bool.
 
     :param data: bytes with the bits (can be longer than needed)
@@ -372,7 +373,7 @@ def _unpack_bits(data: bytes, bit_nb: int) -> List[bool]:
     :returns: list of bit_nb bool
     :rtype: list
     """
-    bits: List[bool] = []
+    bits: list[bool] = []
     for byte in data[:byte_length(bit_nb)]:
         bits.extend(_BYTE_TO_BITS[byte])
     return bits[:bit_nb]
@@ -400,7 +401,7 @@ def _to_int(value: Any, name: str) -> int:
         raise TypeError(f"{name} must be an int") from None
 
 
-def _to_bool_list(values: Iterable[Any], name: str) -> List[bool]:
+def _to_bool_list(values: Iterable[Any], name: str) -> list[bool]:
     """Return values as a list of bool from boolean-like integers (bool, int or any object with __index__).
 
     :raises TypeError: if an item cannot be interpreted as a boolean
@@ -412,7 +413,7 @@ def _to_bool_list(values: Iterable[Any], name: str) -> List[bool]:
         raise TypeError(f"{name} items must be a bool or an integer") from None
 
 
-def _to_int_list(values: Iterable[Any], name: str) -> List[int]:
+def _to_int_list(values: Iterable[Any], name: str) -> list[int]:
     """Return values as a list of int, accept only int-like items (int, bool or any object with __index__).
 
     :raises TypeError: if an item can't be used as an integer (str, float...)

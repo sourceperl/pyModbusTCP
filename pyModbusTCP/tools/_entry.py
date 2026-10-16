@@ -6,10 +6,10 @@ pyserial must only affect them, and with a clear message.
 
 import importlib
 import sys
-from typing import Callable, Dict, List, Optional
+from collections.abc import Callable
 
 # command name -> module of pyModbusTCP.tools
-COMMANDS: Dict[str, str] = {
+COMMANDS: dict[str, str] = {
     'server': 'server',
     'client': 'client',
     'tcp2rtu': 'tcp_to_rtu_gw',
@@ -17,7 +17,7 @@ COMMANDS: Dict[str, str] = {
 }
 
 
-def run_tool(module_name: str, argv: Optional[List[str]] = None) -> int:
+def run_tool(module_name: str, argv: list[str] | None = None) -> int:
     """Import a tool module and run its main(), return the exit status (2 if pyserial is missing)."""
     try:
         module = importlib.import_module('pyModbusTCP.tools.' + module_name)
@@ -26,7 +26,7 @@ def run_tool(module_name: str, argv: Optional[List[str]] = None) -> int:
             raise
         print('error: %s' % e, file=sys.stderr)
         return 2
-    main: Callable[[Optional[List[str]]], int] = module.main
+    main: Callable[[list[str] | None], int] = module.main
     return main(argv)
 
 
@@ -50,7 +50,7 @@ def run_rtu2tcp() -> int:
     return run_tool('rtu_to_tcp_gw')
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     """python -m pyModbusTCP.tools COMMAND [ARGS...]"""
     args = sys.argv[1:] if argv is None else argv
     usage = 'usage: python -m pyModbusTCP.tools {%s} [-h] [ARGS...]' % ','.join(COMMANDS)

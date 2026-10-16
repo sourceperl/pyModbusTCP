@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import socket
 import warnings
+from collections.abc import Callable, Iterable
 from threading import RLock, Thread, current_thread
-from typing import Callable, Iterable, List, Optional, Tuple, TypeAlias
+from typing import TypeAlias
 
 from ..constants import (
     EXP_DATA_VALUE,
@@ -47,12 +48,12 @@ class ModbusServer(ServerFunctionsMixin):
     _validate_allowed_hosts = staticmethod(_validators.validate_allowed_hosts)
 
     def __init__(self, host: str = 'localhost', port: int = 502, no_block: bool = False, ipv6: bool = False,
-                 data_bank: Optional[DataBank] = None, data_hdl: Optional[DataHandler] = None,
-                 ext_engine: Optional[Callable[[session.SessionData], None]] = None,
-                 device_id: Optional[DeviceIdentification] = None,
-                 request_timeout: Optional[float] = 30.0, idle_timeout: Optional[float] = 300,
-                 max_connections: Optional[int] = 64, max_connections_per_host: Optional[int] = 16,
-                 read_only: bool = False, allowed_hosts: Optional[Iterable[str]] = None) -> None:
+                 data_bank: DataBank | None = None, data_hdl: DataHandler | None = None,
+                 ext_engine: Callable[[session.SessionData], None] | None = None,
+                 device_id: DeviceIdentification | None = None,
+                 request_timeout: float | None = 30.0, idle_timeout: float | None = 300,
+                 max_connections: int | None = 64, max_connections_per_host: int | None = 16,
+                 read_only: bool = False, allowed_hosts: Iterable[str] | None = None) -> None:
         """Initialize a Modbus TCP server.
 
         Sets up a Modbus TCP server with configurable network parameters, data handling,
@@ -127,7 +128,7 @@ class ModbusServer(ServerFunctionsMixin):
         # store access control settings (the whitelist is kept as normalized networks, in CIDR notation)
         self.read_only = read_only
         self._allowed_networks = allowed_networks
-        self.allowed_hosts: Optional[List[str]] = None
+        self.allowed_hosts: list[str] | None = None
         if allowed_networks is not None:
             self.allowed_hosts = [str(network) for network in allowed_networks]
 
@@ -145,9 +146,9 @@ class ModbusServer(ServerFunctionsMixin):
 
         # initialize internal state for server operation
         # active server instance
-        self._tcp_server: Optional[CustomThreadingTCPServer] = None
+        self._tcp_server: CustomThreadingTCPServer | None = None
         # server thread handle
-        self._srv_thread: Optional[Thread] = None
+        self._srv_thread: Thread | None = None
         # ensure atomic start and stop operations
         # (reentrant: stop() may be called from a signal handler running in the thread that is inside start())
         self._start_stop_lock = RLock()
@@ -168,7 +169,7 @@ class ModbusServer(ServerFunctionsMixin):
         return self._srv_thread is not None and self._srv_thread.is_alive()
 
     @property
-    def active_sessions(self) -> List[Tuple[str, int]]:
+    def active_sessions(self) -> list[tuple[str, int]]:
         """Return the (address, port) of the clients of all active sessions (empty if server is stopped)."""
         tcp_server = self._tcp_server
         if tcp_server is None:
@@ -254,7 +255,7 @@ class ModbusServer(ServerFunctionsMixin):
             logger.exception('Unexpected error during processing of function 0x%02X from %s', func_code, client)
             send_pdu.build_except(func_code, EXP_SLAVE_DEVICE_FAILURE)
 
-    def start(self) -> Tuple[str, int]:
+    def start(self) -> tuple[str, int]:
         """Start the server.
 
         This function will block (or not if no_block flag is set).
@@ -270,7 +271,7 @@ class ModbusServer(ServerFunctionsMixin):
                 raise NetworkError('server is already running')
             # init TCP server
             # always need a fresh instance since server_close() destroys the underlying socket file descriptor
-            tcp_server: Optional[CustomThreadingTCPServer] = None
+            tcp_server: CustomThreadingTCPServer | None = None
             try:
                 # IPv4 or IPv6: handled by the server class, the socket is created in its constructor
                 tcp_server = self.CustomThreadingTCPServer((self.host, self.port), self.ModbusRequestHandler,
@@ -313,7 +314,7 @@ class ModbusServer(ServerFunctionsMixin):
         host, port = tcp_server.server_address[:2]
         return str(host), int(port)
 
-    def wait(self, timeout: Optional[float] = None) -> None:
+    def wait(self, timeout: float | None = None) -> None:
         """Wait for the server thread to finish (useful in non-blocking mode)."""
         srv_thread = self._srv_thread
         if srv_thread is not None:

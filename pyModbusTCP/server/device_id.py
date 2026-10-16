@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from threading import Lock
-from typing import Dict, List, Optional, Tuple
 
 from ..constants import MAX_PDU_SIZE
 
@@ -16,7 +15,7 @@ class DeviceIdentification:
 
     def __init__(self, vendor_name: bytes = b'', product_code: bytes = b'', major_minor_revision: bytes = b'',
                  vendor_url: bytes = b'', product_name: bytes = b'', model_name: bytes = b'',
-                 user_application_name: bytes = b'', objects_id: Optional[Dict[int, bytes]] = None) -> None:
+                 user_application_name: bytes = b'', objects_id: dict[int, bytes] | None = None) -> None:
         """
         Constructor
 
@@ -38,7 +37,7 @@ class DeviceIdentification:
         :type objects_id: dict
         """
         # private
-        self._objs_d: Dict[int, bytes] = {}
+        self._objs_d: dict[int, bytes] = {}
         self._objs_lock = Lock()
         # default values
         self.vendor_name = vendor_name
@@ -161,7 +160,7 @@ class DeviceIdentification:
     def user_application_name(self, value: bytes) -> None:
         self[6] = value
 
-    def items(self, start: int = 0x00, end: int = 0xff) -> List[Tuple[int, bytes]]:
+    def items(self, start: int = 0x00, end: int = 0xff) -> list[tuple[int, bytes]]:
         items_l = []
         for obj_id in range(start, end + 1):
             try:

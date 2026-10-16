@@ -4,7 +4,6 @@ import argparse
 import errno
 import ipaddress
 import logging
-from typing import Optional
 
 from ..constants import VERSION
 
@@ -61,7 +60,7 @@ def positive_float(value: str) -> float:
 
 def is_permission_error(exc: BaseException) -> bool:
     """Return True if exc (or its cause) is an "access denied" error, like a bind on a privileged port."""
-    current: Optional[BaseException] = exc
+    current: BaseException | None = exc
     while current is not None:
         if isinstance(current, PermissionError) or getattr(current, 'errno', None) == errno.EACCES:
             return True

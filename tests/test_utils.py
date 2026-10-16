@@ -17,15 +17,13 @@ from pyModbusTCP.utils import (
     long_list_to_word,
     longs2words,
     set_bit,
-)
-from pyModbusTCP.utils import test_bit as get_bit
-from pyModbusTCP.utils import (
     twos_c,
     twos_c_l,
     valid_host,
     word_list_to_long,
     words2longs,
 )
+from pyModbusTCP.utils import test_bit as get_bit
 
 
 class TestUtils(unittest.TestCase):

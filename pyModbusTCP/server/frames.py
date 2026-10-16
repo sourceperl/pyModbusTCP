@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import struct
-from typing import Any, Optional, Tuple
+from typing import Any
 
 from ..constants import MBAP_MAX_LENGTH, MBAP_MIN_LENGTH, MBAP_SIZE
 from .errors import DataFormatError, PDUDecodeError
@@ -91,7 +91,7 @@ class PDU:
             err_msg = 'unable to format PDU message (fmt: %s, values: %s)' % (fmt, args)
             raise DataFormatError(err_msg)
 
-    def unpack(self, fmt: str, from_byte: Optional[int] = None, to_byte: Optional[int] = None) -> Tuple[Any, ...]:
+    def unpack(self, fmt: str, from_byte: int | None = None, to_byte: int | None = None) -> tuple[Any, ...]:
         raw_section = self.raw[from_byte:to_byte]
         try:
             return struct.unpack(fmt, raw_section)

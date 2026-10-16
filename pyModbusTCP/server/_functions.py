@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import struct
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from collections.abc import Callable
+from typing import Any
 
 from ..constants import (
     ENCAPSULATED_INTERFACE_TRANSPORT,
@@ -36,13 +37,13 @@ class ServerFunctionsMixin:
     """
 
     # read device identification, stream access: ReadDevId code -> (first, last) object id of its category
-    _DEVICE_ID_STREAM_RANGES: Dict[int, Tuple[int, int]] = {1: (0x00, 0x02), 2: (0x03, 0x7f), 3: (0x80, 0xff)}
+    _DEVICE_ID_STREAM_RANGES: dict[int, tuple[int, int]] = {1: (0x00, 0x02), 2: (0x03, 0x7f), 3: (0x80, 0xff)}
 
     # set by ModbusServer.__init__()
     data_hdl: DataHandler
-    device_id: Optional[DeviceIdentification]
+    device_id: DeviceIdentification | None
 
-    def _build_func_map(self) -> Dict[int, Callable[[SessionData], None]]:
+    def _build_func_map(self) -> dict[int, Callable[[SessionData], None]]:
         """Return the routing table: Modbus function code -> method that processes it."""
         return {
             READ_COILS: self._read_bits,
@@ -58,7 +59,7 @@ class ServerFunctionsMixin:
         }
 
     @staticmethod
-    def _checked_read_data(func_code: int, expected: int, data: Optional[List[Any]]) -> Optional[List[Any]]:
+    def _checked_read_data(func_code: int, expected: int, data: list[Any] | None) -> list[Any] | None:
         """Return data if a data handler returned the expected number of items for a read request.
 
         Otherwise log an error and return None (the caller must answer with a slave device failure).

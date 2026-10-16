@@ -80,7 +80,6 @@ import struct
 import sys
 import time
 from threading import Event
-from typing import List, Optional, Tuple, Type
 
 from ._common import (
     SERIAL_MISSING_MSG,
@@ -105,7 +104,7 @@ from ..utils import crc16
 
 # exceptions raised by the serial port when the device is lost (explicit type,
 # so both branches below have the same type for mypy)
-SERIAL_IO_ERRORS: Tuple[Type[BaseException], ...] = (serialutil.SerialException, OSError)
+SERIAL_IO_ERRORS: tuple[type[BaseException], ...] = (serialutil.SerialException, OSError)
 # a sys.platform test (not a try/except ImportError) so that mypy knows termios is POSIX only
 if sys.platform != 'win32':
     import termios
@@ -205,7 +204,7 @@ class ModbusRTUFrame:
 class SlaveSerialWorkerModel:
     """A base serial worker to manage I/O loop with RTU master device."""
 
-    def __init__(self, port: Serial, end_of_frame: Optional[float] = None) -> None:
+    def __init__(self, port: Serial, end_of_frame: float | None = None) -> None:
         # public
         self.serial_port = port
         # silent interval between two frames on the bus
@@ -320,7 +319,7 @@ class SlaveSerialWorkerModel:
                 # Never stop: close the port, it is reopened automatically
                 logger.error('Serial I/O error: %r (port %s)', e, self.serial_port.port)
                 self._close_port()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 # safety net: the worker must survive
                 logger.exception('Unexpected error in serial worker')
 
@@ -329,13 +328,13 @@ class SerialModbusWorker(SlaveSerialWorkerModel):
     """A specialized serial worker that maps RTU requests to a Modbus TCP client."""
 
     def __init__(self, port: Serial, mbus_cli: ModbusClient, slave_addr: int = 1, allow_bcast: bool = False,
-                 end_of_frame: Optional[float] = None) -> None:
+                 end_of_frame: float | None = None) -> None:
         super().__init__(port, end_of_frame=end_of_frame)
         self.mbus_cli = mbus_cli
         self.slave_addr = slave_addr
         self.allow_bcast = allow_bcast
 
-    def _relay_to_server(self, pdu: bytes) -> Tuple[Optional[bytes], int]:
+    def _relay_to_server(self, pdu: bytes) -> tuple[bytes | None, int]:
         """Send a PDU to the Modbus/TCP server.
 
         :return: tuple (response PDU or None if error, modbus exception status to use on error)
@@ -343,7 +342,7 @@ class SerialModbusWorker(SlaveSerialWorkerModel):
         cli = self.mbus_cli
         try:
             resp_pdu = cli.custom_request(pdu)
-        except Exception:  # noqa: BLE001
+        except Exception:
             # not a serial error: never let it reach the serial error handler
             logger.exception('Unexpected error with Modbus/TCP client')
             return None, EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
@@ -381,7 +380,7 @@ class SerialModbusWorker(SlaveSerialWorkerModel):
             logger.debug('Frame for slave %d ignored (gateway is slave %d)', req.slave_addr, self.slave_addr)
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     # parse args
     parser = argparse.ArgumentParser(prog='mbtcp-rtu2tcp', description='Modbus/RTU to Modbus/TCP gateway')
     parser.add_argument('device', type=str, help='serial device (like /dev/ttyUSB0)')
