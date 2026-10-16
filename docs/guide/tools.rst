@@ -42,15 +42,15 @@ pyModbusTCP-cli package (it contains no code, only the commands and pyserial):
     pipx install pyModbusTCP-cli
 
     # or in a virtual environment, with the library
-    pip install "pyModbusTCP[tools]"
+    pip install "pyModbusTCP[cli]"
 
 pyModbusTCP-cli always has the version of the library it requires.
 
 .. note::
 
     The tools are new in version 0.4.0, only available as a pre-release (alpha) for now: their options and their
-    output may still change. ``pip install "pyModbusTCP[tools]"`` without a version installs the stable 0.3.1,
-    without the tools: use ``pip install "pyModbusTCP[tools]==0.4.0a1"`` (or ``--pre``).
+    output may still change. ``pip install "pyModbusTCP[cli]"`` without a version installs the stable 0.3.1,
+    without the tools: use ``pip install "pyModbusTCP[cli]==0.4.0a1"`` (or ``--pre``).
 
 Examples
 --------
@@ -71,7 +71,7 @@ Examples
     # TCP clients of the 192.168.1.0/24 network can read (only) the RTU slaves of /dev/ttyUSB0
     mbtcp-tcp2rtu -H 0.0.0.0 -A 192.168.1.0/24 --read-only -b 19200 --parity E /dev/ttyUSB0
 
-    # a RTU master on /dev/ttyUSB0 reads the Modbus/TCP server 192.168.1.10 (the gateway is the RTU slave 30)
+    # an RTU master on /dev/ttyUSB0 reads the Modbus/TCP server 192.168.1.10 (the gateway is the RTU slave 30)
     mbtcp-rtu2tcp -a 30 -H 192.168.1.10 /dev/ttyUSB0
 
 The exit status of ``mbtcp-client`` is 0 on success, 1 if the request failed and 2 for an invalid parameter: it can

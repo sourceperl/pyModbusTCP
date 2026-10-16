@@ -5,7 +5,7 @@ Revision history for pyModbusTCP
     Breaking changes:
 
     - DataBank: remove deprecated class methods (get_bits, set_bits, get_words and set_words).
-    - DataBank: set_*() methods raise a TypeError on non-integer items and a ValueError on registers values out of
+    - DataBank: set_*() methods raise a TypeError on non-integer items and a ValueError on register values out of
                 the 0-65535 range (values were silently converted before, see below).
     - ModbusClient: non-integer arguments raise a TypeError, custom_request() checks its pdu argument
                     (TypeError/ValueError) and auto_open, auto_close and no_delay only accept bool or int values.
@@ -33,20 +33,20 @@ Revision history for pyModbusTCP
       functions, TCP layer, argument checks...) with the same layout for both. No change for the users: same
       imports, same logger names, nested names kept (ModbusServer.PDU, ModbusServer.NetworkError...). Exceptions
       of the server are now shown as pyModbusTCP.server.errors.NetworkError (and so on) in tracebacks.
-    - new module pyModbusTCP.tools: command line tools (Modbus/TCP server and client, TCP to RTU and RTU to TCP
+    - new package pyModbusTCP.tools: command line tools (Modbus/TCP server and client, TCP to RTU and RTU to TCP
       gateways), run them with "python -m pyModbusTCP.tools {server,client,tcp2rtu,rtu2tcp}". The gateways need
       pyserial, a new optional dependency: "pip install pyModbusTCP[serial]".
     - new package pyModbusTCP-cli (directory of the same name, no code): installs the tools as the commands
       mbtcp-server, mbtcp-client, mbtcp-tcp2rtu and mbtcp-rtu2tcp, with pyserial. Install it with
-      "pip install pyModbusTCP[tools]" or "pipx install pyModbusTCP-cli". A plain "pip install pyModbusTCP" puts
+      "pip install pyModbusTCP[cli]" or "pipx install pyModbusTCP-cli". A plain "pip install pyModbusTCP" puts
       no command in the PATH and still has no dependency.
-    - build: migrate from setup.py to pyproject.toml, with the hatchling build backend (no more MANIFEST.in, tests are
-      no longer in the sdist).
+    - build: migrate from setup.py to pyproject.toml, with the hatchling build backend (no MANIFEST.in anymore, tests
+      are no longer in the sdist).
     - fix ModbusClient: is_open is now False only for a closed socket (file descriptor 0 is valid).
     - fix ModbusClient: non-integer arguments (float, str...) now raise a TypeError instead of an uncaught struct.error.
     - fix ModbusClient: treat socket.gaierror as MB_CONNECT_ERR (like any other connect error).
-    - fix ModbusClient: timeout is now a limit for the whole request (send + receive) and no more for each socket I/O. A
-                        server sending its response byte by byte could hold the client much longer than timeout.
+    - fix ModbusClient: timeout is now a limit for the whole request (send + receive) and no longer for each socket I/O.
+                        A server sending its response byte by byte could hold the client much longer than timeout.
     - fix ModbusClient: validate write_multiple_coils items to reject non-integer values (like 'a', None, [], 1.5),
                         matching write_single_coil behavior.
     - fix ModbusClient: write_multiple_coils() and write_multiple_registers() now set last_error (MB_RECV_ERR) when the

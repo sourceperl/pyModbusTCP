@@ -456,7 +456,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog='mbtcp-tcp2rtu', description='Modbus/TCP to Modbus/RTU gateway',
                                      epilog='Port 502 without root: ' + PORT_502_HELP)
     parser.add_argument('device', type=str, help='serial device (like /dev/ttyUSB0)')
-    parser.add_argument('-H', '--host', type=str, default='localhost', help='host (default: localhost)')
+    parser.add_argument('-H', '--host', type=str, default='localhost', help='listen address (default: localhost)')
     parser.add_argument('-p', '--port', type=tcp_port, default=5020, help='TCP port (default: 5020)')
     parser.add_argument('-A', '--allow', action='append', type=ip_or_network, metavar='IP_OR_NETWORK',
                         help='allowed client IP address or network (like 10.0.0.0/24), repeatable '
@@ -465,14 +465,14 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help='only relay read functions (0x01 to 0x04, 0x2B/0x0E)')
     parser.add_argument('--allow-broadcast', action='store_true',
                         help='relay broadcast requests (unit id 0) to every slave')
-    parser.add_argument('-b', '--baudrate', type=int, default=9600, help='serial rate (default is 9600)')
-    parser.add_argument('--bytesize', type=int, choices=(7, 8), default=8, help='data bits (default is 8)')
-    parser.add_argument('--parity', choices=('N', 'E', 'O'), default='N', help='parity (default is N)')
-    parser.add_argument('--stopbits', type=float, choices=(1, 1.5, 2), default=1, help='stop bits (default is 1)')
-    parser.add_argument('-t', '--timeout', type=float, default=1.0, help='timeout delay (default is 1.0 s)')
+    parser.add_argument('-b', '--baudrate', type=int, default=9600, help='serial rate (default: 9600)')
+    parser.add_argument('--bytesize', type=int, choices=(7, 8), default=8, help='data bits (default: 8)')
+    parser.add_argument('--parity', choices=('N', 'E', 'O'), default='N', help='parity (default: N)')
+    parser.add_argument('--stopbits', type=float, choices=(1, 1.5, 2), default=1, help='stop bits (default: 1)')
+    parser.add_argument('-t', '--timeout', type=float, default=1.0, help='serial timeout in s (default: 1.0)')
     parser.add_argument('-e', '--eof', type=float, default=None,
-                        help='end of frame delay (default: computed from baudrate, min %.3f s)' % MIN_EOF_DELAY)
-    parser.add_argument('-d', '--debug', action='store_true', help='set debug mode')
+                        help='serial end of frame delay in s (default: computed from baudrate, min %.3f s)' % MIN_EOF_DELAY)
+    parser.add_argument('-d', '--debug', action='store_true', help='debug mode')
     add_version_arg(parser)
     args = parser.parse_args(argv)
 

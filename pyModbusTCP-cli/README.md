@@ -20,19 +20,19 @@ command in the PATH and installs no dependency.
 pipx install pyModbusTCP-cli
 
 # or in a virtual environment, with the library
-pip install "pyModbusTCP[tools]==0.4.0a1"
+pip install "pyModbusTCP[cli]==0.4.0a1"
 ```
 
 **Alpha**: pyModbusTCP-cli is new with pyModbusTCP 0.4.0, only pre-releases exist for now. The commands, their
 options and their output may still change before the final release. Without a version or `--pre`,
-`pip install "pyModbusTCP[tools]"` installs the stable pyModbusTCP 0.3.1, without the tools.
+`pip install "pyModbusTCP[cli]"` installs the stable pyModbusTCP 0.3.1, without the tools.
 
 Without this package, the tools can still be run from the library alone:
 
 ```bash
 python -m pyModbusTCP.tools server --help
 python -m pyModbusTCP.tools client --help
-pip install "pyModbusTCP[serial]==0.4.0a1" # pyserial, only needed by the gateways
+pip install "pyModbusTCP[serial]==0.4.0a1"  # pyserial, only needed by the gateways
 python -m pyModbusTCP.tools tcp2rtu --help
 python -m pyModbusTCP.tools rtu2tcp --help
 ```
@@ -51,7 +51,7 @@ mbtcp-client -p 5020 write-coil 10 on
 # TCP clients of the 192.168.1.0/24 network can read (only) the RTU slaves of /dev/ttyUSB0
 mbtcp-tcp2rtu -H 0.0.0.0 -A 192.168.1.0/24 --read-only -b 19200 --parity E /dev/ttyUSB0
 
-# a RTU master on /dev/ttyUSB0 reads the Modbus/TCP server 192.168.1.10 (gateway is RTU slave 30)
+# an RTU master on /dev/ttyUSB0 reads the Modbus/TCP server 192.168.1.10 (the gateway is the RTU slave 30)
 mbtcp-rtu2tcp -a 30 -H 192.168.1.10 /dev/ttyUSB0
 ```
 

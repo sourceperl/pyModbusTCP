@@ -86,22 +86,27 @@ def build_parser() -> argparse.ArgumentParser:
                        help='repeat the read every INTERVAL s, until Ctrl-C')
 
     # write requests
-    p = sub.add_parser('write-coil', help='write a single coil (function 0x05)')
+    txt = 'write a single coil (function 0x05)'
+    p = sub.add_parser('write-coil', help=txt, description=txt)
     p.add_argument('address', type=int_value, help='coil address (0 to 65535)')
     p.add_argument('value', type=bool_value, help='1/0, on/off or true/false')
-    p = sub.add_parser('write-coils', help='write multiple coils (function 0x0F)')
+    txt = 'write multiple coils (function 0x0F)'
+    p = sub.add_parser('write-coils', help=txt, description=txt)
     p.add_argument('address', type=int_value, help='first coil address (0 to 65535)')
     p.add_argument('values', type=bool_value, nargs='+', help='1/0, on/off or true/false (1 to 1968 values)')
-    p = sub.add_parser('write-register', help='write a single holding register (function 0x06)')
+    txt = 'write a single holding register (function 0x06)'
+    p = sub.add_parser('write-register', help=txt, description=txt)
     p.add_argument('address', type=int_value, help='register address (0 to 65535)')
     p.add_argument('value', type=int_value, help='value (0 to 65535, or -32768 to -1 for a signed value)')
-    p = sub.add_parser('write-registers', help='write multiple holding registers (function 0x10)')
+    txt = 'write multiple holding registers (function 0x10)'
+    p = sub.add_parser('write-registers', help=txt, description=txt)
     p.add_argument('address', type=int_value, help='first register address (0 to 65535)')
     p.add_argument('values', type=int_value, nargs='+',
                    help='values (0 to 65535, or -32768 to -1 for a signed value, 1 to 123 values)')
 
     # device identification
-    p = sub.add_parser('device-id', help='read device identification (function 0x2B/0x0E)')
+    txt = 'read device identification (function 0x2B/0x0E)'
+    p = sub.add_parser('device-id', help=txt, description=txt)
     p.add_argument('-c', '--code', type=int, choices=(1, 2, 3, 4), default=1,
                    help='1 basic, 2 regular, 3 extended (stream access), 4 one object (default: 1)')
     p.add_argument('-o', '--object-id', type=int_value, default=0, help='first (or only) object id (default: 0)')

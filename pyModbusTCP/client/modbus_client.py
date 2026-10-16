@@ -28,7 +28,7 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
                  auto_open: bool = True, auto_close: bool = False, no_delay: bool = True):
         """Constructor.
 
-        :param host: hostname or IPv4/IPv6 address server address
+        :param host: hostname or IPv4/IPv6 address of the server
         :type host: str
         :param port: TCP port number
         :type port: int

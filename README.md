@@ -10,7 +10,7 @@ The module is currently tested on Python 3.10, 3.11, 3.12, 3.13 and 3.14, on Lin
 
 ## Documentation
 
-Documentation of the last release is available online at https://pymodbustcp.readthedocs.io/.
+Documentation of the latest release is available online at https://pymodbustcp.readthedocs.io/.
 
 ## Security
 
@@ -31,7 +31,7 @@ source venv/bin/activate
 From PyPI, the easy way:
 
 ```bash
-# install the last available release (stable)
+# install the latest available release (stable)
 pip install pyModbusTCP
 ```
 
@@ -133,8 +133,8 @@ server.start()
 
 ## Command line tools
 
-***The tools are new in 0.4.0 (only pre-releases for now): without a version or `--pre`, `pip install "pyModbusTCP"`
-installs the stable 0.3.1, without the tools (pip only shows a warning).***
+***The tools are new in 0.4.0 (only pre-releases for now): without a version or `--pre`,
+`pip install "pyModbusTCP[cli]"` installs the stable 0.3.1, without the tools (pip only shows a warning).***
 
 The library comes with command line tools: a Modbus/TCP server, a Modbus/TCP client, and two gateways between
 Modbus/TCP and Modbus/RTU (serial line). They run from the library itself:
@@ -154,7 +154,7 @@ install the optional package pyModbusTCP-cli. A plain `pip install pyModbusTCP` 
 
 ```bash
 # in a virtual environment, with the library
-pip install "pyModbusTCP[tools]==0.4.0a1"
+pip install "pyModbusTCP[cli]==0.4.0a1"
 # or as isolated command line tools
 pipx install pyModbusTCP-cli
 ```

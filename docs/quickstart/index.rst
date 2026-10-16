@@ -17,7 +17,7 @@ The library has no dependency. Two optional extras add the :doc:`command line to
 .. code-block:: bash
 
     pip install "pyModbusTCP[serial]"   # pyserial, for the Modbus TCP/RTU gateways
-    pip install "pyModbusTCP[tools]"    # the mbtcp-* commands in the PATH (with pyserial)
+    pip install "pyModbusTCP[cli]"      # the mbtcp-* commands in the PATH (with pyserial)
 
 .. tip::
 
@@ -29,7 +29,7 @@ The library has no dependency. Two optional extras add the :doc:`command line to
 
     This documentation describes version 0.4.0, only available as a pre-release (alpha) for now: pip installs the
     stable 0.3.1 by default. Ask for the pre-release explicitly, with ``pip install pyModbusTCP==0.4.0a1`` (or
-    ``"pyModbusTCP[tools]==0.4.0a1"``), or with ``pip install --pre pyModbusTCP``.
+    ``"pyModbusTCP[cli]==0.4.0a1"``), or with ``pip install --pre pyModbusTCP``.
 
 To install the development version from GitHub:
 

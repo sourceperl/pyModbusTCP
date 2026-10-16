@@ -44,7 +44,7 @@ class TestClientServer(unittest.TestCase):
         self.client.open()
 
     def tearDown(self):
-        """Cleanning after test."""
+        """Cleaning after test."""
         self.client.close()
         self.server.stop()
 
@@ -257,7 +257,7 @@ class TestClientServer(unittest.TestCase):
         self.assertEqual(self.client.last_except, EXP_NONE)
 
     def test_server_read_identification(self):
-        """Test server device indentification function."""
+        """Test server device identification function."""
         # forge a basic read identification on unconfigured server (return a data address except)
         self.assertEqual(self.client.custom_request(b'\x2b\x0e\x01\x00'), None)
         self.assertEqual(self.client.last_error, MB_EXCEPT_ERR)
@@ -268,7 +268,7 @@ class TestClientServer(unittest.TestCase):
         self.server.device_id[0x80] = b'\xc0\xde'
         # forge a basic read identification on a configured server (return a valid pdu)
         self.assertNotEqual(self.client.custom_request(b'\x2b\x0e\x01\x00'), None)
-        # forge a read identifaction request with a bad read device id code (return except 3)
+        # forge a read identification request with a bad read device id code (return except 3)
         self.assertEqual(self.client.custom_request(b'\x2b\x0e\x05\x00'), None)
         self.assertEqual(self.client.last_error, MB_EXCEPT_ERR)
         self.assertEqual(self.client.last_except, EXP_DATA_VALUE)
@@ -282,7 +282,7 @@ class TestClientServer(unittest.TestCase):
         self.server.device_id = None
 
     def test_client_read_identification(self):
-        """Test client device indentification function."""
+        """Test client device identification function."""
         # configure server
         vendor_name = ''.join(choice(ascii_letters) for _ in range(16)).encode()
         product_code = ''.join(choice(ascii_letters) for _ in range(32)).encode()

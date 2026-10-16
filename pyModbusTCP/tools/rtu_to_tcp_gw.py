@@ -384,14 +384,13 @@ class SerialModbusWorker(SlaveSerialWorkerModel):
 def main(argv: Optional[List[str]] = None) -> int:
     # parse args
     parser = argparse.ArgumentParser(prog='mbtcp-rtu2tcp', description='Modbus/RTU to Modbus/TCP gateway')
-    parser.add_argument('serial_device', type=str, help='serial device (like /dev/ttyUSB0)')
-    parser.add_argument('-d', '--debug', action='store_true', help='debug mode')
-    parser.add_argument('-a', '--address', type=int, default=1, help='slave address (default is 1)')
-    parser.add_argument('--allow-broadcast', action='store_true', help='serial allow broadcast frame (to address 0)')
-    parser.add_argument('-b', '--baudrate', type=int, default=9600, help='serial rate (default is 9600)')
-    parser.add_argument('--bytesize', type=int, choices=(7, 8), default=8, help='data bits (default is 8)')
-    parser.add_argument('--parity', choices=('N', 'E', 'O'), default='N', help='parity (default is N)')
-    parser.add_argument('--stopbits', type=float, choices=(1, 1.5, 2), default=1, help='stop bits (default is 1)')
+    parser.add_argument('device', type=str, help='serial device (like /dev/ttyUSB0)')
+    parser.add_argument('-a', '--address', type=int, default=1, help='slave address (default: 1)')
+    parser.add_argument('--allow-broadcast', action='store_true', help='relay broadcast frames (address 0) to the server')
+    parser.add_argument('-b', '--baudrate', type=int, default=9600, help='serial rate (default: 9600)')
+    parser.add_argument('--bytesize', type=int, choices=(7, 8), default=8, help='data bits (default: 8)')
+    parser.add_argument('--parity', choices=('N', 'E', 'O'), default='N', help='parity (default: N)')
+    parser.add_argument('--stopbits', type=float, choices=(1, 1.5, 2), default=1, help='stop bits (default: 1)')
     parser.add_argument('-e', '--eof', type=float, default=None,
                         help='serial end of frame delay in s (default: computed from baudrate, min %.3f s)'
                         % MIN_EOF_DELAY)
@@ -399,6 +398,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument('-p', '--port', type=tcp_port, default=502, help='server TCP port (default: 502)')
     parser.add_argument('-u', '--unit-id', type=int, default=1, help='server unit id (default: 1)')
     parser.add_argument('-t', '--timeout', type=float, default=1.0, help='server timeout delay in s (default: 1.0)')
+    parser.add_argument('-d', '--debug', action='store_true', help='debug mode')
     add_version_arg(parser)
     args = parser.parse_args(argv)
 
@@ -413,8 +413,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         # init serial port
         logger.info('Open serial port %s at %d bauds (%d%s%s)',
-                    args.serial_device, args.baudrate, args.bytesize, args.parity, args.stopbits)
-        serial_port = Serial(port=args.serial_device, baudrate=args.baudrate, bytesize=args.bytesize,
+                    args.device, args.baudrate, args.bytesize, args.parity, args.stopbits)
+        serial_port = Serial(port=args.device, baudrate=args.baudrate, bytesize=args.bytesize,
                              parity={'N': PARITY_NONE, 'E': PARITY_EVEN, 'O': PARITY_ODD}[args.parity],
                              stopbits=args.stopbits)
 

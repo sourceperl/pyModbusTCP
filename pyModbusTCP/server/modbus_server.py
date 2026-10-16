@@ -55,7 +55,7 @@ class ModbusServer(ServerFunctionsMixin):
         parameters to prevent silent runtime failures.
 
 
-        :param host: hostname or IPv4/IPv6 address server address (default is 'localhost')
+        :param host: hostname or IPv4/IPv6 address to listen on (default is 'localhost')
         :type host: str
         :param port: TCP port number (default is 502), use 0 to let the OS choose a free port
         :type port: int

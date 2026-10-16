@@ -105,7 +105,7 @@ Environment ready.
     Code audit:       tools/code_audit.sh
     Type check:       mypy --strict pyModbusTCP
     Run a tool:       python -m pyModbusTCP.tools {server,client,tcp2rtu,rtu2tcp} --help
-    Build:            python -m build
+    Build:            python -m build --outdir dist .
     Check the build:  twine check dist/*
 EOF
 
@@ -114,7 +114,7 @@ if [[ "$WITH_TOOLS" -eq 1 ]]; then
 
   Commands (package pyModbusTCP-cli, $TOOLS_DIR/):
     Commands:         mbtcp-server, mbtcp-client, mbtcp-tcp2rtu, mbtcp-rtu2tcp (--help for each)
-    Build:            python -m build $TOOLS_DIR
-    Check the build:  twine check $TOOLS_DIR/dist/*
+    Build:            python -m build --outdir dist $TOOLS_DIR
+    Check the build:  twine check dist/*
 EOF
 fi

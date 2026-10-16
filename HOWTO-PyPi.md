@@ -31,7 +31,7 @@ Set the `Development Status` classifier of both `pyproject.toml` (`3 - Alpha`, `
 An uploaded version can never be uploaded again, even after its deletion: on a mistake, yank it on PyPI and release
 the next number.
 
-### upload archive and wheel to PyPi test server
+### upload archive and wheel to PyPI test server
 
 ```bash
 twine upload dist/pymodbustcp-x.x.x* dist/pymodbustcp_cli-x.x.x* -r pypitest
@@ -42,17 +42,17 @@ then test the install in a new venv (pyserial is not on TestPyPI: take it from P
 
 ```bash
 pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ \
-    "pyModbusTCP[tools]==x.x.x"
+    "pyModbusTCP[cli]==x.x.x"
 mbtcp-client --version
 ```
 
-### upload archive and wheel to PyPi server
+### upload archive and wheel to PyPI server
 
 ```bash
 twine upload dist/pymodbustcp-x.x.x* dist/pymodbustcp_cli-x.x.x* -r pypi
 ```
 
-Check result at https://pypi.org/project/pyModbusTCP/.
+Check result at https://pypi.org/project/pyModbusTCP/ and https://pypi.org/project/pyModbusTCP-cli/.
 
 
 ## Twine setup
@@ -63,7 +63,7 @@ Check result at https://pypi.org/project/pyModbusTCP/.
 pip install twine
 ```
 
-### create it's conf file
+### create its conf file
 
 Create ~/.pypirc with credentials for pypi and pypitest.
 

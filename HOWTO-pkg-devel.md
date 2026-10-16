@@ -1,6 +1,6 @@
-## How to set package developer mode (also call editable mode on pip)
+## How to set package developer mode (also called editable mode in pip)
 
-*After set this, we can directly test effect of editing a package files
+*After setting this, we can directly test the effect of editing the package files
 without need to fully reinstall it.*
 
 The easy way: `./init_dev_venv.sh` creates a venv (`venv/`) with the test and build tools, the library (with pyserial)
