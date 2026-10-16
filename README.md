@@ -1,4 +1,4 @@
-# pyModbusTCP [![Tests](https://github.com/sourceperl/pyModbusTCP/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/sourceperl/pyModbusTCP/actions/workflows/tests.yml) [![Documentation](https://readthedocs.org/projects/pymodbustcp/badge/?version=latest)](https://pymodbustcp.readthedocs.io/)
+# pyModbusTCP [![Tests](https://github.com/sourceperl/pyModbusTCP/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/sourceperl/pyModbusTCP/actions/workflows/tests.yml)
 
 A simple Modbus/TCP client and server library for Python.
 
