@@ -47,13 +47,13 @@ def validate_timeout(value: Optional[Union[int, float]], name: str) -> Optional[
     return float(value)
 
 
-def validate_max_connections(max_connections: Optional[int]) -> Optional[int]:
+def validate_max_connections(max_connections: Optional[int], name: str = 'max_connections') -> Optional[int]:
     if max_connections is None:
         return None
     if isinstance(max_connections, bool) or not isinstance(max_connections, int):
-        raise TypeError('max_connections must be an int or None')
+        raise TypeError('%s must be an int or None' % name)
     if max_connections < 1:
-        raise ValueError('max_connections must be at least 1 (or None for no limit)')
+        raise ValueError('%s must be at least 1 (or None for no limit)' % name)
     return max_connections
 
 

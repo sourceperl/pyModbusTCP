@@ -65,7 +65,9 @@ The server and the TCP to RTU gateway are designed to be safe by default:
 - they listen on `localhost` and on port 5020 by default: use `-H` with the address of the network interface that
   needs it (`0.0.0.0` only if every network of the host is trusted);
 - `-A/--allow` restricts the clients to some IP addresses or networks, `--read-only` refuses every write;
-- the TCP to RTU gateway refuses broadcast requests (unit id 0) unless `--allow-broadcast` is set.
+- the TCP to RTU gateway refuses broadcast requests (unit id 0) unless `--allow-broadcast` is set;
+- `--max-connections-per-host` (default 16) keeps a single client host from taking every connection, and the TCP
+  to RTU gateway shares the serial line between the client hosts (at most 2 pending requests per host).
 
 Port 502 (the standard Modbus/TCP port) is a privileged port on Unix systems. **Never run these commands as root (or
 with sudo) to listen on it.** Give the `CAP_NET_BIND_SERVICE` capability to the Python interpreter of a virtual

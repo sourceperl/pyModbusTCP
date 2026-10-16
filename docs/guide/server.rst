@@ -152,6 +152,7 @@ The server has several protections, all set in the :class:`~pyModbusTCP.server.M
         allowed_hosts=['192.168.1.0/24'],     # other clients are disconnected at once
         read_only=True,                       # every write request gets an "illegal function" exception
         max_connections=16,                   # simultaneous clients (default: 64)
+        max_connections_per_host=4,           # simultaneous connections of one client host (default: 16)
         idle_timeout=60,                      # close a session without request for 60 s (default: 300)
     )
 

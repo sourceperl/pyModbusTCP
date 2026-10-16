@@ -15,6 +15,9 @@ Revision history for pyModbusTCP
                     closed after 5 min (its next request fails once, then the client reconnects), set them to None
                     to get the previous behavior.
     - ModbusServer: start() raises a NetworkError if the server is already running (the call was silently ignored).
+    - ModbusServer: max_connections_per_host (16) is active by default: a client host (an IPv4 address, or a /64
+                    network for IPv6) can't open more connections, the next ones are closed at once. Clients
+                    behind a NAT share the same address: raise it, or set it to None to get the previous behavior.
     - ModbusServer: the internal request handler class ModbusService is replaced by ModbusRequestHandler and
                     CustomThreadingTCPServer, is_run is deprecated (use is_running).
     - examples: client_serial_gw.py and server_serial_gw.py are removed, replaced by the gateways of
@@ -36,6 +39,11 @@ Revision history for pyModbusTCP
     - new package pyModbusTCP.tools: command line tools (Modbus/TCP server and client, TCP to RTU and RTU to TCP
       gateways), run them with "python -m pyModbusTCP.tools {server,client,tcp2rtu,rtu2tcp}". The gateways need
       pyserial, a new optional dependency: "pip install pyModbusTCP[serial]".
+    - tools: mbtcp-tcp2rtu shares the serial line between the client hosts (at most 2 pending requests per host,
+      the next ones get exception 0x0A): a single host can no longer monopolize the line. Its refused requests are
+      logged once per 10 s at most (with their count) instead of one line per request. New options
+      --max-connections and --max-connections-per-host for mbtcp-tcp2rtu, --max-connections-per-host for
+      mbtcp-server.
     - new package pyModbusTCP-cli (directory of the same name, no code): installs the tools as the commands
       mbtcp-server, mbtcp-client, mbtcp-tcp2rtu and mbtcp-rtu2tcp, with pyserial. Install it with
       "pip install pyModbusTCP[cli]" or "pipx install pyModbusTCP-cli". A plain "pip install pyModbusTCP" puts
@@ -93,6 +101,8 @@ Revision history for pyModbusTCP
                             Set request_timeout=None to get the previous behavior.
     - improve ModbusServer: add idle_timeout (close a session without any request for this time, default 300 s) and
                             max_connections (reject connections over this limit, default 64), None disables them.
+    - improve ModbusServer: add max_connections_per_host (default 16), a single host can no longer take every
+                            connection of max_connections (denial of service).
     - improve ModbusServer: add allowed_hosts (whitelist of client IP addresses or networks, CIDR notation) and
                             read_only (refuse the write functions 0x05, 0x06, 0x0F, 0x10 and 0x17), see SECURITY.md.
     - improve ModbusServer: increase the listen backlog from 5 to 128, a burst of simultaneous connections (like clients

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import ipaddress
 import socket
 import time
 from socketserver import BaseRequestHandler, ThreadingTCPServer
 from threading import Lock
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from ._common import _IPNetwork, logger
+from ._common import LogThrottle, _IPNetwork, client_ip, host_key, logger
 from .errors import Error, NetworkError
 from .session import SessionData
 
@@ -22,8 +21,9 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
     # listen backlog: the socketserver default (5) makes a burst of simultaneous connections wait for a TCP SYN
     # retransmission (1 s or more) as soon as the accept loop is a bit late
     request_queue_size: int = 128
-    # these 3 settings are set by ModbusServer.start() (see ModbusServer.__init__() for a description)
+    # these 4 settings are set by ModbusServer.start() (see ModbusServer.__init__() for a description)
     max_connections: Optional[int] = None
+    max_connections_per_host: Optional[int] = None
     idle_timeout: Optional[float] = None
     request_timeout: Optional[float] = None
     # whitelist of allowed client networks (None: every client is allowed), set by ModbusServer.start()
@@ -35,13 +35,14 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
         self.address_family = socket.AF_INET6 if ipv6 else socket.AF_INET
         # active sessions (a session = a client TCP connection with its thread): socket -> client address
         self._active_sessions: Dict[socket.socket, Any] = {}
+        # number of active sessions of each client host (see host_key()), protected by the sessions lock
+        self._host_sessions: Dict[str, int] = {}
         self._sessions_lock = Lock()
-        # connections rejected since the last warning in the log (don't flood the log on a connection flood)
-        self._rejected = 0
-        self._rejected_log_time: Optional[float] = None
-        # connections refused by the allowed hosts whitelist since the last warning in the log
-        self._denied = 0
-        self._denied_log_time: Optional[float] = None
+        # refused connections: the first one is logged at once, then one message per 10 s at most (a connection
+        # flood must not flood the log)
+        self._denied_log = LogThrottle(logger)
+        self._rejected_log = LogThrottle(logger)
+        self._host_rejected_log = LogThrottle(logger)
         super().__init__(*args, **kwargs)
 
     @property
@@ -76,57 +77,66 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
         """Return True if the client address is accepted by the allowed hosts whitelist (if any)."""
         if self.allowed_networks is None:
             return True
-        try:
-            # drop the zone id of a link-local IPv6 address (like "fe80::1%eth0")
-            ip = ipaddress.ip_address(str(client_address[0]).split('%')[0])
-        except ValueError:
+        # zone id dropped, an IPv4-mapped address (IPv4 client of a dual-stack socket) seen as IPv4
+        ip = client_ip(client_address)
+        if ip is None:
             return False
-        # an IPv4 client on a dual-stack IPv6 socket is seen as an IPv4-mapped address (::ffff:a.b.c.d)
-        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
-            ip = ip.ipv4_mapped
         return any(ip in network for network in self.allowed_networks)
 
+    def _add_session(self, request: Any, client_address: Any) -> None:
+        with self._sessions_lock:
+            self._active_sessions[request] = client_address
+            key = host_key(client_address)
+            self._host_sessions[key] = self._host_sessions.get(key, 0) + 1
+
+    def _remove_session(self, request: Any) -> None:
+        with self._sessions_lock:
+            client_address = self._active_sessions.pop(request, None)
+            if client_address is None:
+                return
+            key = host_key(client_address)
+            remaining = self._host_sessions.get(key, 0) - 1
+            if remaining > 0:
+                self._host_sessions[key] = remaining
+            else:
+                self._host_sessions.pop(key, None)
+
     def verify_request(self, request: Any, client_address: Any) -> bool:
-        # called by the main server thread, the only one that add sessions (so these checks are safe)
+        # called by the main server thread, the only one that add sessions (so these checks are safe: the
+        # counters can only decrease meanwhile, when a session ends)
         if not self.is_allowed(client_address):
-            self._denied += 1
-            # log the first refusal at once, then one message per 10 s at most
-            now = time.monotonic()
-            if self._denied_log_time is None or now - self._denied_log_time >= 10.0:
-                logger.warning('Connection refused, host not in allowed hosts: %d connection(s) refused '
-                               '(last from %r)', self._denied, client_address)
-                self._denied = 0
-                self._denied_log_time = now
+            self._denied_log.event('Connection refused, host not in allowed hosts: %d connection(s) refused '
+                                   '(last from %r)', client_address)
             return False
         if self.max_connections is not None and self._sessions >= self.max_connections:
-            self._rejected += 1
-            # log the first rejection at once, then one message per 10 s at most
-            now = time.monotonic()
-            if self._rejected_log_time is None or now - self._rejected_log_time >= 10.0:
-                logger.warning('Maximum number of connections (%d) reached: %d connection(s) rejected '
-                               '(last from %r)', self.max_connections, self._rejected, client_address)
-                self._rejected = 0
-                self._rejected_log_time = now
+            self._rejected_log.event('Maximum number of connections reached: %d connection(s) rejected '
+                                     '(limit %d, last from %r)', self.max_connections, client_address)
             return False
+        if self.max_connections_per_host is not None:
+            key = host_key(client_address)
+            with self._sessions_lock:
+                host_sessions = self._host_sessions.get(key, 0)
+            if host_sessions >= self.max_connections_per_host:
+                self._host_rejected_log.event('Maximum number of connections per host reached: %d connection(s) '
+                                              'rejected (limit %d, last from %s)',
+                                              self.max_connections_per_host, key)
+                return False
         return True
 
     def process_request(self, request: Any, client_address: Any) -> None:
-        with self._sessions_lock:
-            self._active_sessions[request] = client_address
+        self._add_session(request, client_address)
         try:
             super().process_request(request, client_address)
         except BaseException:
             # the session thread can't start: no session
-            with self._sessions_lock:
-                self._active_sessions.pop(request, None)
+            self._remove_session(request)
             raise
 
     def process_request_thread(self, request: Any, client_address: Any) -> None:
         try:
             super().process_request_thread(request, client_address)
         finally:
-            with self._sessions_lock:
-                self._active_sessions.pop(request, None)
+            self._remove_session(request)
 
 
 class ModbusRequestHandler(BaseRequestHandler):

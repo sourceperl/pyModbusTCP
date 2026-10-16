@@ -176,6 +176,114 @@ def test_tcp2rtu_filters(kwargs: dict, expected: dict) -> None:  # type: ignore[
         thread.join(5.0)
 
 
+class SilentSerial:
+    """A serial port where no slave ever answers (each request holds the line for the whole timeout)."""
+    baudrate, bytesize, parity, stopbits, port, is_open, in_waiting = 19200, 8, 'N', 1, 'silent', True, 0
+
+    def __init__(self) -> None:
+        self.timeout = 0.1
+
+    def reset_input_buffer(self) -> None:
+        pass
+
+    def write(self, data: bytes) -> int:
+        return len(data)
+
+    def flush(self) -> None:
+        pass
+
+    def read(self, size: int = 1) -> bytes:
+        time.sleep(self.timeout)
+        return b''
+
+
+def connect_from(source_ip: str, port: int) -> socket.socket:
+    """Open a TCP connection to localhost from another loopback address (skip the test if it's not available)."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind((source_ip, 0))
+    except OSError:
+        sock.close()
+        pytest.skip('loopback address %s not available on this machine' % source_ip)
+    sock.connect(('127.0.0.1', port))
+    return sock
+
+
+def test_tcp2rtu_fair_share(caplog: pytest.LogCaptureFixture) -> None:
+    """A host that floods the gateway can't take the serial line: the requests of another host still reach it.
+
+    The flood is refused with exception 0x0A (at most 2 pending requests per host) and logged once (log throttle).
+    """
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import tcp_to_rtu_gw
+    worker = tcp_to_rtu_gw.ModbusSerialWorker(SilentSerial(), timeout=0.3)  # type: ignore[arg-type]
+    thread = threading.Thread(target=worker.loop, daemon=True)
+    thread.start()
+    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, ext_engine=worker.srv_engine_entry)
+    _, tcp_port = srv.start()
+    stop = threading.Event()
+    flood_excepts: List[int] = []
+    request = struct.pack('>HHHBBHH', 1, 0, 6, 1, 0x03, 0, 1)
+
+    def flood(sock: socket.socket) -> None:
+        sock.settimeout(10)
+        while not stop.is_set():
+            sock.sendall(request)
+            resp = sock.recv(64)
+            if len(resp) < 9:
+                return
+            flood_excepts.append(resp[8])
+
+    flood_socks: List[socket.socket] = []
+    try:
+        flood_socks = [connect_from('127.0.0.2', tcp_port) for _ in range(8)]
+        with caplog.at_level('WARNING', logger='mbtcp-tcp2rtu'):
+            threads = [threading.Thread(target=flood, args=(sock,), daemon=True) for sock in flood_socks]
+            for t in threads:
+                t.start()
+            time.sleep(0.3)
+            # another host (127.0.0.1): its requests reach the serial line (no answer: exception 0x0B, not 0x0A)
+            c = ModbusClient(host='127.0.0.1', port=tcp_port, timeout=5.0)
+            for _ in range(3):
+                assert c.read_holding_registers(0, 1) is None
+                assert c.last_except == 0x0B
+            c.close()
+            stop.set()
+            for t in threads:
+                t.join(5.0)
+        # the flood host got "gateway path unavailable" for its extra requests, logged only once
+        assert 0x0A in flood_excepts
+        busy_logs = [r for r in caplog.records if 'Too many pending requests' in r.getMessage()]
+        assert len(busy_logs) == 1
+    finally:
+        stop.set()
+        for sock in flood_socks:
+            sock.close()
+        worker.stop()
+        srv.stop()
+        thread.join(5.0)
+
+
+def test_tcp2rtu_refused_requests_log_throttle(caplog: pytest.LogCaptureFixture) -> None:
+    """Requests refused by the filters are logged once, then once per 10 s at most."""
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import tcp_to_rtu_gw
+    worker = tcp_to_rtu_gw.ModbusSerialWorker(SilentSerial(), timeout=0.3, read_only=True)  # type: ignore[arg-type]
+    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, ext_engine=worker.srv_engine_entry)
+    _, tcp_port = srv.start()
+    try:
+        with caplog.at_level('INFO', logger='mbtcp-tcp2rtu'):
+            c = ModbusClient(host='127.0.0.1', port=tcp_port, timeout=2.0)
+            for _ in range(50):
+                assert not c.write_single_register(0, 1)
+                assert c.last_except == 0x01
+            c.close()
+        refused = [r for r in caplog.records if 'Request refused' in r.getMessage()]
+        assert len(refused) == 1
+    finally:
+        srv.stop()
+
+
 def test_tcp2rtu_invalid_allow(capsys: pytest.CaptureFixture[str]) -> None:
     pytest.importorskip('serial')
     from pyModbusTCP.tools import tcp_to_rtu_gw

@@ -156,19 +156,22 @@ class TestModbusServerLimits(unittest.TestCase):
         self.assertEqual(server.request_timeout, 30.0)
         self.assertEqual(server.idle_timeout, 300.0)
         self.assertEqual(server.max_connections, 64)
+        self.assertEqual(server.max_connections_per_host, 16)
 
     def test_params_check(self):
         for kwargs in ({'request_timeout': 0}, {'request_timeout': -1}, {'idle_timeout': 0}, {'idle_timeout': -2.5},
-                       {'max_connections': 0}, {'max_connections': -1}):
+                       {'max_connections': 0}, {'max_connections': -1}, {'max_connections_per_host': 0}):
             with self.assertRaises(ValueError, msg=repr(kwargs)):
                 ModbusServer(**kwargs)  # type: ignore
         for kwargs in ({'request_timeout': '1'}, {'idle_timeout': True}, {'max_connections': 1.5},
-                       {'max_connections': True}, {'max_connections': '2'}):
+                       {'max_connections': True}, {'max_connections': '2'}, {'max_connections_per_host': 1.0}):
             with self.assertRaises(TypeError, msg=repr(kwargs)):
                 ModbusServer(**kwargs)  # type: ignore
         # None disable the limits
-        server = ModbusServer(request_timeout=None, idle_timeout=None, max_connections=None)
+        server = ModbusServer(request_timeout=None, idle_timeout=None, max_connections=None,
+                              max_connections_per_host=None)
         self.assertIsNone(server.request_timeout)
+        self.assertIsNone(server.max_connections_per_host)
 
     def test_request_timeout(self):
         """A request that is never completed (partial MBAP header, or header without PDU) closes the session."""
@@ -262,6 +265,61 @@ class TestModbusServerLimits(unittest.TestCase):
             time.sleep(0.05)
         self.assertTrue(accepted, 'slot of a closed session is never freed')
         self.assertEqual(len(self._request(sock_2)), self.RESP_LEN)
+
+    def _connect_from(self, source_ip):
+        """Open a client connection from another loopback address (skip the test if the OS doesn't allow it)."""
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.addCleanup(sock.close)
+        try:
+            sock.bind((source_ip, 0))
+        except OSError:
+            self.skipTest('loopback address %s not available on this machine' % source_ip)
+        sock.settimeout(5)
+        sock.connect(('127.0.0.1', self.port))
+        return sock
+
+    def test_max_connections_per_host(self):
+        """A host can't open more than max_connections_per_host connections, other hosts are still accepted."""
+        server = self._start_server(max_connections=10, max_connections_per_host=2)
+        sock_1, sock_2 = self._connect(), self._connect()
+        self.assertEqual(len(self._request(sock_1)), self.RESP_LEN)
+        self.assertEqual(len(self._request(sock_2)), self.RESP_LEN)
+        # next connections of the same host are rejected, and logged once
+        with self.assertLogs('pyModbusTCP.server', level='WARNING') as logs:
+            for _ in range(3):
+                sock_3 = self._connect()
+                self.assertIsNotNone(self._closed_after(sock_3, 2.0), 'connection over the host limit is not closed')
+        self.assertEqual(len(logs.records), 1)
+        self.assertIn('per host', logs.records[0].getMessage())
+        self.assertEqual(len(server.active_sessions), 2)
+        # another host is accepted
+        self.assertEqual(len(self._request(self._connect_from('127.0.0.2'))), self.RESP_LEN)
+        # free a slot of the host: a new connection of this host is accepted
+        sock_1.close()
+        deadline = time.monotonic() + 5.0
+        accepted = False
+        while time.monotonic() < deadline and not accepted:
+            sock_4 = self._connect()
+            accepted = len(self._request(sock_4)) == self.RESP_LEN
+            sock_4.close()
+            time.sleep(0.05)
+        self.assertTrue(accepted, 'slot of a closed session is never freed for its host')
+
+    def test_max_connections_per_host_disabled(self):
+        self._start_server(max_connections_per_host=None)
+        socks = [self._connect() for _ in range(20)]
+        for sock in socks:
+            self.assertEqual(len(self._request(sock)), self.RESP_LEN)
+
+    def test_host_key(self):
+        """Connections are counted by IPv4 address, by /64 network for IPv6, an IPv4-mapped address is IPv4."""
+        from pyModbusTCP.server._common import host_key
+        self.assertEqual(host_key(('10.1.2.3', 502)), '10.1.2.3')
+        self.assertEqual(host_key(('::ffff:10.1.2.3', 502, 0, 0)), '10.1.2.3')
+        self.assertEqual(host_key(('2001:db8:1:2::1', 502, 0, 0)), host_key(('2001:db8:1:2:ffff::9', 1, 0, 0)))
+        self.assertEqual(host_key(('2001:db8:1:2::1', 502, 0, 0)), '2001:db8:1:2::/64')
+        self.assertNotEqual(host_key(('2001:db8:1:2::1', 502, 0, 0)), host_key(('2001:db8:1:3::1', 502, 0, 0)))
+        self.assertEqual(host_key(('fe80::1%eth0', 502, 0, 2)), 'fe80::/64')
 
     def test_allowed_hosts(self):
         """Only the clients of the allowed_hosts whitelist are served."""

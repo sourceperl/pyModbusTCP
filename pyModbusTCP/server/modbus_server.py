@@ -7,7 +7,12 @@ import warnings
 from threading import RLock, Thread, current_thread
 from typing import Callable, Iterable, List, Optional, Tuple, TypeAlias
 
-from ..constants import EXP_DATA_VALUE, EXP_ILLEGAL_FUNCTION, EXP_SLAVE_DEVICE_FAILURE, WRITE_FUNCTION_CODES
+from ..constants import (
+    EXP_DATA_VALUE,
+    EXP_ILLEGAL_FUNCTION,
+    EXP_SLAVE_DEVICE_FAILURE,
+    WRITE_FUNCTION_CODES,
+)
 from . import _transport, _validators, errors, frames, session
 from ._common import logger
 from ._functions import ServerFunctionsMixin
@@ -46,8 +51,8 @@ class ModbusServer(ServerFunctionsMixin):
                  ext_engine: Optional[Callable[[session.SessionData], None]] = None,
                  device_id: Optional[DeviceIdentification] = None,
                  request_timeout: Optional[float] = 30.0, idle_timeout: Optional[float] = 300,
-                 max_connections: Optional[int] = 64, read_only: bool = False,
-                 allowed_hosts: Optional[Iterable[str]] = None) -> None:
+                 max_connections: Optional[int] = 64, max_connections_per_host: Optional[int] = 16,
+                 read_only: bool = False, allowed_hosts: Optional[Iterable[str]] = None) -> None:
         """Initialize a Modbus TCP server.
 
         Sets up a Modbus TCP server with configurable network parameters, data handling,
@@ -87,6 +92,11 @@ class ModbusServer(ServerFunctionsMixin):
             (like ['192.168.1.10', '10.0.0.0/24', '::1']), other connections are closed at once, None to accept\
             every client (default), hostnames are not supported (an empty whitelist is an error)
         :type allowed_hosts: iterable of str or None
+        :param max_connections_per_host: max number of simultaneous connections from the same client host (an IPv4\
+            address, or a /64 network for IPv6), the next ones are closed immediately: a single host can't take all\
+            the connections of max_connections. Clients behind a NAT share the same address. None for no limit\
+            (default is 16)
+        :type max_connections_per_host: int or None
         """
         # validate complex objects (data storage and callbacks)
         _validators.validate_data_bank_and_handler(data_bank, data_hdl)
@@ -97,6 +107,8 @@ class ModbusServer(ServerFunctionsMixin):
         request_timeout = _validators.validate_timeout(request_timeout, 'request_timeout')
         idle_timeout = _validators.validate_timeout(idle_timeout, 'idle_timeout')
         max_connections = _validators.validate_max_connections(max_connections)
+        max_connections_per_host = _validators.validate_max_connections(max_connections_per_host,
+                                                                        'max_connections_per_host')
         read_only = _validators.validate_read_only(read_only)
         allowed_networks = _validators.validate_allowed_hosts(allowed_hosts)
 
@@ -110,6 +122,7 @@ class ModbusServer(ServerFunctionsMixin):
         self.request_timeout = request_timeout
         self.idle_timeout = idle_timeout
         self.max_connections = max_connections
+        self.max_connections_per_host = max_connections_per_host
 
         # store access control settings (the whitelist is kept as normalized networks, in CIDR notation)
         self.read_only = read_only
@@ -178,11 +191,11 @@ class ModbusServer(ServerFunctionsMixin):
 
     def __repr__(self) -> str:
         r_str = ('ModbusServer(host=\'%s\', port=%d, no_block=%s, ipv6=%s, data_bank=%s, data_hdl=%s, ext_engine=%s, '
-                 'device_id=%s, request_timeout=%s, idle_timeout=%s, max_connections=%s, read_only=%s, '
-                 'allowed_hosts=%s)')
+                 'device_id=%s, request_timeout=%s, idle_timeout=%s, max_connections=%s, max_connections_per_host=%s, '
+                 'read_only=%s, allowed_hosts=%s, )')
         r_str %= (self.host, self.port, self.no_block, self.ipv6, self.data_bank, self.data_hdl, self.ext_engine,
-                  self.device_id, self.request_timeout, self.idle_timeout, self.max_connections, self.read_only,
-                  self.allowed_hosts)
+                  self.device_id, self.request_timeout, self.idle_timeout, self.max_connections,
+                  self.max_connections_per_host, self.read_only, self.allowed_hosts)
         return r_str
 
     def _engine(self, session_data: session.SessionData) -> None:
@@ -267,6 +280,7 @@ class ModbusServer(ServerFunctionsMixin):
                 tcp_server.request_timeout = self.request_timeout
                 tcp_server.idle_timeout = self.idle_timeout
                 tcp_server.max_connections = self.max_connections
+                tcp_server.max_connections_per_host = self.max_connections_per_host
                 tcp_server.allowed_networks = self._allowed_networks
                 # set socket options
                 tcp_server.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)

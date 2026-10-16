@@ -38,8 +38,9 @@ ERRORS SEEN BY THE TCP CLIENT
   (unit id 0 without --allow-broadcast, or reserved unit id 248 to 255).
 - No valid answer from the slave before the timeout (-t): Modbus exception
   0x0B "Gateway Target Device Failed To Respond".
-- More than 5 requests waiting, or serial worker unavailable: Modbus exception
-  0x0A "Gateway Path Unavailable".
+- More than 5 requests waiting, more than 2 requests waiting from the same
+  client host, or serial worker unavailable: Modbus exception 0x0A "Gateway
+  Path Unavailable".
 
 SERIAL PORT FAILURE
 -------------------
@@ -65,6 +66,19 @@ an "external engine" of ModbusServer), so it applies its own filters:
 - Broadcast requests (unit id 0) are a write to every slave of the bus: they
   are refused unless --allow-broadcast is set (and refused with --read-only).
   Unit ids 248 to 255 are reserved on a serial line and always refused.
+
+FAIR SHARE OF THE SERIAL LINE
+-----------------------------
+The serial line serves one request at a time, and a request to a slave that
+doesn't answer holds it for the whole timeout (-t). So a single client host
+can't monopolize it:
+- a client host has at most 2 requests waiting for the serial line (an IPv4
+  address, or a /64 network for IPv6), its next ones get exception 0x0A at
+  once, the requests of other hosts still reach the line;
+- --max-connections-per-host limits its number of TCP connections (default
+  16), --max-connections the total (default 64).
+Refused requests are logged once, then once per 10 s at most (with their
+count), so a request flood can't flood the log.
 
 LIMITATIONS
 -----------
@@ -104,8 +118,8 @@ import struct
 import sys
 import time
 from queue import Queue
-from threading import Event
-from typing import List, Optional, Tuple, Type
+from threading import Event, Lock
+from typing import Dict, List, Optional, Tuple, Type
 
 from ._common import (
     PORT_502_HELP,
@@ -136,6 +150,7 @@ from ..constants import (
     READ_INPUT_REGISTERS,
 )
 from ..server import ModbusServer
+from ..server._common import LogThrottle, host_key
 from ..utils import crc16
 
 # exceptions raised by the serial port when the device is lost (explicit type,
@@ -157,6 +172,9 @@ RECONNECT_DELAY = 1.0
 MAX_RTU_FRAME = 256
 # pending requests accepted before "gateway overloaded" exception is returned
 QUEUE_SIZE = 5
+# pending requests (waiting for the serial line or in progress) of a single client host: a host can't take every
+# place of the queue, the requests of the other hosts still reach the serial line
+MAX_PENDING_PER_HOST = 2
 # lower bound for the end-of-frame delay: USB-serial adapters add latency
 # (e.g. FTDI latency timer), so the theoretical 3.5 char time is too short
 MIN_EOF_DELAY = 0.02
@@ -269,6 +287,13 @@ class ModbusSerialWorker:
         # internal request queue
         # accept QUEUE_SIZE simultaneous requests before overloaded exception is return
         self.rtu_queries_q: 'Queue[RtuQuery]' = Queue(maxsize=QUEUE_SIZE)
+        # pending requests of each client host (see host_key()) and its lock (session threads)
+        self._host_pending: Dict[str, int] = {}
+        self._host_pending_lock = Lock()
+        # refused requests are logged at most once per 10 s (a request flood must not flood the log)
+        self._refused_log = LogThrottle(logger, level=logging.INFO)
+        self._host_busy_log = LogThrottle(logger)
+        self._overloaded_log = LogThrottle(logger)
         # worker stop flag
         self._stop = Event()
         self._last_bus_activity = 0.0
@@ -415,13 +440,51 @@ class ModbusSerialWorker:
         # gateway filters: refused requests never reach the serial line
         unit_id = session_data.request.mbap.unit_id
         req_pdu = session_data.request.pdu.raw
+        # a request function code can't have the exception flag (bit 7) set
+        func_code = req_pdu[0] & 0x7F
         exp_status = self.is_allowed(unit_id, req_pdu)
         if exp_status:
-            logger.info('Request refused (unit %d, function 0x%02X, exception 0x%02X) from %s',
-                        unit_id, req_pdu[0], exp_status, session_data.client.address)
-            # a request function code can't have the exception flag (bit 7) set
-            session_data.response.pdu.build_except(func_code=req_pdu[0] & 0x7F, exp_status=exp_status)
+            self._refused_log.event('Request refused by the gateway filters: %d request(s) (last: unit %d, '
+                                    'function 0x%02X, exception 0x%02X, from %s)',
+                                    unit_id, req_pdu[0], exp_status, session_data.client.address)
+            session_data.response.pdu.build_except(func_code=func_code, exp_status=exp_status)
             return
+        # fair share of the serial line: a client host can't fill the queue
+        host = host_key((session_data.client.address, session_data.client.port))
+        if not self._acquire_host_slot(host):
+            self._host_busy_log.event('Too many pending requests from a host: %d request(s) rejected '
+                                      '(limit %d, last from %s)', MAX_PENDING_PER_HOST, host)
+            session_data.response.pdu.build_except(func_code=func_code, exp_status=EXP_GATEWAY_PATH_UNAVAILABLE)
+            return
+        try:
+            exp_status = self._relay(session_data)
+        finally:
+            self._release_host_slot(host)
+        if exp_status:
+            session_data.response.pdu.build_except(func_code=func_code, exp_status=exp_status)
+
+    def _acquire_host_slot(self, host: str) -> bool:
+        """Count a new pending request of a client host, False if it already has MAX_PENDING_PER_HOST."""
+        with self._host_pending_lock:
+            pending = self._host_pending.get(host, 0)
+            if pending >= MAX_PENDING_PER_HOST:
+                return False
+            self._host_pending[host] = pending + 1
+            return True
+
+    def _release_host_slot(self, host: str) -> None:
+        with self._host_pending_lock:
+            pending = self._host_pending.get(host, 0) - 1
+            if pending > 0:
+                self._host_pending[host] = pending
+            else:
+                self._host_pending.pop(host, None)
+
+    def _relay(self, session_data: ModbusServer.SessionData) -> int:
+        """Relay the request to the serial line, set the response PDU.
+
+        :return: 0 if the response PDU is set, else the modbus exception code to return
+        """
         # init a serial exchange from session data
         rtu_query = RtuQuery()
         rtu_query.request.build(raw_pdu=session_data.request.pdu.raw,
@@ -429,26 +492,23 @@ class ModbusSerialWorker:
         try:
             # add a request in the serial worker queue, can raise queue.Full
             self.rtu_queries_q.put(rtu_query, block=False)
-            # wait result (bounded: worst case every queued request times out)
-            wait_max = (QUEUE_SIZE + 1) * (self.timeout + self.end_of_frame) + 1.0
-            if not rtu_query.completed.wait(timeout=wait_max):
-                logger.error('Serial worker not responding (unit %d)', rtu_query.request.slave_address)
-                exp_status = EXP_GATEWAY_PATH_UNAVAILABLE
-            # check receive frame status
-            elif rtu_query.response.is_response_to(rtu_query.request):
-                session_data.response.pdu.raw = rtu_query.response.pdu
-                return
-            else:
-                # except status for slave failed to respond
-                logger.debug('No valid answer from unit %d', rtu_query.request.slave_address)
-                exp_status = EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
         except queue.Full:
-            # except status for overloaded gateway
-            logger.warning('Gateway overloaded, request rejected')
-            exp_status = EXP_GATEWAY_PATH_UNAVAILABLE
-        # return modbus exception
-        func_code = rtu_query.request.function_code
-        session_data.response.pdu.build_except(func_code=func_code, exp_status=exp_status)
+            # overloaded gateway
+            self._overloaded_log.event('Gateway overloaded: %d request(s) rejected (queue full, last from %s)',
+                                       session_data.client.address)
+            return EXP_GATEWAY_PATH_UNAVAILABLE
+        # wait result (bounded: worst case every queued request times out)
+        wait_max = (QUEUE_SIZE + 1) * (self.timeout + self.end_of_frame) + 1.0
+        if not rtu_query.completed.wait(timeout=wait_max):
+            logger.error('Serial worker not responding (unit %d)', rtu_query.request.slave_address)
+            return EXP_GATEWAY_PATH_UNAVAILABLE
+        # check receive frame status
+        if rtu_query.response.is_response_to(rtu_query.request):
+            session_data.response.pdu.raw = rtu_query.response.pdu
+            return 0
+        # slave failed to respond
+        logger.debug('No valid answer from unit %d', rtu_query.request.slave_address)
+        return EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -463,6 +523,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                              '(default: every client)')
     parser.add_argument('--read-only', action='store_true',
                         help='only relay read functions (0x01 to 0x04, 0x2B/0x0E)')
+    parser.add_argument('--max-connections', type=int, default=64,
+                        help='max number of simultaneous clients (default: 64)')
+    parser.add_argument('--max-connections-per-host', type=int, default=16,
+                        help='max number of simultaneous connections of a client host (default: 16)')
     parser.add_argument('--allow-broadcast', action='store_true',
                         help='relay broadcast requests (unit id 0) to every slave')
     parser.add_argument('-b', '--baudrate', type=int, default=9600, help='serial rate (default: 9600)')
@@ -502,7 +566,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         logger.info('Start modbus server (%s, %d)', args.host, args.port)
         # note: ModbusServer read_only has no effect with an external engine, the serial worker filters itself
         srv = ModbusServer(host=args.host, port=args.port, no_block=True, ext_engine=serial_worker.srv_engine_entry,
-                           allowed_hosts=args.allow)
+                           allowed_hosts=args.allow, max_connections=args.max_connections,
+                           max_connections_per_host=args.max_connections_per_host)
         if args.allow:
             logger.info('Allowed clients: %s', ', '.join(srv.allowed_hosts or []))
         if args.read_only:
