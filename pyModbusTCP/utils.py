@@ -378,36 +378,19 @@ def _unpack_bits(data: bytes, bit_nb: int) -> List[bool]:
     return bits[:bit_nb]
 
 
-def _is_np_bool(value: Any) -> bool:
-    """Return True for a numpy boolean scalar (numpy.bool_), without importing numpy."""
-    return getattr(getattr(value, 'dtype', None), 'kind', None) == 'b'
-
-
-def _is_index(value: Any) -> bool:
-    """Return True if value can be used as an integer (implements __index__)."""
-    try:
-        operator.index(value)
-    except TypeError:
-        return False
-    return True
-
-
 def _to_bool(value: Any, name: str) -> bool:
-    """Return value as bool from a boolean-like integer.
+    """Return value as bool from a boolean-like integer (bool, int or any object with __index__).
 
     :raises TypeError: if value cannot be interpreted as a boolean
     """
     try:
-        operator.index(value)
+        return bool(operator.index(value))
     except TypeError:
-        # numpy booleans don't implement __index__ but are valid bool-like values
-        if not _is_np_bool(value):
-            raise TypeError(f"{name} must be a bool or an integer") from None
-    return bool(value)
+        raise TypeError(f"{name} must be a bool or an integer") from None
 
 
 def _to_int(value: Any, name: str) -> int:
-    """Return value as an int, accept only int-like objects (int, bool, numpy ints...).
+    """Return value as an int, accept only int-like objects (int, bool or any object with __index__).
 
     :raises TypeError: if value can't be used as an integer (str, float...)
     """
@@ -418,25 +401,19 @@ def _to_int(value: Any, name: str) -> int:
 
 
 def _to_bool_list(values: Iterable[Any], name: str) -> List[bool]:
-    """Return values as a list of bool from boolean-like integers.
+    """Return values as a list of bool from boolean-like integers (bool, int or any object with __index__).
 
     :raises TypeError: if an item cannot be interpreted as a boolean
     """
-    # materialize one-shot iterators, so the fallback below can safely scan values again
-    if not isinstance(values, (list, tuple)):
-        values = list(values)
     try:
-        return [bool(operator.index(val)) for val in values]
+        # Python bools (the usual case) are taken as is, without a function call
+        return [val if type(val) is bool else bool(operator.index(val)) for val in values]
     except TypeError:
-        pass
-    # slow path: also accept numpy booleans (no __index__), reject everything else
-    if all(isinstance(val, bool) or _is_np_bool(val) or _is_index(val) for val in values):
-        return [bool(val) for val in values]
-    raise TypeError(f"{name} items must be a bool or an integer")
+        raise TypeError(f"{name} items must be a bool or an integer") from None
 
 
 def _to_int_list(values: Iterable[Any], name: str) -> List[int]:
-    """Return values as a list of int, accept only int-like items (int, bool, numpy ints...).
+    """Return values as a list of int, accept only int-like items (int, bool or any object with __index__).
 
     :raises TypeError: if an item can't be used as an integer (str, float...)
     """

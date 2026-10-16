@@ -552,20 +552,22 @@ class TestDataBankValidation(unittest.TestCase):
             with self.assertRaises(TypeError):
                 _to_bool_list([True, bad_value], 'x')
 
-    def test_numpy_booleans_are_accepted(self):
-        np = None
-        try:
-            import numpy as np
-        except ImportError:
-            self.skipTest('numpy not installed')
-        self.assertIs(self.db.set_coils(0, np.array([True, False, True])), True)  # type: ignore
+    def test_int_like_values(self):
+        """Any object with __index__ is accepted as an item."""
+
+        class IntLike:
+            def __init__(self, value):
+                self.value = value
+
+            def __index__(self):
+                return self.value
+
+        self.assertIs(self.db.set_coils(0, [IntLike(1), IntLike(0), True]), True)
         self.assertEqual(self.db.get_coils(0, 3), [True, False, True])
-        self.assertIs(self.db.set_discrete_inputs(0, [np.True_, np.False_]), True)  # type: ignore
-        self.assertIs(self.db.set_holding_registers(0, np.array([1, 2], dtype=np.uint16)), True)  # type: ignore
-        self.assertEqual(self.db.get_holding_registers(0, 2), [1, 2])
-        # numpy floats are still rejected
-        with self.assertRaises(TypeError):
-            self.db.set_coils(0, np.array([1.0]))  # type: ignore
+        self.assertIs(self.db.set_holding_registers(0, (IntLike(1), IntLike(65535))), True)
+        self.assertEqual(self.db.get_holding_registers(0, 2), [1, 65535])
+        with self.assertRaises(ValueError):
+            self.db.set_holding_registers(0, [IntLike(65536)])
 
 
 class TestModbusServerSpecFrames(unittest.TestCase):

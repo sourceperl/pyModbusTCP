@@ -214,3 +214,60 @@ class TestUtils(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class IntLike:
+    """An int-like object: it implements __index__."""
+
+    def __init__(self, value):
+        self.value = value
+
+    def __index__(self):
+        return self.value
+
+
+class FloatLike:
+    """A float-like object: __float__ and __bool__, no __index__."""
+
+    def __init__(self, value):
+        self.value = value
+
+    def __float__(self):
+        return float(self.value)
+
+    def __bool__(self):
+        return bool(self.value)
+
+
+class TestArgConversion(unittest.TestCase):
+    """The internal conversions of the arguments (bool and int)."""
+
+    def test_python_values(self):
+        from pyModbusTCP.utils import _to_bool, _to_bool_list, _to_int, _to_int_list
+        self.assertIs(_to_bool(1, 'v'), True)
+        self.assertIs(_to_bool(False, 'v'), False)
+        self.assertEqual(_to_bool_list([True, 0, 2], 'v'), [True, False, True])
+        self.assertEqual(_to_bool_list(iter([1, 0]), 'v'), [True, False])
+        self.assertEqual(_to_int(True, 'v'), 1)
+        self.assertEqual(_to_int_list([1, True, 65535], 'v'), [1, 1, 65535])
+        for func, value in ((_to_bool, 1.0), (_to_bool, '1'), (_to_bool, None), (_to_int, 1.5), (_to_int, '1')):
+            with self.subTest(func=func.__name__, value=value), self.assertRaises(TypeError):
+                func(value, 'v')
+        for func, values in ((_to_bool_list, [True, 1.0]), (_to_bool_list, [None]), (_to_int_list, [1, '2'])):
+            with self.subTest(func=func.__name__, values=values), self.assertRaises(TypeError):
+                func(values, 'v')
+
+    def test_int_like_values(self):
+        """Any object with __index__ is accepted, a float-like one is refused."""
+        from pyModbusTCP.utils import _to_bool, _to_bool_list, _to_int, _to_int_list
+        self.assertIs(_to_bool(IntLike(0), 'v'), False)
+        self.assertIs(_to_bool(IntLike(3), 'v'), True)
+        self.assertEqual(_to_bool_list([IntLike(1), IntLike(0), True], 'v'), [True, False, True])
+        self.assertEqual(_to_int(IntLike(65535), 'v'), 65535)
+        self.assertEqual(_to_int_list((IntLike(1), 2, IntLike(3)), 'v'), [1, 2, 3])
+        for func, value in ((_to_bool, FloatLike(1.0)), (_to_int, FloatLike(2.0))):
+            with self.subTest(func=func.__name__), self.assertRaises(TypeError):
+                func(value, 'v')
+        for func in (_to_bool_list, _to_int_list):
+            with self.subTest(func=func.__name__), self.assertRaises(TypeError):
+                func([1, FloatLike(1.0)], 'v')

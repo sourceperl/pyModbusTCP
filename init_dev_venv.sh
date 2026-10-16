@@ -24,7 +24,7 @@ TOOLS_DIR="pyModbusTCP-cli"
 
 # test and build tools (types-pyserial: type stubs of pyserial, for mypy on the gateways of pyModbusTCP.tools;
 # hatchling: the build backend, installed here only for mypy on pyModbusTCP-cli/hatch_build.py)
-DEV_PACKAGES=(build twine pytest flake8 mypy numpy types-pyserial hatchling)
+DEV_PACKAGES=(build twine pytest flake8 mypy types-pyserial hatchling)
 
 usage() {
     sed -n '3,13p' "$0" | sed 's/^# \{0,1\}//'

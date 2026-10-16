@@ -85,8 +85,8 @@ Revision history for pyModbusTCP
     - fix ModbusServer: support MBAP header length from 2 to 253.
     - fix ModbusServer: limit client info to (address, port) for IPv6 peers.
     - fix DataBank: set_coils(), set_discrete_inputs(), set_holding_registers() and set_input_registers() now check
-                    their input. Non-integer items (float, str, None...) raise a TypeError (numpy integers and
-                    booleans are accepted), and register values out of the 0-65535 range raise a ValueError.
+                    their input. Non-integer items (float, str, None...) raise a TypeError (numpy integers are
+                    accepted), and register values out of the 0-65535 range raise a ValueError.
                     Before, they were silently converted (a value like 70000 or -1 was truncated to 16 bits).
     - fix utils: valid_host() returns False for an empty host or a host with a NUL char, it raised an IndexError or a
                  ValueError (so ModbusClient(host='') raised an IndexError instead of a ValueError).
