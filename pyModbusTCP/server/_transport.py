@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import socket
+import sys
 import time
 from socketserver import BaseRequestHandler, ThreadingTCPServer
 from threading import Lock
@@ -16,7 +17,12 @@ from .session import SessionData
 class CustomThreadingTCPServer(ThreadingTCPServer):
     """Threaded TCP server."""
     address_family = socket.AF_INET
-    allow_reuse_address = True
+    # SO_REUSEADDR: on POSIX systems, a restarted server can listen at once, even with connections of the previous
+    # one still in TIME_WAIT (another socket can't bind a port in the LISTEN state). On Windows, it means something
+    # else: it allows another socket to bind the port in use and take its connections (port hijacking), and opens the
+    # port to the sockets of the other user accounts. So, on Windows, the port is reserved with SO_EXCLUSIVEADDRUSE
+    # instead (see server_bind()).
+    allow_reuse_address = sys.platform != 'win32'
     daemon_threads: bool = True
     # listen backlog: the socketserver default (5) makes a burst of simultaneous connections wait for a TCP SYN
     # retransmission (1 s or more) as soon as the accept loop is a bit late
@@ -44,6 +50,12 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
         self._rejected_log = LogThrottle(logger)
         self._host_rejected_log = LogThrottle(logger)
         super().__init__(*args, **kwargs)
+
+    def server_bind(self) -> None:
+        # Windows: no other socket (of this process, of another one, of another user) can bind this port
+        if sys.platform == 'win32':
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
     @property
     def _sessions(self) -> int:

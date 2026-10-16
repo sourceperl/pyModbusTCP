@@ -73,6 +73,9 @@ Revision history for pyModbusTCP
     - fix ModbusServer: start() no longer modifies class attributes of socketserver, since ThreadingTCPServer can be
                         shared with the rest of the process.
     - fix ModbusServer: close the listening socket when start() fails to bind.
+    - fix ModbusServer: on Windows, the listening port is reserved with SO_EXCLUSIVEADDRUSE instead of SO_REUSEADDR,
+                        which allowed another local socket to bind the same port and take the connections of the
+                        server (port hijacking). No change on the other systems.
     - fix ModbusServer: make function Write/Read Multiple Registers (0x17) atomic to prevent writing when the read range
                         is out of bounds.
     - fix ModbusServer: ensure Write Single Coil (0x05) complies fully with the Modbus specification.

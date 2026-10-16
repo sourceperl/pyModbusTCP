@@ -77,6 +77,16 @@ timeout. A client host has at most 2 requests waiting for the serial line: its n
 the `--max-connections` and `--max-connections-per-host` options of the server. Requests refused by its filters
 are logged once, then once per 10 s at most, so a request flood can't flood the log.
 
+### Listening socket
+
+On Windows, the listening port is reserved with `SO_EXCLUSIVEADDRUSE`: no other socket (of the same process, of
+another process or of another user account) can bind it while the server runs and take its connections (port
+hijacking). The `SO_REUSEADDR` option, which allows this hijacking on Windows, is only set on the other systems,
+where it just allows a quick restart of the server on the same port.
+
+On Windows, a server restarted on the same port may get an "address already in use" error for a short time, until
+the connections of the previous one are fully closed by the system.
+
 ### Frame checks
 
 - The MBAP header is checked (protocol ID must be 0, length from 2 to 254 bytes): an invalid header closes

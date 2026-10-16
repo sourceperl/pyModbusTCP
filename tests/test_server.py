@@ -321,6 +321,43 @@ class TestModbusServerLimits(unittest.TestCase):
         self.assertNotEqual(host_key(('2001:db8:1:2::1', 502, 0, 0)), host_key(('2001:db8:1:3::1', 502, 0, 0)))
         self.assertEqual(host_key(('fe80::1%eth0', 502, 0, 2)), 'fe80::/64')
 
+    def test_port_hijacking(self):
+        """Another socket can't bind the port of a running server, even with SO_REUSEADDR (port hijacking)."""
+        server = self._start_server()
+        assert server._tcp_server is not None
+        srv_sock = server._tcp_server.socket
+        if sys.platform == 'win32':
+            # Windows: SO_REUSEADDR would allow the hijacking, the port is reserved with SO_EXCLUSIVEADDRUSE
+            self.assertEqual(srv_sock.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR), 0)
+            self.assertNotEqual(srv_sock.getsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE), 0)
+        else:
+            # POSIX: SO_REUSEADDR only allows a quick restart (connections of a previous server in TIME_WAIT)
+            self.assertNotEqual(srv_sock.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR), 0)
+        for address in ('127.0.0.1', '0.0.0.0'):
+            with self.subTest(address=address):
+                thief = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.addCleanup(thief.close)
+                thief.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                with self.assertRaises(OSError):
+                    thief.bind((address, self.port))
+        # the server still gets the connections
+        self.assertEqual(len(self._request(self._connect())), self.RESP_LEN)
+
+    def test_quick_restart_on_the_same_port(self):
+        """A server stopped after serving a client can be started again at once on the same port (POSIX)."""
+        if sys.platform == 'win32':
+            self.skipTest('no quick restart on Windows: the port is reserved with SO_EXCLUSIVEADDRUSE')
+        server = self._start_server()
+        sock = self._connect()
+        self.assertEqual(len(self._request(sock)), self.RESP_LEN)
+        # the server closes the session first: its side of the connection goes to TIME_WAIT
+        server.stop()
+        sock.close()
+        restarted = ModbusServer(host='127.0.0.1', port=self.port, no_block=True)
+        restarted.start()
+        self.addCleanup(restarted.stop)
+        self.assertEqual(len(self._request(self._connect())), self.RESP_LEN)
+
     def test_allowed_hosts(self):
         """Only the clients of the allowed_hosts whitelist are served."""
         for hosts in (['127.0.0.1'], ['127.0.0.0/8'], ['10.1.2.3', '127.0.0.1'], ('10.0.0.0/8', '127.0.0.0/8')):
