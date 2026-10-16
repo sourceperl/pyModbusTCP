@@ -16,7 +16,7 @@ while True:
 
     # if success display registers
     if regs_l:
-        print('reg ad #0 to 9: %s' % regs_l)
+        print(f'reg ad #0 to 9: {regs_l}')
     else:
         print('unable to read registers')
 

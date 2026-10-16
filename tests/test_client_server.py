@@ -360,7 +360,7 @@ class TestClientServerAccessControl(unittest.TestCase):
 
     def test_allowed_hosts(self):
         """A client in the whitelist is served."""
-        server, client = self._start(allowed_hosts=['127.0.0.1'])
+        _server, client = self._start(allowed_hosts=['127.0.0.1'])
         self.assertTrue(client.write_single_register(0, 7))
         self.assertEqual(client.read_holding_registers(0), [7])
 

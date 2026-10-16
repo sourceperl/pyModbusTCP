@@ -18,9 +18,9 @@ while True:
     for ad in range(4):
         is_ok = c.write_single_coil(ad, bit)
         if is_ok:
-            print('coil #%s: write to %s' % (ad, bit))
+            print(f'coil #{ad}: write to {bit}')
         else:
-            print('coil #%s: unable to write %s' % (ad, bit))
+            print(f'coil #{ad}: unable to write {bit}')
         time.sleep(0.5)
 
     print()
@@ -31,7 +31,7 @@ while True:
     print('---------\n')
     bits = c.read_coils(0, 4)
     if bits:
-        print('coils #0 to 3: %s' % bits)
+        print(f'coils #0 to 3: {bits}')
     else:
         print('coils #0 to 3: unable to read')
 

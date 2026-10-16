@@ -125,7 +125,7 @@ def test_server_command() -> None:
 
 
 def test_server_invalid_allow() -> None:
-    proc = subprocess.run([sys.executable, '-m', 'pyModbusTCP.tools.server', '-A', 'not-an-ip'],
+    proc = subprocess.run([sys.executable, '-m', 'pyModbusTCP.tools.server', '-A', 'not-an-ip'], check=False,
                           capture_output=True, text=True, timeout=30)
     assert proc.returncode == 2
     assert 'not an IP address' in proc.stderr
@@ -204,7 +204,7 @@ def connect_from(source_ip: str, port: int) -> socket.socket:
         sock.bind((source_ip, 0))
     except OSError:
         sock.close()
-        pytest.skip('loopback address %s not available on this machine' % source_ip)
+        pytest.skip(f'loopback address {source_ip} not available on this machine')
     sock.connect(('127.0.0.1', port))
     return sock
 
@@ -359,14 +359,15 @@ def test_help_and_version(command: str) -> None:
     for option in ('--help', '--version'):
         # through the dispatcher (python -m pyModbusTCP.tools) and the module itself
         for cmd in (['-m', 'pyModbusTCP.tools', command], ['-m', 'pyModbusTCP.tools.' + _entry.COMMANDS[command]]):
-            proc = subprocess.run([sys.executable] + cmd + [option], capture_output=True, text=True, timeout=30)
+            proc = subprocess.run([sys.executable] + cmd + [option], check=False,
+                                  capture_output=True, text=True, timeout=30)
             assert proc.returncode == 0, proc.stderr
             assert proc.stdout
 
 
 def test_dispatcher_usage() -> None:
     for args, status in (([], 2), (['--help'], 0), (['unknown'], 2)):
-        proc = subprocess.run([sys.executable, '-m', 'pyModbusTCP.tools'] + args,
+        proc = subprocess.run([sys.executable, '-m', 'pyModbusTCP.tools'] + args, check=False,
                               capture_output=True, text=True, timeout=30)
         assert proc.returncode == status, args
         assert 'usage: python -m pyModbusTCP.tools' in proc.stdout + proc.stderr
@@ -378,7 +379,7 @@ def test_gateway_without_pyserial(command: str) -> None:
     code = ('import sys; sys.modules["serial"] = None; '  # "import serial" now fails like a missing pyserial
             'from pyModbusTCP.tools import _entry; '
             'import pyModbusTCP.tools.client, pyModbusTCP.tools.server; '  # the other tools still work
-            'sys.exit(_entry.main([%r, "--help"]))' % command)
-    proc = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, timeout=30)
+            f'sys.exit(_entry.main([{command!r}, "--help"]))')
+    proc = subprocess.run([sys.executable, '-c', code], check=False, capture_output=True, text=True, timeout=30)
     assert proc.returncode == 2, proc.stderr
     assert 'pip install "pyModbusTCP[serial]"' in proc.stderr

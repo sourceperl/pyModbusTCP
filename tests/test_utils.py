@@ -78,10 +78,10 @@ class TestUtils(unittest.TestCase):
         # test convert with big and little endian
         l1 = [0xdead, 0xbeef]
         l2 = [0xfeed, 0xface, 0xcafe, 0xbeef]
-        big = dict(big_endian=True)
-        nobig = dict(big_endian=False)
-        big64 = dict(big_endian=True, long_long=True)
-        nobig64 = dict(big_endian=False, long_long=True)
+        big = {'big_endian': True}
+        nobig = {'big_endian': False}
+        big64 = {'big_endian': True, 'long_long': True}
+        nobig64 = {'big_endian': False, 'long_long': True}
         self.assertEqual(words2longs(l1, **big), [0xdeadbeef])
         self.assertEqual(words2longs(l2, **big), [0xfeedface, 0xcafebeef])
         self.assertEqual(words2longs(l1, **nobig), [0xbeefdead])
@@ -107,10 +107,10 @@ class TestUtils(unittest.TestCase):
         l3 = [0xfeedfacecafebeef]
         l3_big64 = [0xfeed, 0xface, 0xcafe, 0xbeef]
         l3_nobig64 = [0xbeef, 0xcafe, 0xface, 0xfeed]
-        big = dict(big_endian=True)
-        nobig = dict(big_endian=False)
-        big64 = dict(big_endian=True, long_long=True)
-        nobig64 = dict(big_endian=False, long_long=True)
+        big = {'big_endian': True}
+        nobig = {'big_endian': False}
+        big64 = {'big_endian': True, 'long_long': True}
+        nobig64 = {'big_endian': False, 'long_long': True}
         self.assertEqual(longs2words(l1, **big), l1_big)
         self.assertEqual(longs2words(l2, **big), l2_big)
         self.assertEqual(longs2words(l1, **nobig), l1_nobig)

@@ -25,7 +25,7 @@ class TestModbusServer(unittest.TestCase):
         try:
             ModbusServer(device_id=DeviceIdentification())
         except Exception as e:
-            self.fail('ModbusServer raised exception "%r" unexpectedly' % e)
+            self.fail(f'ModbusServer raised exception "{e!r}" unexpectedly')
         # init a DeviceIdentification class for test it
         device_id = DeviceIdentification()
         # should raise exception
@@ -39,7 +39,7 @@ class TestModbusServer(unittest.TestCase):
             device_id.user_application_name = b'unittest'
             device_id[0x80] = b'feed'
         except Exception as e:
-            self.fail('DeviceIdentification raised exception "%r" unexpectedly' % e)
+            self.fail(f'DeviceIdentification raised exception "{e!r}" unexpectedly')
         # check access by shortcut name (str) or object id (int) return same value
         self.assertEqual(device_id.vendor_name, device_id[0x00])
         self.assertEqual(device_id.user_application_name, device_id[0x06])
@@ -113,7 +113,7 @@ class TestModbusServerLimits(unittest.TestCase):
     def _start_server(self, **kwargs):
         """Start a server on a free TCP port chosen by the OS (port=0), it's stored in self.port."""
         server = ModbusServer(host='127.0.0.1', port=0, no_block=True, **kwargs)
-        host, port = server.start()
+        _host, port = server.start()
         self.addCleanup(server.stop)
         self.port = port
         return server
@@ -273,7 +273,7 @@ class TestModbusServerLimits(unittest.TestCase):
         try:
             sock.bind((source_ip, 0))
         except OSError:
-            self.skipTest('loopback address %s not available on this machine' % source_ip)
+            self.skipTest(f'loopback address {source_ip} not available on this machine')
         sock.settimeout(5)
         sock.connect(('127.0.0.1', self.port))
         return sock
@@ -577,7 +577,7 @@ class TestModbusServerSpecFrames(unittest.TestCase):
         self.bank = DataBank()
         # port=0: a free TCP port chosen by the OS
         self.server = ModbusServer(host='127.0.0.1', port=0, no_block=True, data_bank=self.bank)
-        host, port = self.server.start()
+        _host, port = self.server.start()
         self.addCleanup(self.server.stop)
         self.port = port
         self.sock = socket.create_connection(('127.0.0.1', self.port), timeout=5)
@@ -827,7 +827,7 @@ class TestStopFromSignalHandler(unittest.TestCase):
         )
         # in a subprocess: a deadlock is a clean test failure (timeout), not a hanging test suite
         try:
-            res = subprocess.run([sys.executable, '-c', code], timeout=15, capture_output=True, text=True)
+            res = subprocess.run([sys.executable, '-c', code], check=False, timeout=15, capture_output=True, text=True)
         except subprocess.TimeoutExpired:
             self.fail('stop() called from a signal handler deadlocks')
         self.assertEqual(res.returncode, 0, res.stderr)
@@ -1127,7 +1127,7 @@ class TestAllowedHostsIPv6(unittest.TestCase):
 
     def _connect(self, **server_kwargs):
         server = ModbusServer(host='::1', port=0, ipv6=True, no_block=True, **server_kwargs)
-        host, port = server.start()
+        _host, port = server.start()
         self.addCleanup(server.stop)
         sock = socket.create_connection(('::1', port), timeout=5)
         self.addCleanup(sock.close)

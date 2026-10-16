@@ -16,7 +16,7 @@ while True:
 
     # if success display registers
     if coils_l:
-        print('coil ad #0 to 9: %s' % coils_l)
+        print(f'coil ad #0 to 9: {coils_l}')
     else:
         print('unable to read coils')
 
