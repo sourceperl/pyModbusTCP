@@ -82,7 +82,9 @@ are logged once, then once per 10 s at most, so a request flood can't flood the 
 On Windows, the listening port is reserved with `SO_EXCLUSIVEADDRUSE`: no other socket (of the same process, of
 another process or of another user account) can bind it while the server runs and take its connections (port
 hijacking). The `SO_REUSEADDR` option, which allows this hijacking on Windows, is only set on the other systems,
-where it just allows a quick restart of the server on the same port.
+where it allows a quick restart of the server on the same port. On macOS and the BSDs, it also lets a process of the
+same user bind the same port on a more specific address (like `127.0.0.1` for a server on `0.0.0.0`) and get the
+connections to this address: the processes of the other users can't.
 
 On Windows, a server restarted on the same port may get an "address already in use" error for a short time, until
 the connections of the previous one are fully closed by the system.

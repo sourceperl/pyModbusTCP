@@ -333,15 +333,33 @@ class TestModbusServerLimits(unittest.TestCase):
         else:
             # POSIX: SO_REUSEADDR only allows a quick restart (connections of a previous server in TIME_WAIT)
             self.assertNotEqual(srv_sock.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR), 0)
-        for address in ('127.0.0.1', '0.0.0.0'):
-            with self.subTest(address=address):
-                thief = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.addCleanup(thief.close)
-                thief.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                with self.assertRaises(OSError):
-                    thief.bind((address, self.port))
-        # the server still gets the connections
-        self.assertEqual(len(self._request(self._connect())), self.RESP_LEN)
+        # the same address and port: refused on every system
+        thief = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.addCleanup(thief.close)
+        thief.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        with self.assertRaises(OSError):
+            thief.bind(('127.0.0.1', self.port))
+        # the wildcard address and the same port: refused on Linux and Windows. macOS (BSD semantics) allows it for
+        # a socket of the same user, but the connections to the address of the server still go to the server (the
+        # most specific binding wins): no hijacking
+        thief = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.addCleanup(thief.close)
+        thief.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if sys.platform in ('linux', 'win32'):
+            with self.assertRaises(OSError):
+                thief.bind(('0.0.0.0', self.port))
+        else:
+            try:
+                thief.bind(('0.0.0.0', self.port))
+                thief.listen(5)
+            except OSError:
+                pass
+        # the server still gets the connections, never the other socket
+        for _ in range(3):
+            self.assertEqual(len(self._request(self._connect())), self.RESP_LEN)
+        thief.setblocking(False)
+        with self.assertRaises(OSError):
+            thief.accept()
 
     def test_quick_restart_on_the_same_port(self):
         """A server stopped after serving a client can be started again at once on the same port (POSIX)."""
