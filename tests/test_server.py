@@ -321,8 +321,23 @@ class TestModbusServerLimits(unittest.TestCase):
         self.assertNotEqual(host_key(('2001:db8:1:2::1', 502, 0, 0)), host_key(('2001:db8:1:3::1', 502, 0, 0)))
         self.assertEqual(host_key(('fe80::1%eth0', 502, 0, 2)), 'fe80::/64')
 
+    def _thief(self):
+        """A socket with SO_REUSEADDR, like a local process that tries to take the port of the server."""
+        thief = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.addCleanup(thief.close)
+        thief.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        return thief
+
+    def _assert_server_gets_connections(self, thief):
+        """The connections to 127.0.0.1 always go to the server, never to the thief socket (if it could listen)."""
+        for _ in range(3):
+            self.assertEqual(len(self._request(self._connect())), self.RESP_LEN)
+        thief.setblocking(False)
+        with self.assertRaises(OSError):
+            thief.accept()
+
     def test_port_hijacking(self):
-        """Another socket can't bind the port of a running server, even with SO_REUSEADDR (port hijacking)."""
+        """Another socket can't bind the address and port of a running server, even with SO_REUSEADDR."""
         server = self._start_server()
         assert server._tcp_server is not None
         srv_sock = server._tcp_server.socket
@@ -334,18 +349,12 @@ class TestModbusServerLimits(unittest.TestCase):
             # POSIX: SO_REUSEADDR only allows a quick restart (connections of a previous server in TIME_WAIT)
             self.assertNotEqual(srv_sock.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR), 0)
         # the same address and port: refused on every system
-        thief = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.addCleanup(thief.close)
-        thief.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         with self.assertRaises(OSError):
-            thief.bind(('127.0.0.1', self.port))
-        # the wildcard address and the same port: refused on Linux and Windows. macOS (BSD semantics) allows it for
-        # a socket of the same user, but the connections to the address of the server still go to the server (the
-        # most specific binding wins): no hijacking
-        thief = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.addCleanup(thief.close)
-        thief.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        if sys.platform in ('linux', 'win32'):
+            self._thief().bind(('127.0.0.1', self.port))
+        # the wildcard address and the same port: refused on Linux. Windows and macOS allow it, but the wildcard
+        # socket only gets the connections to the other addresses (the most specific binding wins): no hijacking
+        thief = self._thief()
+        if sys.platform == 'linux':
             with self.assertRaises(OSError):
                 thief.bind(('0.0.0.0', self.port))
         else:
@@ -354,12 +363,25 @@ class TestModbusServerLimits(unittest.TestCase):
                 thief.listen(5)
             except OSError:
                 pass
-        # the server still gets the connections, never the other socket
-        for _ in range(3):
-            self.assertEqual(len(self._request(self._connect())), self.RESP_LEN)
-        thief.setblocking(False)
-        with self.assertRaises(OSError):
-            thief.accept()
+        self._assert_server_gets_connections(thief)
+
+    def test_port_hijacking_of_a_wildcard_server(self):
+        """A server on every interface (0.0.0.0): another socket can't take one of its addresses (127.0.0.1).
+
+        This is the real hijacking (the most specific binding gets the connections): refused on Linux, and on
+        Windows thanks to SO_EXCLUSIVEADDRUSE (SO_REUSEADDR allowed it, even to another user account). macOS allows
+        it to a process of the same user only (see SECURITY.md).
+        """
+        server = ModbusServer(host='0.0.0.0', port=0, no_block=True)
+        self.port = server.start()[1]
+        self.addCleanup(server.stop)
+        thief = self._thief()
+        if sys.platform in ('linux', 'win32'):
+            with self.assertRaises(OSError):
+                thief.bind(('127.0.0.1', self.port))
+            self._assert_server_gets_connections(thief)
+        else:
+            self.skipTest('BSD semantics: a socket of the same user can bind a more specific address')
 
     def test_quick_restart_on_the_same_port(self):
         """A server stopped after serving a client can be started again at once on the same port (POSIX)."""

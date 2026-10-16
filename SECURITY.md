@@ -86,6 +86,10 @@ where it allows a quick restart of the server on the same port. On macOS and the
 same user bind the same port on a more specific address (like `127.0.0.1` for a server on `0.0.0.0`) and get the
 connections to this address: the processes of the other users can't.
 
+On every system, another socket may bind the wildcard address (`0.0.0.0`) on the port of a server that listens on
+a specific address (refused on Linux only): it only gets the connections to the other addresses of the host, never
+those of the server.
+
 On Windows, a server restarted on the same port may get an "address already in use" error for a short time, until
 the connections of the previous one are fully closed by the system.
 
