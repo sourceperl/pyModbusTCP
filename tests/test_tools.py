@@ -552,7 +552,7 @@ def test_gateway_api_checks() -> None:
 
 
 def test_gateway_rs485_settings() -> None:
-    """The --rs485-* options give the RS485Settings of pyserial (RTS high to send, low to receive by default)."""
+    """The --rs485-* options give the RS485Settings of pyserial; a level not given is the one of the driver, if any."""
     pytest.importorskip('serial')
     import argparse
 
@@ -561,18 +561,67 @@ def test_gateway_rs485_settings() -> None:
     parser = argparse.ArgumentParser()
     _common.add_rs485_args(parser)
     assert _common.rs485_settings(parser.parse_args([])) is None
-    settings = _common.rs485_settings(parser.parse_args(['--rs485']))
-    assert settings is not None
-    assert (settings.rts_level_for_tx, settings.rts_level_for_rx) == (True, False)
-    assert (settings.delay_before_tx, settings.delay_before_rx) == (None, None)
-    assert not settings.loopback  # no echo of the frames sent
-    settings = _common.rs485_settings(parser.parse_args(
+    # no RS-485 mode in the driver: RTS high to send, low to receive (pyserial and Windows)
+    setup = _common.rs485_settings(parser.parse_args(['--rs485']))
+    assert setup is not None
+    st = setup.settings
+    assert (st.rts_level_for_tx, st.rts_level_for_rx) == (True, False)
+    assert (st.delay_before_tx, st.delay_before_rx) == (None, None)
+    assert not st.loopback  # no echo of the frames sent
+    assert setup.text() == 'RTS high on tx, low on rx, delay before tx driver, before rx driver'
+    # RS-485 mode already set in the driver (device tree): its levels are kept
+    setup = _common.rs485_settings(parser.parse_args(['--rs485']), driver_levels=(False, True))
+    assert setup is not None
+    assert (setup.settings.rts_level_for_tx, setup.settings.rts_level_for_rx) == (False, True)
+    assert setup.text().startswith('RTS low (driver) on tx, high (driver) on rx')
+    # the command line wins over the driver, level by level
+    setup = _common.rs485_settings(parser.parse_args(['--rs485', '--rs485-rts-tx', 'high']), driver_levels=(False, True))
+    assert setup is not None
+    assert (setup.settings.rts_level_for_tx, setup.settings.rts_level_for_rx) == (True, True)
+    assert setup.text().startswith('RTS high on tx, high (driver) on rx')
+    setup = _common.rs485_settings(parser.parse_args(
         ['--rs485', '--rs485-rts-tx', 'low', '--rs485-rts-rx', 'high',
          '--rs485-delay-before-tx', '0.002', '--rs485-delay-before-rx', '0']))
-    assert settings is not None
-    assert (settings.rts_level_for_tx, settings.rts_level_for_rx) == (False, True)
-    assert (settings.delay_before_tx, settings.delay_before_rx) == (0.002, 0.0)
-    assert _common.rs485_text(settings) == 'RTS low on tx, high on rx, delay before tx 0.002 s, before rx 0.000 s'
+    assert setup is not None
+    st = setup.settings
+    assert (st.rts_level_for_tx, st.rts_level_for_rx) == (False, True)
+    assert (st.delay_before_tx, st.delay_before_rx) == (0.002, 0.0)
+    assert setup.text() == 'RTS low on tx, high on rx, delay before tx 0.002 s, before rx 0.000 s'
+
+
+@pytest.mark.skipif(not sys.platform.startswith('linux'), reason='RS-485 ioctl of Linux')
+def test_gateway_driver_rts_levels(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The RTS levels of a RS-485 mode already set in the driver are read with the TIOCGRS485 ioctl."""
+    pytest.importorskip('serial')
+    import fcntl
+
+    from serial import serialposix
+
+    from pyModbusTCP.tools import _common
+
+    class Port:
+        def fileno(self) -> int:
+            return 42
+
+    def fake_ioctl(flags: int) -> object:
+        def ioctl(fd: int, request: int, buf: list[int]) -> int:
+            assert (fd, request) == (42, serialposix.TIOCGRS485)
+            buf[0] = flags
+            return 0
+        return ioctl
+
+    on, tx, rx = (serialposix.SER_RS485_ENABLED, serialposix.SER_RS485_RTS_ON_SEND,
+                  serialposix.SER_RS485_RTS_AFTER_SEND)
+    for flags, levels in ((on | tx, (True, False)), (on | rx, (False, True)), (on, (False, False)),
+                          (tx | rx, None)):  # mode disabled: its flags are meaningless
+        monkeypatch.setattr(fcntl, 'ioctl', fake_ioctl(flags))
+        assert _common.driver_rts_levels(Port()) == levels  # type: ignore[arg-type]
+
+    def no_rs485(fd: int, request: int, buf: list[int]) -> int:
+        raise OSError(25, 'Inappropriate ioctl for device')
+
+    monkeypatch.setattr(fcntl, 'ioctl', no_rs485)
+    assert _common.driver_rts_levels(Port()) is None  # type: ignore[arg-type]
 
 
 class RS485Port:

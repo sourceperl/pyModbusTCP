@@ -6,9 +6,11 @@ import ipaddress
 import logging
 import math
 import signal
+import sys
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from types import FrameType
 from typing import TYPE_CHECKING
 
@@ -114,13 +116,16 @@ def add_rs485_args(parser: argparse.ArgumentParser) -> None:
     """Add the options of the RS-485 mode of the serial driver (the kernel drives RTS to switch the transceiver)."""
     group = parser.add_argument_group(
         'RS-485 mode', 'for a serial port whose RS-485 transceiver is switched by RTS (an UART of an embedded board); '
-                       'useless with an USB-RS485 adapter, it switches by itself')
+                       'useless with an USB-RS485 adapter, it switches by itself. The RTS levels are logical: '
+                       '"high" is RTS asserted, a low voltage on the nRTS pin of most UARTs')
     group.add_argument('--rs485', action='store_true',
                        help='enable the RS-485 mode of the serial driver (Linux; on Windows, default levels only)')
     group.add_argument('--rs485-rts-tx', choices=('high', 'low'), default=None,
-                       help='RTS level while sending (default: high)')
+                       help='RTS level while sending (default: the level of the driver if its RS-485 mode is already '
+                            'set, like by the device tree, else high)')
     group.add_argument('--rs485-rts-rx', choices=('high', 'low'), default=None,
-                       help='RTS level while receiving (default: low)')
+                       help='RTS level while receiving (default: the level of the driver if its RS-485 mode is '
+                            'already set, else low)')
     group.add_argument('--rs485-delay-before-tx', type=rs485_delay, default=None, metavar='S',
                        help=f'delay between RTS switch and the first byte sent, in s (0 to {MAX_RS485_DELAY:g}, '
                             'default: driver value)')
@@ -138,27 +143,77 @@ def check_rs485_args(parser: argparse.ArgumentParser, args: argparse.Namespace) 
             parser.error(f'--{name.replace("_", "-")} needs --rs485')
 
 
-def rs485_settings(args: argparse.Namespace) -> 'RS485Settings | None':
-    """The RS-485 settings for pyserial from the command line options, None without --rs485."""
+def driver_rts_levels(port: 'Serial') -> tuple[bool, bool] | None:
+    """The RTS levels (tx, rx) of the RS-485 mode already set in the Linux driver of an open port (like by the device
+    tree), None if this mode is off, unknown (not Linux) or unsupported by the driver.
+    """
+    if not sys.platform.startswith('linux'):
+        return None
+    import array
+    import fcntl
+
+    from serial import serialposix
+    # struct serial_rs485: flags, delay_rts_before_send, delay_rts_after_send, padding (the buffer of pyserial)
+    buf = array.array('i', [0] * 8)
+    try:
+        fcntl.ioctl(port.fileno(), serialposix.TIOCGRS485, buf)
+    except (OSError, AttributeError, ValueError):
+        # no RS-485 support in the driver (a pseudo-terminal, an USB adapter...), or not a real port
+        return None
+    flags = buf[0]
+    if not flags & serialposix.SER_RS485_ENABLED:
+        # the flags of a disabled mode are meaningless (often all 0: RTS never asserted)
+        return None
+    return bool(flags & serialposix.SER_RS485_RTS_ON_SEND), bool(flags & serialposix.SER_RS485_RTS_AFTER_SEND)
+
+
+@dataclass
+class RS485Setup:
+    """The RS-485 settings for pyserial and where the RTS levels come from (for the log)."""
+    settings: 'RS485Settings'
+    tx_from_driver: bool = False
+    rx_from_driver: bool = False
+
+    def text(self) -> str:
+        """The settings for the log: "RTS low on tx (driver), high on rx (driver), delay before tx driver..."."""
+        st = self.settings
+
+        def level(high: bool, from_driver: bool) -> str:
+            return ('high' if high else 'low') + (' (driver)' if from_driver else '')
+
+        def delay(value: float | None) -> str:
+            return 'driver' if value is None else f'{value:.3f} s'
+
+        return (f'RTS {level(st.rts_level_for_tx, self.tx_from_driver)} on tx, '
+                f'{level(st.rts_level_for_rx, self.rx_from_driver)} on rx, '
+                f'delay before tx {delay(st.delay_before_tx)}, before rx {delay(st.delay_before_rx)}')
+
+
+def rs485_settings(args: argparse.Namespace, driver_levels: tuple[bool, bool] | None = None) -> RS485Setup | None:
+    """The RS-485 settings from the command line options, None without --rs485.
+
+    A RTS level not given on the command line is the one of the driver (driver_levels, see driver_rts_levels()):
+    pyserial always writes both levels, the configuration of the device tree would be lost. Without it, the levels of
+    pyserial and Windows: RTS high to send, low to receive.
+    """
     if not args.rs485:
         return None
     from serial.rs485 import RS485Settings
-    return RS485Settings(rts_level_for_tx=args.rs485_rts_tx != 'low',
-                         rts_level_for_rx=args.rs485_rts_rx == 'high',
-                         delay_before_tx=args.rs485_delay_before_tx,
-                         delay_before_rx=args.rs485_delay_before_rx)
 
+    def resolve(option: str | None, index: int, default: bool) -> tuple[bool, bool]:
+        """The level (True: high) and True if it comes from the driver."""
+        if option is not None:
+            return option == 'high', False
+        if driver_levels is not None:
+            return driver_levels[index], True
+        return default, False
 
-def rs485_text(settings: 'RS485Settings') -> str:
-    """The RS-485 settings for the log: "RTS high on tx, low on rx, delays 0.000/0.000 s"."""
-    def level(high: bool) -> str:
-        return 'high' if high else 'low'
-
-    def delay(value: float | None) -> str:
-        return 'driver' if value is None else f'{value:.3f} s'
-
-    return (f'RTS {level(settings.rts_level_for_tx)} on tx, {level(settings.rts_level_for_rx)} on rx, '
-            f'delay before tx {delay(settings.delay_before_tx)}, before rx {delay(settings.delay_before_rx)}')
+    tx, tx_from_driver = resolve(args.rs485_rts_tx, 0, True)
+    rx, rx_from_driver = resolve(args.rs485_rts_rx, 1, False)
+    settings = RS485Settings(rts_level_for_tx=tx, rts_level_for_rx=rx,
+                             delay_before_tx=args.rs485_delay_before_tx,
+                             delay_before_rx=args.rs485_delay_before_rx)
+    return RS485Setup(settings, tx_from_driver, rx_from_driver)
 
 
 def apply_rs485(port: 'Serial', settings: 'RS485Settings') -> None:
@@ -173,6 +228,19 @@ def apply_rs485(port: 'Serial', settings: 'RS485Settings') -> None:
         raise ValueError(f'RS-485 mode not supported on this platform ({e})') from None
     except ValueError as e:
         raise ValueError(f'RS-485 mode refused by the serial driver of {port.port}: {e}') from None
+
+
+def setup_rs485(port: 'Serial', args: argparse.Namespace) -> RS485Setup | None:
+    """Apply the RS-485 options of the command line to an open serial port (nothing without --rs485).
+
+    :raises ValueError: the platform or the serial driver refuses it
+    """
+    if not args.rs485:
+        return None
+    setup = rs485_settings(args, driver_rts_levels(port))
+    assert setup is not None
+    apply_rs485(port, setup.settings)
+    return setup
 
 
 def slave_address(value: str) -> int:

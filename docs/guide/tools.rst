@@ -81,14 +81,20 @@ An USB-RS485 adapter switches its transceiver between send and receive by itself
 embedded board often drives the transceiver with its RTS line: ``--rs485`` enables the RS-485 mode of the serial
 driver (Linux), the kernel switches RTS around each frame with an exact timing.
 
-- ``--rs485-rts-tx {high,low}``: RTS level while sending (default: high);
-- ``--rs485-rts-rx {high,low}``: RTS level while receiving (default: low);
+- ``--rs485-rts-tx {high,low}``: RTS level while sending;
+- ``--rs485-rts-rx {high,low}``: RTS level while receiving;
 - ``--rs485-delay-before-tx S`` and ``--rs485-delay-before-rx S``: delays around a frame, 0 to 0.1 s (default: the
   value of the driver).
 
+The RTS levels are logical: ``high`` is RTS asserted, which is a low voltage on the nRTS pin of most UARTs. A level
+not given on the command line keeps the one of the driver when its RS-485 mode is already set (like by the
+``rs485-rts-active-low`` property of the device tree): ``--rs485`` alone respects the configuration of the board.
+Otherwise, the default is RTS high to send and low to receive (the only levels accepted on Windows). The log shows
+the levels used, with ``(driver)`` for a level kept from the driver.
+
 .. code-block:: bash
 
-    # a board whose transceiver is enabled by RTS low
+    # a board whose transceiver sends while RTS is not asserted (nRTS pin wired directly to the DE input)
     mbtcp-tcp2rtu --rs485 --rs485-rts-tx low --rs485-rts-rx high /dev/ttyRS485
 
 The mode is applied again when a lost port is reopened. A driver without RS-485 support (a pseudo-terminal, most USB

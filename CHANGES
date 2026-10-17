@@ -9,8 +9,9 @@ Revision history for pyModbusTCP
     - tools: add the version option is -v/--version in every tool and in the dispatcher.
     - tools: mbtcp-tcp2rtu and mbtcp-rtu2tcp can enable the RS-485 mode of the serial driver (Linux), for an
              UART that switches its RS-485 transceiver with RTS: new options --rs485, --rs485-rts-tx,
-             --rs485-rts-rx, --rs485-delay-before-tx and --rs485-delay-before-rx. A driver without RS-485 support
-             refuses it at startup (exit code 2). Without these options, the serial port is opened as before.
+             --rs485-rts-rx, --rs485-delay-before-tx and --rs485-delay-before-rx. A RTS level not given keeps the
+             one of the driver when its RS-485 mode is already set (like by the device tree). A driver without
+             RS-485 support refuses it at startup (exit code 2). Without these options, the serial port is opened as before.
     - tools: mbtcp-client has an output for humans: on a terminal, a header (server, request, response time) and
              a table. Each row shows the offset from the first address and the address in decimal and
              hexadecimal, the registers in hexadecimal, unsigned, signed, binary and ASCII, the bits in a grid of

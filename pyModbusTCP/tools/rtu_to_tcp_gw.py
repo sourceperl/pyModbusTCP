@@ -72,12 +72,16 @@ An USB-RS485 adapter switches its transceiver by itself: nothing to set. The
 UART of an embedded board often drives the transceiver with its RTS line:
 --rs485 enables the RS-485 mode of the serial driver (Linux), the kernel
 switches RTS around each frame with an exact timing. --rs485-rts-tx and
---rs485-rts-rx set the RTS levels (default: high to send, low to receive),
---rs485-delay-before-tx and --rs485-delay-before-rx the delays around a frame.
+--rs485-rts-rx set the RTS levels, --rs485-delay-before-tx and
+--rs485-delay-before-rx the delays around a frame. The levels are logical:
+"high" is RTS asserted, a low voltage on the nRTS pin of most UARTs. A level
+not given keeps the one of the driver if its RS-485 mode is already set (like
+by the device tree), else it is high to send and low to receive.
 The mode is applied again when a lost port is reopened. A driver without
 RS-485 support refuses it at startup (exit code 2). On Windows, only the
 default levels and delays are accepted; macOS has no RS-485 mode.
-For a board whose transceiver is enabled by RTS low:
+For a board whose transceiver sends while RTS is not asserted (nRTS pin wired
+directly to the DE input):
 $ mbtcp-rtu2tcp --rs485 --rs485-rts-tx low --rs485-rts-rx high -a 30 /dev/ttyRS485
 
 Add -d (--debug) to log every RTU frame exchanged on the serial line, as a
@@ -99,12 +103,10 @@ from ._common import (
     SERIAL_MISSING_MSG,
     add_rs485_args,
     add_version_arg,
-    apply_rs485,
     check_rs485_args,
     positive_float,
     positive_int,
-    rs485_settings,
-    rs485_text,
+    setup_rs485,
     slave_address,
     stop_on_sigterm,
     tcp_port,
@@ -448,10 +450,9 @@ def main(argv: list[str] | None = None) -> int:
         serial_port = Serial(port=args.device, baudrate=args.baudrate, bytesize=args.bytesize,
                              parity={'N': PARITY_NONE, 'E': PARITY_EVEN, 'O': PARITY_ODD}[args.parity],
                              stopbits=args.stopbits)
-        settings = rs485_settings(args)
-        if settings is not None:
-            apply_rs485(serial_port, settings)
-            logger.info('RS-485 mode: %s', rs485_text(settings))
+        rs485 = setup_rs485(serial_port, args)
+        if rs485 is not None:
+            logger.info('RS-485 mode: %s', rs485.text())
 
         # start modbus client as request relay
         logger.info('Connect to modbus server at %s:%d, unit id %d (timeout = %.2fs)',
