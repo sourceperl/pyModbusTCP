@@ -87,6 +87,23 @@ fi
 echo "==> Using Python: $("$PYTHON" --version) ($(command -v "$PYTHON"))"
 echo "==> Version: $VERSION (pyModbusTCP/constants.py)"
 
+# the changelog of a release (not a .devN version) starts with this version and its release date (YYYY-MM-DD): the
+# changelog is in the sdist and on the docs, a placeholder like "xxxx-xx-xx" can't be fixed after the upload
+if [[ "$VERSION" != *.dev* ]]; then
+    changes_head="$(grep -m 1 -E '^[0-9]' CHANGES || true)"
+    if [[ ! "$changes_head" =~ ^${VERSION//./\\.}\ [0-9]{4}-[0-9]{2}-[0-9]{2}( |$) ]]; then
+        echo "Error: the first entry of CHANGES must be \"$VERSION YYYY-MM-DD\", found: \"$changes_head\"" >&2
+        exit 1
+    fi
+fi
+# the install commands of the docs pin a pre-release: they must name this one (warning only)
+stale="$(grep -rnoE '==[0-9]+\.[0-9]+\.[0-9]+(a|b|rc)[0-9]+' README.md "$CLI_DIR/README.md" docs --include='*.md' \
+         --include='*.rst' | grep -vF "==$VERSION" || true)"
+if [[ -n "$stale" ]]; then
+    echo "Warning: pre-release pins other than $VERSION in the docs:" >&2
+    echo "$stale" >&2
+fi
+
 # no stale file of an older version next to the new ones (twine upload dist/* would take them)
 rm -rf "$OUT_DIR" build "$CLI_DIR/build"
 mkdir -p "$OUT_DIR"
@@ -146,7 +163,7 @@ if [[ "$INSTALL_TEST" -eq 1 ]]; then
         echo "Error: mbtcp-* command installed with the library alone" >&2
         exit 1
     fi
-    "$BIN_LIB/python" -m pyModbusTCP.cli server --version
+    "$BIN_LIB/python" -m pyModbusTCP.tools server --version
 
     echo "==> Install test: the library with pyModbusTCP-cli (pyserial from the package index)"
     "$PYTHON" -m venv "$TMP_DIR/with-cli"

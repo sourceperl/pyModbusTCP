@@ -1,5 +1,6 @@
 """ Test of pyModbusTCP.ModbusServer """
 
+import gc
 import signal
 import socket
 import struct
@@ -7,7 +8,9 @@ import subprocess
 import sys
 import time
 import unittest
-from typing import ClassVar
+import warnings
+from collections.abc import Iterable
+from typing import Any, ClassVar
 from unittest import mock
 
 from pyModbusTCP.constants import EXP_NONE
@@ -18,7 +21,7 @@ from pyModbusTCP.utils import _to_bool_list
 class TestModbusServer(unittest.TestCase):
     """ ModbusServer tests class. """
 
-    def test_device_identification(self):
+    def test_device_identification(self) -> None:
         """Some tests around modbus device identification."""
         # should raise exception
         self.assertRaises(TypeError, ModbusServer, device_id=object())
@@ -49,20 +52,20 @@ class TestModbusServer(unittest.TestCase):
             product_name=b'server', objects_id={42: b'this'})
         self.assertEqual(repr(device_id), "DeviceIdentification(product_name=b'server', objects_id={42: b'this'})")
 
-    def test_pdu_is_valid(self):
+    def test_pdu_is_valid(self) -> None:
         """PDU min length is 2 bytes (function code + at least one data/except byte)."""
         self.assertFalse(ModbusServer.PDU(b'').is_valid)
         self.assertFalse(ModbusServer.PDU(b'\x03').is_valid)
         self.assertTrue(ModbusServer.PDU(b'\x83\x02').is_valid)
 
-    def test_send_timeout_close_session(self):
+    def test_send_timeout_close_session(self) -> None:
         """A timeout on send can leave a partial frame on the wire: session must be closed."""
         class TimeoutSock:
-            def sendall(self, _data):
+            def sendall(self, _data: bytes) -> None:
                 raise TimeoutError()
 
         class OkSock:
-            def sendall(self, _data):
+            def sendall(self, _data: bytes) -> None:
                 pass
 
         # ModbusRequestHandler __init__ would start handling a request, so bypass it (with __new__)
@@ -78,7 +81,7 @@ class TestModbusServer(unittest.TestCase):
         except ModbusServer.NetworkError:
             self.fail("NetworkError was unexpectedly raised!")
 
-    def test_start_doesnt_alter_socketserver_classes(self):
+    def test_start_doesnt_alter_socketserver_classes(self) -> None:
         """ModbusServer must not change class attributes of the stdlib socketserver classes."""
         from socketserver import ThreadingTCPServer
         server = ModbusServer(host='127.0.0.1', port=0, no_block=True)
@@ -89,13 +92,40 @@ class TestModbusServer(unittest.TestCase):
         finally:
             server.stop()
 
-    def test_failed_start_close_socket(self):
+    def test_failed_start_close_socket(self) -> None:
         """A failed start (bind error) must not leave a listening socket open."""
         # 192.0.2.1 is reserved for documentation (TEST-NET-1): not a local address, so bind() fails on all systems
         server = ModbusServer(host='192.0.2.1', port=0, no_block=True)
         with self.assertRaises(ModbusServer.NetworkError):
             server.start()
         self.assertFalse(server.is_running)
+
+    def test_host_and_port_check(self) -> None:
+        """host and port are checked by the constructor (a bad type or value was only seen by start())."""
+        # bad values are typed Any: they are deliberately not of the annotated type
+        bad_types: tuple[dict[str, Any], ...] = (
+            {'port': '502'}, {'port': 1.5}, {'port': True}, {'port': None}, {'host': None}, {'host': b'localhost'})
+        for kwargs in bad_types:
+            with self.subTest(kwargs), self.assertRaises(TypeError):
+                ModbusServer(**kwargs)
+        for port in (-1, 65536, 70000):
+            with self.subTest(port=port), self.assertRaises(ValueError):
+                ModbusServer(port=port)
+        self.assertEqual(ModbusServer(port=0).port, 0)
+        self.assertEqual(ModbusServer(port=65535).port, 65535)
+
+    def test_failed_start_with_invalid_port_close_socket(self) -> None:
+        """A port made invalid after the constructor: start() raises and doesn't leave the listening socket open."""
+        for port, exc in ((70000, OverflowError), ('abc', TypeError)):
+            server = ModbusServer(host='127.0.0.1', port=0, no_block=True)
+            server.port = port  # type: ignore
+            with self.subTest(port=port), warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter('always')
+                with self.assertRaises(exc):
+                    server.start()
+                gc.collect()
+                self.assertFalse([w for w in caught if issubclass(w.category, ResourceWarning)])
+            self.assertFalse(server.is_running)
 
 
 class TestModbusServerLimits(unittest.TestCase):
@@ -105,7 +135,7 @@ class TestModbusServerLimits(unittest.TestCase):
     REQ_FRAME = b'\x00\x01\x00\x00\x00\x06\x01\x03\x00\x00\x00\x01'
     RESP_LEN = 11
 
-    def _start_server(self, **kwargs):
+    def _start_server(self, **kwargs: Any) -> ModbusServer:
         """Start a server on a free TCP port chosen by the OS (port=0), it's stored in self.port."""
         server = ModbusServer(host='127.0.0.1', port=0, no_block=True, **kwargs)
         _host, port = server.start()
@@ -113,13 +143,13 @@ class TestModbusServerLimits(unittest.TestCase):
         self.port = port
         return server
 
-    def _connect(self):
+    def _connect(self) -> socket.socket:
         """Open a new client connection to the server started by _start_server()."""
         sock = socket.create_connection(('127.0.0.1', self.port), timeout=5)
         self.addCleanup(sock.close)
         return sock
 
-    def _closed_after(self, sock, max_wait):
+    def _closed_after(self, sock: socket.socket, max_wait: float) -> float | None:
         """Return the delay (in s) before the server close the connection, None if it is still open."""
         sock.settimeout(max_wait)
         start = time.monotonic()
@@ -131,7 +161,7 @@ class TestModbusServerLimits(unittest.TestCase):
             data = b''
         return time.monotonic() - start if data == b'' else None
 
-    def _request(self, sock):
+    def _request(self, sock: socket.socket) -> bytes:
         """Send a read request and return the response (b'' if the connection is closed)."""
         sock.settimeout(5)
         try:
@@ -146,29 +176,34 @@ class TestModbusServerLimits(unittest.TestCase):
         except ConnectionError:
             return b''
 
-    def test_defaults(self):
+    def test_defaults(self) -> None:
         server = ModbusServer()
         self.assertEqual(server.request_timeout, 30.0)
         self.assertEqual(server.idle_timeout, 300.0)
         self.assertEqual(server.max_connections, 64)
         self.assertEqual(server.max_connections_per_host, 16)
 
-    def test_params_check(self):
-        for kwargs in ({'request_timeout': 0}, {'request_timeout': -1}, {'idle_timeout': 0}, {'idle_timeout': -2.5},
-                       {'max_connections': 0}, {'max_connections': -1}, {'max_connections_per_host': 0}):
+    def test_params_check(self) -> None:
+        bad_values: tuple[dict[str, Any], ...] = (
+            {'request_timeout': 0}, {'request_timeout': -1}, {'idle_timeout': 0}, {'idle_timeout': -2.5},
+            {'max_connections': 0}, {'max_connections': -1}, {'max_connections_per_host': 0})
+        for kwargs in bad_values:
             with self.assertRaises(ValueError, msg=repr(kwargs)):
-                ModbusServer(**kwargs)  # type: ignore
-        for kwargs in ({'request_timeout': '1'}, {'idle_timeout': True}, {'max_connections': 1.5},
-                       {'max_connections': True}, {'max_connections': '2'}, {'max_connections_per_host': 1.0}):
+                ModbusServer(**kwargs)
+        # bad values are typed Any: they are deliberately not of the annotated type
+        bad_types: tuple[dict[str, Any], ...] = (
+            {'request_timeout': '1'}, {'idle_timeout': True}, {'max_connections': 1.5},
+            {'max_connections': True}, {'max_connections': '2'}, {'max_connections_per_host': 1.0})
+        for kwargs in bad_types:
             with self.assertRaises(TypeError, msg=repr(kwargs)):
-                ModbusServer(**kwargs)  # type: ignore
+                ModbusServer(**kwargs)
         # None disable the limits
         server = ModbusServer(request_timeout=None, idle_timeout=None, max_connections=None,
                               max_connections_per_host=None)
         self.assertIsNone(server.request_timeout)
         self.assertIsNone(server.max_connections_per_host)
 
-    def test_request_timeout(self):
+    def test_request_timeout(self) -> None:
         """A request that is never completed (partial MBAP header, or header without PDU) closes the session."""
         self._start_server(request_timeout=0.25)
         for sent_len in (3, 7):
@@ -180,14 +215,44 @@ class TestModbusServerLimits(unittest.TestCase):
         # server is still serving others
         self.assertEqual(len(self._request(self._connect())), self.RESP_LEN)
 
-    def test_request_timeout_disabled(self):
+    def test_request_timeout_is_for_the_whole_request(self) -> None:
+        """request_timeout limits the whole request from its first byte (MBAP header and PDU), not each part."""
+        self._start_server(request_timeout=1.0)
+        sock = self._connect()
+        start = time.monotonic()
+        # the MBAP header is complete just before the deadline, then the PDU never comes: with a new delay for the
+        # PDU, the session would be closed after 1.8 s
+        sock.sendall(self.REQ_FRAME[:3])
+        time.sleep(0.8)
+        sock.sendall(self.REQ_FRAME[3:8])
+        self.assertIsNotNone(self._closed_after(sock, 3.0), 'stalled request: session is still open')
+        self.assertLess(time.monotonic() - start, 1.6)
+        # a request split in pieces but received in time is served
+        sock = self._connect()
+        sock.sendall(self.REQ_FRAME[:3])
+        time.sleep(0.3)
+        self.assertEqual(len(self._request_end(sock, self.REQ_FRAME[3:])), self.RESP_LEN)
+
+    def _request_end(self, sock: socket.socket, end: bytes) -> bytes:
+        """Send the end of a request and return the response (b'' if the connection is closed)."""
+        sock.settimeout(5)
+        sock.sendall(end)
+        resp = b''
+        while len(resp) < self.RESP_LEN:
+            chunk = sock.recv(self.RESP_LEN - len(resp))
+            if not chunk:
+                break
+            resp += chunk
+        return resp
+
+    def test_request_timeout_disabled(self) -> None:
         """With request_timeout=None a stalled request is never closed (old behavior)."""
         self._start_server(request_timeout=None)
         sock = self._connect()
         sock.sendall(self.REQ_FRAME[:7])
         self.assertIsNone(self._closed_after(sock, 0.7))
 
-    def test_request_timeout_not_for_a_complete_request(self):
+    def test_request_timeout_not_for_a_complete_request(self) -> None:
         """The request_timeout don't apply to a session that wait for a request (see idle_timeout)."""
         self._start_server(request_timeout=0.25)
         sock = self._connect()
@@ -195,7 +260,7 @@ class TestModbusServerLimits(unittest.TestCase):
         self.assertIsNone(self._closed_after(sock, 0.7), 'request_timeout close an idle session')
         self.assertEqual(len(self._request(sock)), self.RESP_LEN)
 
-    def test_idle_timeout(self):
+    def test_idle_timeout(self) -> None:
         """A session without request is closed after idle_timeout, an active one is kept."""
         # keep a wide margin between the pause between requests (0.1 s) and idle_timeout: on a loaded CI runner
         # (macOS especially) a 0.1 s sleep plus a request round trip can take more than 0.25 s
@@ -209,7 +274,7 @@ class TestModbusServerLimits(unittest.TestCase):
         self.assertIsNotNone(delay, 'idle session is still open')
         self.assertLess(delay, idle_timeout + 3.0)  # type: ignore
 
-    def test_idle_timeout_stops_when_request_starts(self):
+    def test_idle_timeout_stops_when_request_starts(self) -> None:
         """idle_timeout is for a session without any data: a slow request is a matter for request_timeout."""
         self._start_server(idle_timeout=0.2)
         sock = self._connect()
@@ -220,7 +285,7 @@ class TestModbusServerLimits(unittest.TestCase):
         resp = sock.recv(self.RESP_LEN)
         self.assertEqual(len(resp), self.RESP_LEN)
 
-    def test_connection_burst(self):
+    def test_connection_burst(self) -> None:
         """A burst of simultaneous connections must not wait for a TCP SYN retransmission (listen backlog)."""
         self._start_server()
         start = time.monotonic()
@@ -228,13 +293,13 @@ class TestModbusServerLimits(unittest.TestCase):
             self._connect()
         self.assertLess(time.monotonic() - start, 3.0)
 
-    def test_no_idle_timeout_by_default(self):
+    def test_no_idle_timeout_by_default(self) -> None:
         self._start_server()
         sock = self._connect()
         self.assertIsNone(self._closed_after(sock, 0.7))
         self.assertEqual(len(self._request(sock)), self.RESP_LEN)
 
-    def test_max_connections(self):
+    def test_max_connections(self) -> None:
         """Connections over max_connections are closed at once, slots are freed when a session end."""
         self._start_server(max_connections=2)
         sock_1, sock_2 = self._connect(), self._connect()
@@ -261,7 +326,7 @@ class TestModbusServerLimits(unittest.TestCase):
         self.assertTrue(accepted, 'slot of a closed session is never freed')
         self.assertEqual(len(self._request(sock_2)), self.RESP_LEN)
 
-    def _connect_from(self, source_ip):
+    def _connect_from(self, source_ip: str) -> socket.socket:
         """Open a client connection from another loopback address (skip the test if the OS doesn't allow it)."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.addCleanup(sock.close)
@@ -273,7 +338,7 @@ class TestModbusServerLimits(unittest.TestCase):
         sock.connect(('127.0.0.1', self.port))
         return sock
 
-    def test_max_connections_per_host(self):
+    def test_max_connections_per_host(self) -> None:
         """A host can't open more than max_connections_per_host connections, other hosts are still accepted."""
         server = self._start_server(max_connections=10, max_connections_per_host=2)
         sock_1, sock_2 = self._connect(), self._connect()
@@ -300,13 +365,13 @@ class TestModbusServerLimits(unittest.TestCase):
             time.sleep(0.05)
         self.assertTrue(accepted, 'slot of a closed session is never freed for its host')
 
-    def test_max_connections_per_host_disabled(self):
+    def test_max_connections_per_host_disabled(self) -> None:
         self._start_server(max_connections_per_host=None)
         socks = [self._connect() for _ in range(20)]
         for sock in socks:
             self.assertEqual(len(self._request(sock)), self.RESP_LEN)
 
-    def test_host_key(self):
+    def test_host_key(self) -> None:
         """Connections are counted by IPv4 address, by /64 network for IPv6, an IPv4-mapped address is IPv4."""
         from pyModbusTCP.server._common import host_key
         self.assertEqual(host_key(('10.1.2.3', 502)), '10.1.2.3')
@@ -316,14 +381,14 @@ class TestModbusServerLimits(unittest.TestCase):
         self.assertNotEqual(host_key(('2001:db8:1:2::1', 502, 0, 0)), host_key(('2001:db8:1:3::1', 502, 0, 0)))
         self.assertEqual(host_key(('fe80::1%eth0', 502, 0, 2)), 'fe80::/64')
 
-    def _thief(self):
+    def _thief(self) -> socket.socket:
         """A socket with SO_REUSEADDR, like a local process that tries to take the port of the server."""
         thief = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.addCleanup(thief.close)
         thief.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         return thief
 
-    def _assert_server_gets_connections(self, thief):
+    def _assert_server_gets_connections(self, thief: socket.socket) -> None:
         """The connections to 127.0.0.1 always go to the server, never to the thief socket (if it could listen)."""
         for _ in range(3):
             self.assertEqual(len(self._request(self._connect())), self.RESP_LEN)
@@ -331,7 +396,7 @@ class TestModbusServerLimits(unittest.TestCase):
         with self.assertRaises(OSError):
             thief.accept()
 
-    def test_port_hijacking(self):
+    def test_port_hijacking(self) -> None:
         """Another socket can't bind the address and port of a running server, even with SO_REUSEADDR."""
         server = self._start_server()
         assert server._tcp_server is not None
@@ -360,7 +425,7 @@ class TestModbusServerLimits(unittest.TestCase):
                 pass
         self._assert_server_gets_connections(thief)
 
-    def test_port_hijacking_of_a_wildcard_server(self):
+    def test_port_hijacking_of_a_wildcard_server(self) -> None:
         """A server on every interface (0.0.0.0): another socket can't take one of its addresses (127.0.0.1).
 
         This is the real hijacking (the most specific binding gets the connections): refused on Linux, and on
@@ -378,7 +443,7 @@ class TestModbusServerLimits(unittest.TestCase):
         else:
             self.skipTest('BSD semantics: a socket of the same user can bind a more specific address')
 
-    def test_quick_restart_on_the_same_port(self):
+    def test_quick_restart_on_the_same_port(self) -> None:
         """A server stopped after serving a client can be started again at once on the same port (POSIX)."""
         if sys.platform == 'win32':
             self.skipTest('no quick restart on Windows: the port is reserved with SO_EXCLUSIVEADDRUSE')
@@ -393,7 +458,7 @@ class TestModbusServerLimits(unittest.TestCase):
         self.addCleanup(restarted.stop)
         self.assertEqual(len(self._request(self._connect())), self.RESP_LEN)
 
-    def test_allowed_hosts(self):
+    def test_allowed_hosts(self) -> None:
         """Only the clients of the allowed_hosts whitelist are served."""
         for hosts in (['127.0.0.1'], ['127.0.0.0/8'], ['10.1.2.3', '127.0.0.1'], ('10.0.0.0/8', '127.0.0.0/8')):
             with self.subTest(allowed_hosts=hosts):
@@ -403,7 +468,7 @@ class TestModbusServerLimits(unittest.TestCase):
                 self.assertEqual(len(server.active_sessions), 1)
                 server.stop()
 
-    def test_allowed_hosts_refusal(self):
+    def test_allowed_hosts_refusal(self) -> None:
         """A client out of allowed_hosts is closed at once and never gets a session (the refusal is logged)."""
         server = self._start_server(allowed_hosts=['10.1.2.3', '192.168.0.0/16'])
         with self.assertLogs('pyModbusTCP.server', level='WARNING') as logs:
@@ -416,7 +481,7 @@ class TestModbusServerLimits(unittest.TestCase):
         self.assertEqual(server.active_sessions, [])
         self.assertTrue(server.is_running)
 
-    def test_allowed_hosts_after_restart(self):
+    def test_allowed_hosts_after_restart(self) -> None:
         """The whitelist is still applied after a stop/start."""
         server = self._start_server(allowed_hosts=['10.1.2.3'])
         for _ in range(2):
@@ -426,9 +491,9 @@ class TestModbusServerLimits(unittest.TestCase):
             server.stop()
             self.port = server.start()[1]
 
-    def test_allowed_hosts_with_external_engine(self):
+    def test_allowed_hosts_with_external_engine(self) -> None:
         """The whitelist is checked before any engine: an external engine is never called for a refused client."""
-        calls = []
+        calls: list[ModbusServer.SessionData] = []
         self._start_server(allowed_hosts=['10.1.2.3'], ext_engine=lambda session_data: calls.append(session_data))
         with self.assertLogs('pyModbusTCP.server', level='WARNING'):
             self.assertIsNotNone(self._closed_after(self._connect(), 2.0), 'host out of allowed_hosts is not closed')
@@ -441,17 +506,19 @@ class TestDataBankSetters(unittest.TestCase):
     class RecordingDataBank(DataBank):
         """A data bank that records the changes notified by the set_coils() and set_holding_registers() methods."""
 
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, **kwargs)
-            self.changes = []
+            self.changes: list[tuple[str, int, int, int]] = []
 
-        def on_coils_change(self, address, from_value, to_value, srv_info):
+        def on_coils_change(self, address: int, from_value: bool, to_value: bool,
+                            srv_info: ModbusServer.ServerInfo) -> None:
             self.changes.append(('coil', address, from_value, to_value))
 
-        def on_holding_registers_change(self, address, from_value, to_value, srv_info):
+        def on_holding_registers_change(self, address: int, from_value: int, to_value: int,
+                                        srv_info: ModbusServer.ServerInfo) -> None:
             self.changes.append(('reg', address, from_value, to_value))
 
-    def test_set_coils(self):
+    def test_set_coils(self) -> None:
         bank = TestDataBankSetters.RecordingDataBank()
         srv_info = ModbusServer.ServerInfo()
         # any true value: the data bank is called by the server
@@ -468,7 +535,7 @@ class TestDataBankSetters(unittest.TestCase):
         self.assertTrue(bank.set_coils(0, [1, 0, 1, 0]))  # type: ignore
         self.assertEqual(bank.get_coils(0, 4), [True, False, True, False])
 
-    def test_set_holding_registers(self):
+    def test_set_holding_registers(self) -> None:
         bank = TestDataBankSetters.RecordingDataBank()
         srv_info = ModbusServer.ServerInfo()
         self.assertTrue(bank.set_holding_registers(100, [1, 2, 3, 4], srv_info))
@@ -480,17 +547,17 @@ class TestDataBankSetters(unittest.TestCase):
         self.assertEqual(bank.changes, [('reg', 102, 3, 30), ('reg', 103, 4, 3)])
         self.assertEqual(bank.get_holding_registers(99, 6), [0, 1, 2, 30, 3, 0])
         # items are converted to int, with a max size of 16 bits
-        self.assertTrue(bank.set_holding_registers(0, [0xffff, True, 1]))  # type: ignore
+        self.assertTrue(bank.set_holding_registers(0, [0xffff, True, 1]))
         self.assertEqual(bank.get_holding_registers(0, 3), [0xffff, 1, 1])
 
-    def test_set_discrete_inputs_and_input_registers(self):
+    def test_set_discrete_inputs_and_input_registers(self) -> None:
         bank = DataBank()
         self.assertTrue(bank.set_discrete_inputs(5, [True, False, True]))
         self.assertEqual(bank.get_discrete_inputs(4, 5), [False, True, False, True, False])
         self.assertTrue(bank.set_input_registers(5, [7, 0x1, 9]))
         self.assertEqual(bank.get_input_registers(4, 5), [0, 7, 1, 9, 0])
 
-    def test_set_out_of_range(self):
+    def test_set_out_of_range(self) -> None:
         """Out of range writes return None and must not modify anything (even partially)."""
         bank = TestDataBankSetters.RecordingDataBank()
         srv_info = ModbusServer.ServerInfo()
@@ -511,17 +578,17 @@ class TestDataBankSetters(unittest.TestCase):
 
 
 class TestDataBankValidation(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.db = DataBank(coils_size=16, d_inputs_size=16, h_regs_size=16, i_regs_size=16)
 
-    def test_empty_lists_are_a_noop(self):
+    def test_empty_lists_are_a_noop(self) -> None:
         # an empty write is valid and must succeed, whatever the table
         self.assertIs(self.db.set_coils(0, []), True)
         self.assertIs(self.db.set_discrete_inputs(0, []), True)
         self.assertIs(self.db.set_holding_registers(0, []), True)
         self.assertIs(self.db.set_input_registers(0, []), True)
 
-    def test_registers_range_and_type(self):
+    def test_registers_range_and_type(self) -> None:
         for method in (self.db.set_holding_registers, self.db.set_input_registers):
             with self.subTest(method=method.__name__):
                 self.assertIs(method(0, [0, 0xffff]), True)
@@ -533,28 +600,28 @@ class TestDataBankValidation(unittest.TestCase):
                     with self.assertRaises(TypeError):
                         method(0, [bad_value])  # type: ignore
 
-    def test_out_of_bank_returns_none(self):
+    def test_out_of_bank_returns_none(self) -> None:
         self.assertIsNone(self.db.set_holding_registers(14, [1, 2, 3]))
         self.assertIsNone(self.db.set_coils(15, [True, False]))
         self.assertIsNone(self.db.set_coils(-1, [True]))
 
-    def test_bool_list_accepts_bool_like(self):
+    def test_bool_list_accepts_bool_like(self) -> None:
         self.assertEqual(_to_bool_list([True, 0, 2], 'x'), [True, False, True])
         self.assertEqual(_to_bool_list((1, 0), 'x'), [True, False])
         # one-shot iterators must not be lost by the validation fallback
-        self.assertEqual(_to_bool_list(iter([1, 0, 1]), 'x'), [True, False, True])  # type: ignore
+        self.assertEqual(_to_bool_list(iter([1, 0, 1]), 'x'), [True, False, True])
         for bad_value in (1.0, 'a', None):
             with self.assertRaises(TypeError):
                 _to_bool_list([True, bad_value], 'x')
 
-    def test_int_like_values(self):
+    def test_int_like_values(self) -> None:
         """Any object with __index__ is accepted as an item."""
 
         class IntLike:
-            def __init__(self, value):
+            def __init__(self, value: int) -> None:
                 self.value = value
 
-            def __index__(self):
+            def __index__(self) -> int:
                 return self.value
 
         self.assertIs(self.db.set_coils(0, [IntLike(1), IntLike(0), True]), True)  # type: ignore
@@ -568,7 +635,7 @@ class TestDataBankValidation(unittest.TestCase):
 class TestModbusServerSpecFrames(unittest.TestCase):
     """The examples of the Modbus Application Protocol specification, on raw frames: an independent reference."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.bank = DataBank()
         # port=0: a free TCP port chosen by the OS
         self.server = ModbusServer(host='127.0.0.1', port=0, no_block=True, data_bank=self.bank)
@@ -578,7 +645,7 @@ class TestModbusServerSpecFrames(unittest.TestCase):
         self.sock = socket.create_connection(('127.0.0.1', self.port), timeout=5)
         self.addCleanup(self.sock.close)
 
-    def _recv(self, size):
+    def _recv(self, size: int) -> bytes:
         data = b''
         while len(data) < size:
             chunk = self.sock.recv(size - len(data))
@@ -586,7 +653,7 @@ class TestModbusServerSpecFrames(unittest.TestCase):
             data += chunk
         return data
 
-    def exchange(self, pdu_hex):
+    def exchange(self, pdu_hex: str) -> str:
         """Send a PDU (as hex string) in a frame to the server and return the response PDU as hex string."""
         pdu = bytes.fromhex(pdu_hex)
         self.sock.sendall(b'\x00\x01\x00\x00' + (len(pdu) + 1).to_bytes(2, 'big') + b'\x01' + pdu)
@@ -594,10 +661,10 @@ class TestModbusServerSpecFrames(unittest.TestCase):
         return self._recv(int.from_bytes(header[4:6], 'big') - 1).hex()
 
     @staticmethod
-    def bits_of(data):
+    def bits_of(data: bytes) -> list[bool]:
         return [bool(data[i // 8] >> i % 8 & 1) for i in range(len(data) * 8)]
 
-    def test_read_coils(self):
+    def test_read_coils(self) -> None:
         # coils 20 to 38 of the spec (address 19 to 37, 19 coils) are CD 6B 05
         self.bank.set_coils(19, self.bits_of(bytes.fromhex('cd6b05'))[:19])
         self.assertEqual(self.exchange('01 00 13 00 13'), '0103cd6b05')
@@ -605,35 +672,35 @@ class TestModbusServerSpecFrames(unittest.TestCase):
         self.bank.set_coils(19 + 19, [True] * 5)
         self.assertEqual(self.exchange('01 00 13 00 13'), '0103cd6b05')
 
-    def test_read_discrete_inputs(self):
+    def test_read_discrete_inputs(self) -> None:
         # spec: inputs 197 to 218 (address 196 to 217, 22 inputs) are AC DB 35
         self.bank.set_discrete_inputs(196, self.bits_of(bytes.fromhex('acdb35'))[:22])
         self.assertEqual(self.exchange('02 00 c4 00 16'), '0203acdb35')
 
-    def test_write_multiple_coils(self):
+    def test_write_multiple_coils(self) -> None:
         # spec: write 10 coils from address 19: CD 01
         self.assertEqual(self.exchange('0f 00 13 00 0a 02 cd 01'), '0f0013000a')
         self.assertEqual(self.bank.get_coils(19, 10), self.bits_of(bytes.fromhex('cd01'))[:10])
         self.assertEqual(self.bank.get_coils(29, 1), [False], 'only 10 coils must be written')
 
-    def test_read_holding_registers(self):
+    def test_read_holding_registers(self) -> None:
         # spec: read registers 108 to 110, values 022B 0000 0064
         self.bank.set_holding_registers(107, [0x022b, 0, 0x64])
         self.assertEqual(self.exchange('03 00 6b 00 03'), '030602 2b0000 0064'.replace(' ', ''))
 
-    def test_write_multiple_registers(self):
+    def test_write_multiple_registers(self) -> None:
         # spec: write 2 registers from address 1: 000A 0102
         self.assertEqual(self.exchange('10 00 01 00 02 04 00 0a 01 02'), '1000010002')
         self.assertEqual(self.bank.get_holding_registers(0, 4), [0, 0x000a, 0x0102, 0])
 
-    def test_read_write_multiple_registers(self):
+    def test_read_write_multiple_registers(self) -> None:
         # spec: read 6 registers from address 3 and write 3 registers (00FF) from address 14
         self.bank.set_holding_registers(3, [0x00fe, 0x0acd, 0x0001, 0x0003, 0x000d, 0x00ff])
         resp = self.exchange('17 00 03 00 06 00 0e 00 03 06 00 ff 00 ff 00 ff')
         self.assertEqual(resp, '170c00fe0acd00010003000d00ff')
         self.assertEqual(self.bank.get_holding_registers(13, 5), [0, 0xff, 0xff, 0xff, 0])
 
-    def test_write_single_coil_values(self):
+    def test_write_single_coil_values(self) -> None:
         # the only legal values are 0x0000 (off) and 0xFF00 (on), any other one is an ILLEGAL DATA VALUE (03)
         self.bank.set_coils(10, [True])
         for value in ('0001', '00ff', '8000', 'ff01', 'ffff'):
@@ -644,7 +711,7 @@ class TestModbusServerSpecFrames(unittest.TestCase):
         self.assertEqual(self.exchange('05 000a ff00'), '05000aff00')
         self.assertEqual(self.bank.get_coils(10, 1), [True])
 
-    def test_read_write_multiple_registers_refused_request(self):
+    def test_read_write_multiple_registers_refused_request(self) -> None:
         # a refused request (exception response) must not write anything: here the read area is out of the table
         self.assertEqual(self.exchange('17 ffff 0002 0032 0001 02 0457'), '9702')
         self.assertEqual(self.bank.get_holding_registers(50, 1), [0])
@@ -656,7 +723,7 @@ class TestModbusServerSpecFrames(unittest.TestCase):
         self.assertEqual(len(resp), 2 * (2 + 250))
         self.assertEqual(self.exchange('17 0000 0001 0000 0079 f2' + '0000' * 121), '17020000')
 
-    def test_pdu_length(self):
+    def test_pdu_length(self) -> None:
         """Missing bytes or a byte count that doesn't match the quantity: ILLEGAL DATA VALUE (03)."""
         bad_requests = {
             'read coils, missing byte': '01 0000 00',
@@ -677,7 +744,7 @@ class TestModbusServerSpecFrames(unittest.TestCase):
         self.assertEqual(self.bank.get_holding_registers(0, 2), [0, 0])
         self.assertEqual(self.exchange('03 0000 0001'), '03020000')
 
-    def test_extra_bytes_are_ignored(self):
+    def test_extra_bytes_are_ignored(self) -> None:
         """Bytes after a complete and consistent request are ignored (the MBAP length keeps the stream in sync)."""
         self.bank.set_holding_registers(0, [0x1234])
         self.assertEqual(self.exchange('03 0000 0001 ffff'), '03021234')
@@ -688,7 +755,7 @@ class TestModbusServerSpecFrames(unittest.TestCase):
         self.assertEqual(self.exchange('17 0000 0003 0003 0001 02 0042 ff'), '17061234abcd5678')
         self.assertEqual(self.bank.get_holding_registers(0, 5), [0x1234, 0xabcd, 0x5678, 0x42, 0])
 
-    def test_handler_ok_without_data(self):
+    def test_handler_ok_without_data(self) -> None:
         """A data handler that returns "ok" without data is a SLAVE DEVICE FAILURE (04), never an exception code 0."""
         with mock.patch.object(self.server.data_hdl, 'read_h_regs', return_value=DataHandler.Return(EXP_NONE)):
             for pdu in ('03 0000 0001', '17 0000 0001 0005 0001 02 1234'):
@@ -697,19 +764,33 @@ class TestModbusServerSpecFrames(unittest.TestCase):
         # the write of function 0x17 is not done
         self.assertEqual(self.bank.get_holding_registers(5, 1), [0])
 
-    def test_handler_bad_data_count(self):
+    def test_handler_bad_data_count(self) -> None:
         """The first read of function 0x17 must also check the number of registers returned by the data handler."""
         with (mock.patch.object(self.server.data_hdl, 'read_h_regs', return_value=DataHandler.Return(EXP_NONE, [1])),
               self.assertLogs('pyModbusTCP.server', level='ERROR')):
             self.assertEqual(self.exchange('17 0000 0002 0005 0001 02 1234'), '9704')
         self.assertEqual(self.bank.get_holding_registers(5, 1), [0])
 
-    def test_unsupported_function_without_parameter(self):
+    def test_handler_values_that_cant_be_encoded(self) -> None:
+        """A data handler that returns a value out of its field (a register over 65535, an exception code over 255):
+        SLAVE DEVICE FAILURE (04), and the session is kept (the request was valid, the TCP stream is still in sync)."""
+        cases = (('read_h_regs', DataHandler.Return(EXP_NONE, [70000]), '03 0000 0001', '8304'),
+                 ('read_i_regs', DataHandler.Return(EXP_NONE, [-1]), '04 0000 0001', '8404'),
+                 ('read_coils', DataHandler.Return(0x1FF), '01 0000 0001', '8104'),
+                 ('write_h_regs', DataHandler.Return(256), '06 0000 0001', '8604'))
+        for method, ret, pdu, expected in cases:
+            with (self.subTest(method), mock.patch.object(self.server.data_hdl, method, return_value=ret),
+                  self.assertLogs('pyModbusTCP.server', level='ERROR')):
+                self.assertEqual(self.exchange(pdu), expected)
+        # same connection: still in sync
+        self.assertEqual(self.exchange('03 0000 0001'), '03020000')
+
+    def test_unsupported_function_without_parameter(self) -> None:
         # a request can be a function code only (like 0x07, 0x0B, 0x0C or 0x11): ILLEGAL FUNCTION, not a closed session
         for func in (0x07, 0x0b, 0x0c, 0x11):
             self.assertEqual(self.exchange(f'{func:02x}'), f'{func | 0x80:02x}01')
 
-    def _closed_by_server(self, frame):
+    def _closed_by_server(self, frame: bytes) -> bool:
         with socket.create_connection(('127.0.0.1', self.port), timeout=5) as sock:
             # a connection closed by the server may be reported as a reset (POSIX) or as an abort (WinError 10053
             # on Windows) instead of an end of stream: ConnectionError covers both (and a broken pipe on send)
@@ -719,7 +800,7 @@ class TestModbusServerSpecFrames(unittest.TestCase):
             except ConnectionError:
                 return True
 
-    def test_malformed_requests_close_the_session(self):
+    def test_malformed_requests_close_the_session(self) -> None:
         # no function code at all (MBAP length 1)
         self.assertTrue(self._closed_by_server(b'\x00\x01\x00\x00\x00\x01\x01'))
 
@@ -727,7 +808,7 @@ class TestModbusServerSpecFrames(unittest.TestCase):
 class TestReadDeviceIdentification(unittest.TestCase):
     """Read Device Identification (function 0x2B, MEI type 0x0E) on raw frames."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         # basic objects 0 to 2, regular objects 3 to 6 (empty by default), extended objects 0x80 and 0x82
         self.device_id = DeviceIdentification(vendor_name=b'v', product_code=b'p', major_minor_revision=b'1',
                                               objects_id={0x80: b'x', 0x82: b'z'})
@@ -737,7 +818,7 @@ class TestReadDeviceIdentification(unittest.TestCase):
         self.sock = socket.create_connection((host, port), timeout=5)
         self.addCleanup(self.sock.close)
 
-    def _recv(self, size):
+    def _recv(self, size: int) -> bytes:
         data = b''
         while len(data) < size:
             chunk = self.sock.recv(size - len(data))
@@ -745,18 +826,18 @@ class TestReadDeviceIdentification(unittest.TestCase):
             data += chunk
         return data
 
-    def exchange(self, pdu_hex):
+    def exchange(self, pdu_hex: str) -> str:
         """Send a PDU (as hex string) in a frame to the server and return the response PDU as hex string."""
         pdu = bytes.fromhex(pdu_hex)
         self.sock.sendall(b'\x00\x01\x00\x00' + (len(pdu) + 1).to_bytes(2, 'big') + b'\x01' + pdu)
         header = self._recv(7)
         return self._recv(int.from_bytes(header[4:6], 'big') - 1).hex()
 
-    def objects(self, pdu_hex):
+    def objects(self, pdu_hex: str) -> tuple[list[int], int, int]:
         """Send a request, check the response format and return (object ids, more follows, next object id)."""
         resp = bytes.fromhex(self.exchange(pdu_hex))
         self.assertEqual(resp[:3], bytes.fromhex(pdu_hex)[:3], 'not a regular response')
-        ids = []
+        ids: list[int] = []
         offset = 7
         for _ in range(resp[6]):
             ids.append(resp[offset])
@@ -764,7 +845,7 @@ class TestReadDeviceIdentification(unittest.TestCase):
         self.assertEqual(offset, len(resp))
         return ids, resp[4], resp[5]
 
-    def test_stream_access(self):
+    def test_stream_access(self) -> None:
         self.assertEqual(self.objects('2b 0e 01 00'), ([0, 1, 2], 0, 0))
         self.assertEqual(self.objects('2b 0e 01 01'), ([1, 2], 0, 0))
         self.assertEqual(self.objects('2b 0e 02 03'), ([3, 4, 5, 6], 0, 0))
@@ -772,7 +853,7 @@ class TestReadDeviceIdentification(unittest.TestCase):
         self.assertEqual(self.objects('2b 0e 03 80'), ([0x80, 0x82], 0, 0))
         self.assertEqual(self.objects('2b 0e 03 82'), ([0x82], 0, 0))
 
-    def test_stream_access_restart(self):
+    def test_stream_access_restart(self) -> None:
         """An object id that isn't a known object of the requested category: the stream restarts at its first one."""
         for pdu, ids in (('2b 0e 01 05', [0, 1, 2]), ('2b 0e 01 ff', [0, 1, 2]),
                          ('2b 0e 02 00', [3, 4, 5, 6]), ('2b 0e 02 50', [3, 4, 5, 6]),
@@ -780,14 +861,14 @@ class TestReadDeviceIdentification(unittest.TestCase):
             with self.subTest(pdu):
                 self.assertEqual(self.objects(pdu), (ids, 0, 0))
 
-    def test_stream_access_more_follows(self):
+    def test_stream_access_more_follows(self) -> None:
         """A stream that doesn't fit in a response is continued with the next object id given by the server."""
         self.device_id[0x81] = b'a' * 200
         self.device_id[0x82] = b'b' * 200
         self.assertEqual(self.objects('2b 0e 03 00'), ([0x80, 0x81], 0xff, 0x82))
         self.assertEqual(self.objects('2b 0e 03 82'), ([0x82], 0, 0))
 
-    def test_individual_access(self):
+    def test_individual_access(self) -> None:
         self.assertEqual(self.exchange('2b 0e 04 82'), '2b0e048300000182017a')
         self.assertEqual(self.objects('2b 0e 04 05'), ([5], 0, 0))
         # an unknown object is an ILLEGAL DATA ADDRESS (02)
@@ -797,7 +878,7 @@ class TestReadDeviceIdentification(unittest.TestCase):
         # the session is still in sync
         self.assertEqual(self.objects('2b 0e 04 00'), ([0], 0, 0))
 
-    def test_bad_requests(self):
+    def test_bad_requests(self) -> None:
         # unknown ReadDevId code: ILLEGAL DATA VALUE (03)
         for code in ('00', '05', 'ff'):
             self.assertEqual(self.exchange(f'2b 0e {code} 00'), 'ab03')
@@ -810,7 +891,7 @@ class TestReadDeviceIdentification(unittest.TestCase):
 
 class TestStopFromSignalHandler(unittest.TestCase):
     @unittest.skipUnless(hasattr(signal, 'setitimer'), 'needs SIGALRM (not available on Windows)')
-    def test_stop_from_signal_handler_in_blocking_mode(self):
+    def test_stop_from_signal_handler_in_blocking_mode(self) -> None:
         code = (
             'import signal\n'
             'from pyModbusTCP.server import ModbusServer\n'
@@ -843,15 +924,15 @@ def ipv6_available() -> bool:
         return False
 
 
-def first_socket_family(**server_kwargs) -> int:
+def first_socket_family(**server_kwargs: Any) -> int:
     """Start a server and return the family requested for the first socket it creates.
 
     start() may fail afterwards (no IPv6 on this machine, invalid address...): only the family matters here.
     """
     real_socket = socket.socket
-    families = []
+    families: list[int] = []
 
-    def spy(family=-1, *args, **kwargs):
+    def spy(family: int = -1, *args: Any, **kwargs: Any) -> socket.socket:
         families.append(family)
         return real_socket(family, *args, **kwargs)
 
@@ -868,15 +949,15 @@ def first_socket_family(**server_kwargs) -> int:
 
 
 class TestIPv6Option(unittest.TestCase):
-    def test_ipv4_is_the_default_family(self):
+    def test_ipv4_is_the_default_family(self) -> None:
         self.assertEqual(first_socket_family(host='127.0.0.1', port=0), socket.AF_INET)
 
-    def test_ipv6_option_requests_an_ipv6_socket(self):
+    def test_ipv6_option_requests_an_ipv6_socket(self) -> None:
         # fails if address_family is set after TCPServer.__init__() (the socket is already AF_INET)
         self.assertEqual(first_socket_family(host='::1', port=0, ipv6=True), socket.AF_INET6)
 
     @unittest.skipUnless(ipv6_available(), 'IPv6 loopback not available on this machine')
-    def test_ipv6_real_connection(self):
+    def test_ipv6_real_connection(self) -> None:
         server = ModbusServer(host='::1', port=0, ipv6=True, no_block=True)
         server.start()
         try:
@@ -895,7 +976,7 @@ class TestIPv6Option(unittest.TestCase):
             server.stop()
 
     @unittest.skipUnless(ipv6_available(), 'IPv6 loopback not available on this machine')
-    def test_ipv6_server_stop_and_restart(self):
+    def test_ipv6_server_stop_and_restart(self) -> None:
         server = ModbusServer(host='::1', port=0, ipv6=True, no_block=True)
         for _ in range(3):
             server.start()
@@ -905,7 +986,7 @@ class TestIPv6Option(unittest.TestCase):
             server.stop()
             self.assertFalse(server.is_running)
 
-    def test_ipv4_real_connection(self):
+    def test_ipv4_real_connection(self) -> None:
         server = ModbusServer(host='127.0.0.1', port=0, no_block=True)
         server.start()
         try:
@@ -935,7 +1016,7 @@ class TestReadOnlyOption(unittest.TestCase):
         'write/read multiple registers': '17 0000 0001 0000 0001 02 0007',
     }
 
-    def _start_server(self, **kwargs):
+    def _start_server(self, **kwargs: Any) -> ModbusServer:
         """Start a server on a free TCP port (port=0) and open a raw connection to it (self.sock)."""
         server = ModbusServer(host='127.0.0.1', port=0, no_block=True, **kwargs)
         host, port = server.start()
@@ -944,7 +1025,7 @@ class TestReadOnlyOption(unittest.TestCase):
         self.addCleanup(self.sock.close)
         return server
 
-    def _recv(self, size):
+    def _recv(self, size: int) -> bytes:
         data = b''
         while len(data) < size:
             chunk = self.sock.recv(size - len(data))
@@ -952,14 +1033,14 @@ class TestReadOnlyOption(unittest.TestCase):
             data += chunk
         return data
 
-    def exchange(self, pdu_hex):
+    def exchange(self, pdu_hex: str) -> str:
         """Send a PDU (as hex string) in a frame to the server and return the response PDU as hex string."""
         pdu = bytes.fromhex(pdu_hex)
         self.sock.sendall(b'\x00\x01\x00\x00' + (len(pdu) + 1).to_bytes(2, 'big') + b'\x01' + pdu)
         header = self._recv(7)
         return self._recv(int.from_bytes(header[4:6], 'big') - 1).hex()
 
-    def test_params_check(self):
+    def test_params_check(self) -> None:
         self.assertIs(ModbusServer().read_only, False)
         self.assertIs(ModbusServer(read_only=True).read_only, True)
         for value in (1, 0, 'yes', None, [True]):
@@ -968,7 +1049,7 @@ class TestReadOnlyOption(unittest.TestCase):
         self.assertIn('read_only=True', repr(ModbusServer(read_only=True)))
         self.assertIn('read_only=False', repr(ModbusServer()))
 
-    def test_default_is_read_write(self):
+    def test_default_is_read_write(self) -> None:
         bank = TestDataBankSetters.RecordingDataBank()
         self._start_server(data_bank=bank)
         for name, pdu in self.WRITE_REQUESTS.items():
@@ -976,7 +1057,7 @@ class TestReadOnlyOption(unittest.TestCase):
         self.assertEqual(bank.get_holding_registers(5, 1), [0x2a])
         self.assertTrue(bank.changes, 'writes must be notified to the data bank')
 
-    def test_read_functions_are_allowed(self):
+    def test_read_functions_are_allowed(self) -> None:
         bank = DataBank()
         bank.set_holding_registers(0, [0x1234])
         bank.set_input_registers(0, [0x5678])
@@ -988,7 +1069,7 @@ class TestReadOnlyOption(unittest.TestCase):
         self.assertEqual(self.exchange('03 0000 0001'), '03021234')
         self.assertEqual(self.exchange('04 0000 0001'), '04025678')
 
-    def test_write_functions_are_refused(self):
+    def test_write_functions_are_refused(self) -> None:
         bank = TestDataBankSetters.RecordingDataBank()
         self._start_server(read_only=True, data_bank=bank)
         for name, pdu in self.WRITE_REQUESTS.items():
@@ -1002,24 +1083,24 @@ class TestReadOnlyOption(unittest.TestCase):
         # the session is still open and in sync
         self.assertEqual(self.exchange('03 0000 0001'), '03020000')
 
-    def test_server_side_writes_are_still_possible(self):
+    def test_server_side_writes_are_still_possible(self) -> None:
         """read_only is for the requests of the clients, not for the application that owns the data bank."""
         server = self._start_server(read_only=True)
         self.assertTrue(server.data_bank.set_holding_registers(0, [9]))
         self.assertEqual(self.exchange('03 0000 0001'), '03020009')
 
-    def test_other_functions_are_not_concerned(self):
+    def test_other_functions_are_not_concerned(self) -> None:
         self._start_server(read_only=True, device_id=DeviceIdentification(vendor_name=b'me'))
         # read device identification (individual access to VendorName)
         self.assertEqual(self.exchange('2b 0e 04 00'), '2b0e048300000100026d65')
         # an unknown function keeps its own exception
         self.assertEqual(self.exchange('55 00'), 'd501')
 
-    def test_not_applied_to_an_external_engine(self):
+    def test_not_applied_to_an_external_engine(self) -> None:
         """With an ext_engine the requests are handled by user code: read_only has no effect on them."""
-        received = []
+        received: list[int] = []
 
-        def engine(session_data):
+        def engine(session_data: ModbusServer.SessionData) -> None:
             received.append(session_data.request.pdu.func_code)
             session_data.response.pdu.raw = session_data.request.pdu.raw
 
@@ -1027,7 +1108,7 @@ class TestReadOnlyOption(unittest.TestCase):
         self.assertEqual(self.exchange('06 0005 002a'), '06 0005 002a'.replace(' ', ''))
         self.assertEqual(received, [0x06])
 
-    def test_with_allowed_hosts(self):
+    def test_with_allowed_hosts(self) -> None:
         self._start_server(read_only=True, allowed_hosts=['127.0.0.1'])
         self.assertEqual(self.exchange('06 0005 002a'), '8601')
         self.assertEqual(self.exchange('03 0000 0001'), '03020000')
@@ -1039,7 +1120,7 @@ class TestReadOnlyOption(unittest.TestCase):
 class TestAllowedHostsOption(unittest.TestCase):
     """Check of the allowed_hosts parameter and match of the client addresses (without any connection)."""
 
-    def _tcp_server(self, hosts):
+    def _tcp_server(self, hosts: Iterable[str] | None) -> ModbusServer.CustomThreadingTCPServer:
         """Return a (not bound) TCP server of ModbusServer with a whitelist."""
         tcp_server = ModbusServer.CustomThreadingTCPServer(('127.0.0.1', 0), ModbusServer.ModbusRequestHandler,
                                                            bind_and_activate=False)
@@ -1047,12 +1128,12 @@ class TestAllowedHostsOption(unittest.TestCase):
         tcp_server.allowed_networks = ModbusServer._validate_allowed_hosts(hosts)
         return tcp_server
 
-    def test_default(self):
+    def test_default(self) -> None:
         server = ModbusServer()
         self.assertIsNone(server.allowed_hosts)
         self.assertIn('allowed_hosts=None', repr(server))
 
-    def test_hosts_are_normalized(self):
+    def test_hosts_are_normalized(self) -> None:
         server = ModbusServer(allowed_hosts=['192.168.1.10', '10.0.0.0/24', '::1', 'fd00::/8', ' 127.0.0.1 '])
         self.assertEqual(server.allowed_hosts,
                          ['192.168.1.10/32', '10.0.0.0/24', '::1/128', 'fd00::/8', '127.0.0.1/32'])
@@ -1060,32 +1141,36 @@ class TestAllowedHostsOption(unittest.TestCase):
         # host bits of a network are ignored
         self.assertEqual(ModbusServer(allowed_hosts=['192.168.1.5/24']).allowed_hosts, ['192.168.1.0/24'])
 
-    def test_any_iterable_is_accepted(self):
+    def test_any_iterable_is_accepted(self) -> None:
         for hosts in (('127.0.0.1',), iter(['127.0.0.1']), {'127.0.0.1'}, (host for host in ['127.0.0.1'])):
             self.assertEqual(ModbusServer(allowed_hosts=hosts).allowed_hosts, ['127.0.0.1/32'])
 
-    def test_params_check(self):
+    def test_params_check(self) -> None:
         # an empty whitelist is an error (None is for "no whitelist"), and hostnames are not supported
-        for hosts in ([], (), set(), ['localhost'], ['example.com'], [''], ['999.1.1.1'], ['1.2.3'], ['10.0.0.0/33'],
-                      ['::1/129'], ['10.0.0.0/a'], ['127.0.0.1', 'localhost']):
+        bad_values: tuple[Iterable[str], ...] = (
+            [], (), set(), ['localhost'], ['example.com'], [''], ['999.1.1.1'], ['1.2.3'], ['10.0.0.0/33'],
+            ['::1/129'], ['10.0.0.0/a'], ['127.0.0.1', 'localhost'])
+        for hosts in bad_values:
             with self.assertRaises(ValueError, msg=repr(hosts)):
                 ModbusServer(allowed_hosts=hosts)
         # a lone string must not be read char by char, an int is a valid address for ipaddress but not here
-        for hosts in ('127.0.0.1', b'127.0.0.1', '', 42, 1.5, [3232235777], [None], [1.5], [b'127.0.0.1'],
-                      [('127.0.0.1',)]):
-            with self.assertRaises(TypeError, msg=repr(hosts)):
-                ModbusServer(allowed_hosts=hosts)  # type: ignore
+        # bad values are typed Any: they are deliberately not of the annotated type
+        bad_types: tuple[Any, ...] = (
+            '127.0.0.1', b'127.0.0.1', '', 42, 1.5, [3232235777], [None], [1.5], [b'127.0.0.1'], [('127.0.0.1',)])
+        for bad_type in bad_types:
+            with self.assertRaises(TypeError, msg=repr(bad_type)):
+                ModbusServer(allowed_hosts=bad_type)
         # the error message names the faulty item
         with self.assertRaises(ValueError) as ctx:
             ModbusServer(allowed_hosts=['127.0.0.1', 'localhost'])
         self.assertIn("'localhost'", str(ctx.exception))
 
-    def test_no_whitelist_allows_everything(self):
+    def test_no_whitelist_allows_everything(self) -> None:
         tcp_server = self._tcp_server(None)
         for address in ('127.0.0.1', '8.8.8.8', '::1', 'not an ip'):
             self.assertTrue(tcp_server.is_allowed((address, 1234)), address)
 
-    def test_ipv4_match(self):
+    def test_ipv4_match(self) -> None:
         tcp_server = self._tcp_server(['10.1.2.3', '192.168.0.0/16', '172.16.0.0/24'])
         for address, expected in (('10.1.2.3', True), ('10.1.2.4', False), ('192.168.0.1', True),
                                   ('192.168.255.254', True), ('192.169.0.1', False), ('127.0.0.1', False),
@@ -1093,7 +1178,7 @@ class TestAllowedHostsOption(unittest.TestCase):
                                   ('172.16.1.0', False)):
             self.assertEqual(tcp_server.is_allowed((address, 1234)), expected, address)
 
-    def test_ipv6_match(self):
+    def test_ipv6_match(self) -> None:
         tcp_server = self._tcp_server(['::1', 'fd00::/8'])
         for address, expected in (('::1', True), ('::2', False), ('fd12:3456::1', True), ('fe80::1', False)):
             self.assertEqual(tcp_server.is_allowed((address, 1234, 0, 0)), expected, address)
@@ -1101,17 +1186,17 @@ class TestAllowedHostsOption(unittest.TestCase):
         self.assertFalse(tcp_server.is_allowed(('127.0.0.1', 1234)))
         self.assertFalse(self._tcp_server(['127.0.0.1']).is_allowed(('::1', 1234, 0, 0)))
 
-    def test_ipv4_mapped_address(self):
+    def test_ipv4_mapped_address(self) -> None:
         """An IPv4 client of a dual-stack IPv6 socket is seen as ::ffff:a.b.c.d."""
         tcp_server = self._tcp_server(['192.168.1.0/24'])
         self.assertTrue(tcp_server.is_allowed(('::ffff:192.168.1.7', 1234, 0, 0)))
         self.assertFalse(tcp_server.is_allowed(('::ffff:10.0.0.1', 1234, 0, 0)))
 
-    def test_link_local_zone_id(self):
+    def test_link_local_zone_id(self) -> None:
         self.assertTrue(self._tcp_server(['fe80::/10']).is_allowed(('fe80::1%eth0', 1234, 0, 0)))
         self.assertFalse(self._tcp_server(['::1']).is_allowed(('fe80::1%eth0', 1234, 0, 0)))
 
-    def test_invalid_client_address_is_refused(self):
+    def test_invalid_client_address_is_refused(self) -> None:
         tcp_server = self._tcp_server(['127.0.0.1'])
         for address in ('', 'not an ip', '1.2.3', '127.0.0.1\n'):
             self.assertFalse(tcp_server.is_allowed((address, 1234)), repr(address))
@@ -1120,7 +1205,7 @@ class TestAllowedHostsOption(unittest.TestCase):
 class TestAllowedHostsIPv6(unittest.TestCase):
     """Tests of allowed_hosts on a real IPv6 connection."""
 
-    def _connect(self, **server_kwargs):
+    def _connect(self, **server_kwargs: Any) -> bytes:
         server = ModbusServer(host='::1', port=0, ipv6=True, no_block=True, **server_kwargs)
         _host, port = server.start()
         self.addCleanup(server.stop)
@@ -1136,11 +1221,11 @@ class TestAllowedHostsIPv6(unittest.TestCase):
             return b''
 
     @unittest.skipUnless(ipv6_available(), 'IPv6 loopback not available on this machine')
-    def test_listed_client_is_served(self):
+    def test_listed_client_is_served(self) -> None:
         self.assertEqual(self._connect(allowed_hosts=['::1']), struct.pack('>HHHBBBH', 1, 0, 5, 1, 3, 2, 0))
 
     @unittest.skipUnless(ipv6_available(), 'IPv6 loopback not available on this machine')
-    def test_unlisted_client_is_closed(self):
+    def test_unlisted_client_is_closed(self) -> None:
         with self.assertLogs('pyModbusTCP.server', level='WARNING'):
             self.assertEqual(self._connect(allowed_hosts=['fd00::/8', '127.0.0.1']), b'')
 

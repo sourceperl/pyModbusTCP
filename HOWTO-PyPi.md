@@ -16,6 +16,19 @@ python -m build --outdir dist pyModbusTCP-cli
 twine check dist/*
 ```
 
+Or all at once, with the release checks, in the dev venv of `./init_dev_venv.sh`:
+
+```bash
+tools/build_dist.sh -t
+```
+
+It builds the 4 files in `dist/`, runs `twine check`, checks that pyModbusTCP-cli requires exactly this release,
+that the first entry of `CHANGES` is `VERSION YYYY-MM-DD` (a placeholder date can't be fixed after the upload: the
+changelog is in the sdist), warns about the docs that pin another pre-release and about a version already on PyPI or
+TestPyPI, then (`-t`) tests the install of the wheels in throwaway venvs.
+
+Before a release, also run the test suite, `mypy --strict pyModbusTCP` and the docs build (`tools/build_docs.sh`).
+
 ### version numbers
 
 Set `VERSION` in `pyModbusTCP/constants.py` with a [PEP 440](https://peps.python.org/pep-0440/) version, and the same

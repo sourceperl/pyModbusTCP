@@ -49,8 +49,8 @@ If the serial port fails while running (e.g. USB adapter unplugged), the
 gateway does NOT stop: it closes the port and tries to reopen it every second
 until the device is back.
 The port must however be openable at startup, otherwise the gateway exits.
-Exit codes: 0 normal stop (Ctrl-C), 1 serial port cannot be opened at startup,
-2 invalid parameter.
+Exit codes: 0 normal stop (Ctrl-C or SIGTERM), 1 serial port cannot be opened at
+startup, 2 invalid parameter.
 
 LIMITATIONS
 -----------
@@ -84,6 +84,10 @@ from threading import Event
 from ._common import (
     SERIAL_MISSING_MSG,
     add_version_arg,
+    positive_float,
+    positive_int,
+    slave_address,
+    stop_on_sigterm,
     tcp_port,
 )
 
@@ -133,6 +137,8 @@ def hexdump(data: bytes) -> str:
 
 def t35(baudrate: int, bytesize: int, parity: str, stopbits: float) -> float:
     """Return the modbus RTU inter-frame silent interval (3.5 chars) in seconds."""
+    if baudrate <= 0:
+        raise ValueError(f'invalid baud rate: {baudrate}')
     if baudrate > 19200:
         # fixed value recommended by the modbus serial line spec
         return 0.00175
@@ -329,6 +335,9 @@ class SerialModbusWorker(SlaveSerialWorkerModel):
 
     def __init__(self, port: Serial, mbus_cli: ModbusClient, slave_addr: int = 1, allow_bcast: bool = False,
                  end_of_frame: float | None = None) -> None:
+        # 0 is the broadcast address, 248 to 255 are reserved: the gateway would never answer
+        if not 1 <= slave_addr <= 247:
+            raise ValueError('slave address must be between 1 and 247')
         super().__init__(port, end_of_frame=end_of_frame)
         self.mbus_cli = mbus_cli
         self.slave_addr = slave_addr
@@ -384,19 +393,21 @@ def main(argv: list[str] | None = None) -> int:
     # parse args
     parser = argparse.ArgumentParser(prog='mbtcp-rtu2tcp', description='Modbus/RTU to Modbus/TCP gateway')
     parser.add_argument('device', type=str, help='serial device (like /dev/ttyUSB0)')
-    parser.add_argument('-a', '--address', type=int, default=1, help='slave address (default: 1)')
+    parser.add_argument('-a', '--address', type=slave_address, default=1,
+                        help='slave address of the gateway, 1 to 247 (default: 1)')
     parser.add_argument('--allow-broadcast', action='store_true', help='relay broadcast frames (address 0) to the server')
-    parser.add_argument('-b', '--baudrate', type=int, default=9600, help='serial rate (default: 9600)')
+    parser.add_argument('-b', '--baudrate', type=positive_int, default=9600, help='serial rate (default: 9600)')
     parser.add_argument('--bytesize', type=int, choices=(7, 8), default=8, help='data bits (default: 8)')
     parser.add_argument('--parity', choices=('N', 'E', 'O'), default='N', help='parity (default: N)')
     parser.add_argument('--stopbits', type=float, choices=(1, 1.5, 2), default=1, help='stop bits (default: 1)')
-    parser.add_argument('-e', '--eof', type=float, default=None,
+    parser.add_argument('-e', '--eof', type=positive_float, default=None,
                         help='serial end of frame delay in s (default: computed from baudrate, '
                              f'min {MIN_EOF_DELAY:.3f} s)')
     parser.add_argument('-H', '--host', type=str, default='localhost', help='server host (default: localhost)')
     parser.add_argument('-p', '--port', type=tcp_port, default=502, help='server TCP port (default: 502)')
     parser.add_argument('-u', '--unit-id', type=int, default=1, help='server unit id (default: 1)')
-    parser.add_argument('-t', '--timeout', type=float, default=1.0, help='server timeout delay in s (default: 1.0)')
+    parser.add_argument('-t', '--timeout', type=positive_float, default=1.0,
+                        help='server timeout delay in s (default: 1.0)')
     parser.add_argument('-d', '--debug', action='store_true', help='debug mode')
     add_version_arg(parser)
     args = parser.parse_args(argv)
@@ -428,9 +439,10 @@ def main(argv: list[str] | None = None) -> int:
         logger.debug('Interframe delay %.4f s, end of frame delay %.4f s',
                      serial_worker.interframe_delay, serial_worker.end_of_frame)
 
-        # start serial worker loop
+        # start serial worker loop (until Ctrl-C or SIGTERM)
         logger.info('Start serial worker (slave address = %d)', args.address)
-        serial_worker.run()
+        with stop_on_sigterm(serial_worker.stop, logger):
+            serial_worker.run()
         return 0
 
     except serialutil.SerialException as e:

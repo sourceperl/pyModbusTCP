@@ -3,6 +3,8 @@
 import math
 import random
 import unittest
+from collections.abc import Iterator, Sequence
+from typing import Any
 
 from pyModbusTCP.utils import (
     _pack_bits,
@@ -29,7 +31,7 @@ from pyModbusTCP.utils import test_bit as get_bit
 class TestUtils(unittest.TestCase):
     """ pyModbusTCP.utils function test class. """
 
-    def test_get_bits_from_int(self):
+    def test_get_bits_from_int(self) -> None:
         """Test function get_bits_from_int and it's short alias int2bits."""
         # default bits list size is 16
         self.assertEqual(len(get_bits_from_int(0)), 16)
@@ -43,7 +45,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(int2bits(0xf007), [True]*3 + [False]*9 + [True]*4)
         self.assertEqual(int2bits(6, 4), [False, True, True, False])
 
-    def test_ieee(self):
+    def test_ieee(self) -> None:
         """Test IEEE functions: decode_ieee and encode_ieee."""
         # test IEEE NaN
         self.assertTrue(math.isnan(decode_ieee(0x7fc00000)))
@@ -69,7 +71,7 @@ class TestUtils(unittest.TestCase):
         self.assertAlmostEqual(encode_ieee(planck), pla_32)
         self.assertAlmostEqual(encode_ieee(planck, double=True), pla_64)
 
-    def test_word_list_to_long(self):
+    def test_word_list_to_long(self) -> None:
         """Test function word_list_to_long and it 's short alias words2longs."""
         # empty list, return empty list
         self.assertEqual(word_list_to_long([]), [])
@@ -91,7 +93,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(words2longs(l1*2, **nobig64), [0xbeefdeadbeefdead])
         self.assertEqual(words2longs(l2*2, **nobig64), [0xbeefcafefacefeed]*2)
 
-    def test_long_list_to_word(self):
+    def test_long_list_to_word(self) -> None:
         """Test function long_list_to_word and short alias longs2words."""
         # empty list, return empty list
         self.assertEqual(long_list_to_word([]), [])
@@ -120,7 +122,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(longs2words(l1*4, **nobig64), l1_nobig64*4)
         self.assertEqual(longs2words(l3*4, **nobig64), l3_nobig64*4)
 
-    def test_get_2comp(self):
+    def test_get_2comp(self) -> None:
         """Test function get_2comp and it's short alias twos_c."""
         # check if ValueError exception is raised
         self.assertRaises(ValueError, get_2comp, 0x10000)
@@ -146,7 +148,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(twos_c(0xfffea2a5, val_size=32), -89435)
         self.assertEqual(twos_c(-89435, val_size=32), 0xfffea2a5)
 
-    def test_get_list_2comp(self):
+    def test_get_list_2comp(self) -> None:
         """Test get_list_2comp and it's short alias twos_c_l."""
         self.assertEqual(get_list_2comp([0x8000], 16), [-32768])
         in_l = [0x8000, 0xffff, 0x0042]
@@ -156,9 +158,9 @@ class TestUtils(unittest.TestCase):
         out_l = [0x8000, -0x0001, -89435]
         self.assertEqual(twos_c_l(in_l, val_size=32), out_l)
 
-    def test_pack_unpack_bits(self):
+    def test_pack_unpack_bits(self) -> None:
         """Bits codec (private helpers of client and server) must give the same result as a loop with set_bit()."""
-        def ref_pack(bits):
+        def ref_pack(bits: Sequence[Any]) -> bytes:
             byte_l = [0] * byte_length(len(bits))
             for i, item in enumerate(bits):
                 if item:
@@ -176,71 +178,85 @@ class TestUtils(unittest.TestCase):
                 raw = bytes(rnd.randrange(256) for _ in range(byte_length(nb) + rnd.randrange(3)))
                 self.assertEqual(_unpack_bits(raw, nb), [get_bit(raw[i // 8], i % 8) for i in range(nb)])
         # items are evaluated as bool, like in a loop with 'if item'
-        mixed = [1, 0, 'x', None, 5, 0.0, [], [0]]
+        mixed: list[Any] = [1, 0, 'x', None, 5, 0.0, [], [0]]
         self.assertEqual(_pack_bits(mixed), ref_pack(mixed))
         # no bits, no bytes
         self.assertEqual(_pack_bits([]), b'')
         self.assertEqual(_unpack_bits(b'', 0), [])
 
-    def test_pack_bits_not_a_sequence(self):
+    def test_pack_bits_not_a_sequence(self) -> None:
         """A sized iterable that can't be reversed (no __reversed__ nor indexing) is still accepted."""
         class IterOnly:
-            def __init__(self, items: list):
+            def __init__(self, items: list[bool]) -> None:
                 self._items = items
 
-            def __len__(self):
+            def __len__(self) -> int:
                 return len(self._items)
 
-            def __iter__(self):
+            def __iter__(self) -> Iterator[bool]:
                 return iter(self._items)
 
         bits = [True, False, True, True, False, False, False, False, True]
-        self.assertEqual(_pack_bits(IterOnly(bits)), _pack_bits(bits))  # type: ignore
+        self.assertEqual(_pack_bits(IterOnly(bits)), _pack_bits(bits))  # type: ignore[arg-type]
 
-    def test_valid_host(self):
+    def test_valid_host(self) -> None:
         """valid_host() always returns a bool: an empty host or a NUL char are invalid (and raise nothing)."""
         for host in ['localhost', '127.0.0.1', '::1', 'example.com', 'a-b.c_d.example.', 'x' * 63]:
             self.assertIs(valid_host(host), True, host)
         for host in ['', '\x00', 'a\x00b', 'host\x00', 'wrong@host', '-bad.example.com', 'x' * 64, 'a' * 256]:
             self.assertIs(valid_host(host), False, repr(host))
 
-    def test_valid_host_rejects_trailing_newline(self):
+    def test_valid_host_rejects_trailing_newline(self) -> None:
         self.assertTrue(valid_host('example.com'))
         for bad in ('example.com\n', 'example.com\r\n', '\nexample.com', 'exa mple.com'):
             self.assertFalse(valid_host(bad), repr(bad))
 
+    def test_valid_host_idn(self) -> None:
+        """An internationalized domain name is valid in its ASCII form (punycode) only: the application encodes it."""
+        for host in ('xn--caf-dma.fr', 'www.xn--bcher-kva.example', 'xn--80akhbyknj4f.xn--p1ai', 'XN--CAF-DMA.FR',
+                     'café.fr'.encode('idna').decode()):
+            self.assertIs(valid_host(host), True, host)
+        for host in ('café.fr', 'bücher.example', 'пример.рф'):
+            self.assertIs(valid_host(host), False, host)
 
-if __name__ == '__main__':
-    unittest.main()
+    def test_valid_host_is_ascii_only(self) -> None:
+        """Non-ASCII chars are never a valid hostname, even those that a case-insensitive match takes for a letter.
+
+        With re.IGNORECASE alone, "\u212a" (Kelvin sign) matches "k" and "\u0130" matches "i": the IDNA codec of the
+        resolver may then encode a label beyond 63 chars and raise a UnicodeError at connect time.
+        """
+        for bad in ('\u212a', 'exa\u017fmple.com', '\u0130' * 40, 'a' * 50 + '\u0130' * 13, 'caf\u00e9.example',
+                    '\uff41.example'):
+            self.assertIs(valid_host(bad), False, repr(bad))
 
 
 class IntLike:
     """An int-like object: it implements __index__."""
 
-    def __init__(self, value):
+    def __init__(self, value: int) -> None:
         self.value = value
 
-    def __index__(self):
+    def __index__(self) -> int:
         return self.value
 
 
 class FloatLike:
     """A float-like object: __float__ and __bool__, no __index__."""
 
-    def __init__(self, value):
+    def __init__(self, value: float) -> None:
         self.value = value
 
-    def __float__(self):
+    def __float__(self) -> float:
         return float(self.value)
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self.value)
 
 
 class TestArgConversion(unittest.TestCase):
     """The internal conversions of the arguments (bool and int)."""
 
-    def test_python_values(self):
+    def test_python_values(self) -> None:
         from pyModbusTCP.utils import _to_bool, _to_bool_list, _to_int, _to_int_list
         self.assertIs(_to_bool(1, 'v'), True)
         self.assertIs(_to_bool(False, 'v'), False)
@@ -251,11 +267,11 @@ class TestArgConversion(unittest.TestCase):
         for func, value in ((_to_bool, 1.0), (_to_bool, '1'), (_to_bool, None), (_to_int, 1.5), (_to_int, '1')):
             with self.subTest(func=func.__name__, value=value), self.assertRaises(TypeError):
                 func(value, 'v')
-        for func, values in ((_to_bool_list, [True, 1.0]), (_to_bool_list, [None]), (_to_int_list, [1, '2'])):
-            with self.subTest(func=func.__name__, values=values), self.assertRaises(TypeError):
-                func(values, 'v')
+        for list_func, values in ((_to_bool_list, [True, 1.0]), (_to_bool_list, [None]), (_to_int_list, [1, '2'])):
+            with self.subTest(func=list_func.__name__, values=values), self.assertRaises(TypeError):
+                list_func(values, 'v')
 
-    def test_int_like_values(self):
+    def test_int_like_values(self) -> None:
         """Any object with __index__ is accepted, a float-like one is refused."""
         from pyModbusTCP.utils import _to_bool, _to_bool_list, _to_int, _to_int_list
         self.assertIs(_to_bool(IntLike(0), 'v'), False)
@@ -266,6 +282,10 @@ class TestArgConversion(unittest.TestCase):
         for func, value in ((_to_bool, FloatLike(1.0)), (_to_int, FloatLike(2.0))):
             with self.subTest(func=func.__name__), self.assertRaises(TypeError):
                 func(value, 'v')
-        for func in (_to_bool_list, _to_int_list):
-            with self.subTest(func=func.__name__), self.assertRaises(TypeError):
-                func([1, FloatLike(1.0)], 'v')
+        for list_func in (_to_bool_list, _to_int_list):
+            with self.subTest(func=list_func.__name__), self.assertRaises(TypeError):
+                list_func([1, FloatLike(1.0)], 'v')
+
+
+if __name__ == '__main__':
+    unittest.main()

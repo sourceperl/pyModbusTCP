@@ -294,13 +294,19 @@ def crc16(frame: bytes) -> int:
 
 
 # one label of a hostname (1 to 63 chars: letters, digits, "-" or "_", no leading/trailing "-")
-_RE_HOST_PART_OK = re.compile('(?!-)[a-z0-9-_]{1,63}(?<!-)', re.IGNORECASE)
+# re.ASCII: with re.IGNORECASE alone, [a-z] also matches some non-ASCII chars (like "K", the Kelvin sign, or
+# "İ"), that the IDNA codec of the resolver may expand beyond 63 chars (UnicodeError at connect time)
+_RE_HOST_PART_OK = re.compile('(?!-)[a-z0-9_-]{1,63}(?<!-)', re.IGNORECASE | re.ASCII)
 
 
 def valid_host(host_str: str) -> bool:
     """Validate a host string.
 
-    Can be an IPv4/6 address or a valid hostname.
+    Can be an IPv4/6 address or a valid hostname. A hostname is ASCII only: an internationalized domain name
+    (IDN) is valid in its ASCII form (punycode, like ``'xn--caf-dma.fr'``), not in its Unicode form (``'café.fr'``).
+    The conversion is left to the application: the codec of the standard library (``str.encode('idna')``) follows
+    IDNA 2003, which differs from the current IDNA 2008 for some names (``'faß.de'`` would become ``'fass.de'``, another
+    domain), the idna package of PyPI follows IDNA 2008.
 
     :param host_str: the host string to test
     :type host_str: str

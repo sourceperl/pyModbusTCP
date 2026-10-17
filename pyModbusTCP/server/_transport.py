@@ -156,6 +156,8 @@ class ModbusRequestHandler(BaseRequestHandler):
     # default socket timeout (in s) on blocking operations
     _SOCKET_TIMEOUT: float = 1.0
     server: CustomThreadingTCPServer
+    # deadline in effect at the end of the last _recv_all() call (see handle())
+    _last_deadline: float | None = None
 
     def _send_all(self, data: bytes) -> None:
         try:
@@ -223,6 +225,8 @@ class ModbusRequestHandler(BaseRequestHandler):
             # restore the default timeout used by the other socket operations
             if sock_timeout_changed:
                 self.request.settimeout(self._SOCKET_TIMEOUT)
+        # the deadline in effect at the end (with request_timeout: the end of the request that has started)
+        self._last_deadline = deadline
         return data
 
     def setup(self) -> None:
@@ -250,8 +254,9 @@ class ModbusRequestHandler(BaseRequestHandler):
                 request_timeout = self.server.request_timeout
                 idle_deadline = None if idle_timeout is None else time.monotonic() + idle_timeout
                 session_data.request.mbap.raw = self._recv_all(7, idle_deadline, 'idle timeout', request_timeout)
-                # receive pdu from client (same limit)
-                req_deadline = None if request_timeout is None else time.monotonic() + request_timeout
+                # receive pdu from client: the whole request (MBAP header and PDU) must come in request_timeout
+                # from its first byte (a new delay for the PDU would let a client hold a session twice as long)
+                req_deadline = None if request_timeout is None else self._last_deadline
                 session_data.request.pdu.raw = self._recv_all(session_data.request.mbap.length - 1, req_deadline,
                                                               'request timeout')
                 # update response MBAP fields with request data

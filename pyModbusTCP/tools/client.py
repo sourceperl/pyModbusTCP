@@ -22,7 +22,8 @@ Values accept the decimal, hexadecimal (0x...), octal (0o...) and binary (0b...)
 
 EXIT STATUS
 -----------
-0 success, 1 request failed (network error, timeout, Modbus exception...), 2 invalid parameter.
+0 success (or Ctrl-C to stop a read repeated with -i), 1 request failed (network error, timeout, Modbus
+exception...), 2 invalid parameter, 130 request interrupted by Ctrl-C.
 """
 
 import argparse
@@ -59,7 +60,8 @@ def bool_value(value: str) -> bool:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog='mbtcp-client', description='Modbus/TCP client for the command line',
-                                     epilog='Exit status: 0 success, 1 request failed, 2 invalid parameter.')
+                                     epilog='Exit status: 0 success, 1 request failed, 2 invalid parameter, '
+                                            '130 interrupted (Ctrl-C).')
     parser.add_argument('-H', '--host', default='localhost', help='server host (default: localhost)')
     parser.add_argument('-p', '--port', type=tcp_port, default=502, help='server TCP port (default: 502)')
     parser.add_argument('-u', '--unit-id', type=int_value, default=1, help='unit id (default: 1)')
@@ -207,7 +209,9 @@ def main(argv: list[str] | None = None) -> int:
         # parameter refused by the library (unit id, address or number of items out of range...)
         parser.error(str(e))
     except KeyboardInterrupt:
-        return 0
+        # the normal end of a read repeated with -i, but a single request interrupted before its end has failed
+        # (like any program stopped by Ctrl-C: 128 + SIGINT)
+        return 0 if getattr(args, 'interval', None) is not None else 130
     if not ok:
         print_error(client)
         return 1

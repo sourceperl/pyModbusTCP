@@ -13,6 +13,22 @@ from .device_id import DeviceIdentification
 from .session import SessionData
 
 
+def validate_host(host: str) -> str:
+    # the address itself is checked by start() (name resolution, bind), like before
+    if not isinstance(host, str):
+        raise TypeError('host must be a str')
+    return host
+
+
+def validate_port(port: int) -> int:
+    # bool is an int subclass: port=True would silently be port 1
+    if isinstance(port, bool) or not isinstance(port, int):
+        raise TypeError('port must be an int')
+    if not 0 <= port <= 65535:
+        raise ValueError('port must be between 0 and 65535 (0: a free port chosen by the system)')
+    return port
+
+
 def validate_data_bank_and_handler(data_bank: DataBank | None, data_hdl: DataHandler | None) -> None:
     if data_bank and not isinstance(data_bank, DataBank):
         raise TypeError('data_bank is not a DataBank instance')

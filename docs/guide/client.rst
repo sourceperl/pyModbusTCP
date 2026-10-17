@@ -26,6 +26,18 @@ Invalid settings raise an exception at once (``ValueError`` for a bad value, ``T
     except ValueError as e:
         print('bad setting: %s' % e)
 
+``host`` is an IPv4/IPv6 address or a hostname. A hostname is ASCII only: give an internationalized domain name in
+its ASCII form (punycode), the conversion is up to the application:
+
+.. code-block:: python
+
+    # 'café.fr' is refused (ValueError): use 'xn--caf-dma.fr'
+    c = ModbusClient(host='café.fr'.encode('idna').decode())
+
+The ``idna`` codec of the standard library follows IDNA 2003: for some names, it gives another domain than the
+current IDNA 2008 (like ``'faß.de'``, encoded as ``'fass.de'``). For such names, use the ``idna`` package of PyPI
+(``idna.encode('faß.de').decode()`` gives ``'xn--fa-hia.de'``).
+
 ``unit_id`` is the address of the device behind a gateway (Modbus/RTU slave address). Most Modbus/TCP devices
 ignore it or expect ``1`` (the default) or ``255``.
 

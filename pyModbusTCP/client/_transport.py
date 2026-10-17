@@ -59,9 +59,10 @@ class ClientTransportMixin:
         #          AF_UNSPEC -> IPv6 (priority on some system) or 4
         try:
             addr_infos = socket.getaddrinfo(self.host, self.port, AF_UNSPEC, SOCK_STREAM)
-        except socket.gaierror as e:
+        except (socket.gaierror, UnicodeError) as e:
             # name resolution failure: report it like any other connect error (no exception for the caller)
-            raise NetworkError(MB_CONNECT_ERR, f'host name resolution error: {e}')
+            # (UnicodeError: a name that the IDNA codec can't encode, like a label too long once encoded)
+            raise NetworkError(MB_CONNECT_ERR, f'host name resolution error: {e}') from None
         # try each address in turn, keep the last failure reason for the error message
         last_err: OSError | None = None
         for af, sock_type, proto, _canon_name, sa in addr_infos:

@@ -72,10 +72,18 @@ network where some hosts are not trusted, `allowed_hosts` and the firewall are t
 ### TCP to RTU gateway (`mbtcp-tcp2rtu`)
 
 The serial line serves one request at a time, and a request to a slave that doesn't answer holds it for the whole
-timeout. A client host has at most 2 requests waiting for the serial line: its next ones get the exception 0x0A
-(gateway path unavailable) at once, and the requests of the other hosts still reach the line. The gateway also has
-the `--max-connections` and `--max-connections-per-host` options of the server. Requests refused by its filters
-are logged once, then once per 10 s at most, so a request flood can't flood the log.
+timeout. The waiting requests are served in turn by client host (round robin, a host is an IPv4 address or a /64
+network for IPv6): a request waits for at most one request of each other host, so a few hosts that flood the gateway
+can't take every turn of the line. A client host has at most 2 requests waiting for the serial line: its next ones get
+the exception 0x0A (gateway path unavailable) at once, like any request once 16 requests are waiting. The gateway
+also has the `--max-connections` and `--max-connections-per-host` options of the server. Requests refused by its
+filters are logged once, then once per 10 s at most, so a request flood can't flood the log.
+
+A request with an invalid function code (0, or 0x80 to 0xFF: the exception flag of a reply) gets the exception 0x01
+(illegal function) and is never written on the serial line.
+
+With N client hosts that send requests at the same time, each one gets 1/N of the serial line: many hosts can
+still slow down the others. As for the server, `--allow` and the firewall are the real protections.
 
 ### Listening socket
 

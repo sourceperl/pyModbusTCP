@@ -20,7 +20,7 @@ command in the PATH and installs no dependency.
 pipx install pyModbusTCP-cli
 
 # or in a virtual environment, with the library
-pip install "pyModbusTCP[cli]==0.4.0a1"
+pip install "pyModbusTCP[cli]==0.4.0a2"
 ```
 
 **Alpha**: pyModbusTCP-cli is new with pyModbusTCP 0.4.0, only pre-releases exist for now. The commands, their
@@ -32,7 +32,7 @@ Without this package, the tools can still be run from the library alone:
 ```bash
 python -m pyModbusTCP.tools server --help
 python -m pyModbusTCP.tools client --help
-pip install "pyModbusTCP[serial]==0.4.0a1"  # pyserial, only needed by the gateways
+pip install "pyModbusTCP[serial]==0.4.0a2"  # pyserial, only needed by the gateways
 python -m pyModbusTCP.tools tcp2rtu --help
 python -m pyModbusTCP.tools rtu2tcp --help
 ```

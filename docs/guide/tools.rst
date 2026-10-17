@@ -50,7 +50,7 @@ pyModbusTCP-cli always has the version of the library it requires.
 
     The tools are new in version 0.4.0, only available as a pre-release (alpha) for now: their options and their
     output may still change. ``pip install "pyModbusTCP[cli]"`` without a version installs the stable 0.3.1,
-    without the tools: use ``pip install "pyModbusTCP[cli]==0.4.0a1"`` (or ``--pre``).
+    without the tools: use ``pip install "pyModbusTCP[cli]==0.4.0a2"`` (or ``--pre``).
 
 Examples
 --------
@@ -74,8 +74,9 @@ Examples
     # an RTU master on /dev/ttyUSB0 reads the Modbus/TCP server 192.168.1.10 (the gateway is the RTU slave 30)
     mbtcp-rtu2tcp -a 30 -H 192.168.1.10 /dev/ttyUSB0
 
-The exit status of ``mbtcp-client`` is 0 on success, 1 if the request failed and 2 for an invalid parameter: it can
-be used in a shell script.
+The exit status of ``mbtcp-client`` is 0 on success, 1 if the request failed, 2 for an invalid parameter and 130 for
+a request interrupted by Ctrl-C (Ctrl-C is the normal end of a read repeated with ``-i``: 0): it can be used in a
+shell script.
 
 Security
 --------
@@ -88,7 +89,10 @@ The server and the TCP to RTU gateway are designed to be safe by default:
 - ``-A/--allow`` restricts the clients to some IP addresses or networks, ``--read-only`` refuses every write;
 - the TCP to RTU gateway refuses broadcast requests (unit id 0) unless ``--allow-broadcast`` is set;
 - ``--max-connections-per-host`` (default 16) keeps a single client host from taking every connection, and the
-  TCP to RTU gateway shares the serial line between the client hosts (at most 2 pending requests per host).
+  TCP to RTU gateway shares the serial line between the client hosts: their requests are served in turn (round
+  robin), with at most 2 pending requests per host;
+- the TCP to RTU gateway never writes a request with an invalid function code (0, or 0x80 to 0xFF) on the bus;
+- the delays (``-t``, ``-e``, ``-i``...) must be greater than 0 and at most one day, the serial rate greater than 0.
 
 See also :doc:`../security`.
 

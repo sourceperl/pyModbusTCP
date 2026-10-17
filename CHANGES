@@ -1,6 +1,71 @@
 Revision history for pyModbusTCP
 
-0.4.0a1 xxxx-xx-xx (alpha: the command line tools, their options and output, may still change before 0.4.0)
+0.4.0a2 2026-10-17 (alpha: the command line tools, their options and output, may still change before 0.4.0)
+
+    Changes since 0.4.0a1 (see 0.4.0a1 below for the changes since 0.3.1).
+
+    Breaking changes:
+
+    - extras: "pyModbusTCP[tools]" is renamed "pyModbusTCP[cli]" (the mbtcp-* commands of pyModbusTCP-cli).
+    - ModbusServer: max_connections_per_host (16) is active by default: a client host (an IPv4 address, or a /64
+                    network for IPv6) can't open more connections, the next ones are closed at once. Clients
+                    behind a NAT share the same address: raise it, or set it to None to get the previous behavior.
+    - ModbusServer: the constructor checks host (a str) and port (an int from 0 to 65535): TypeError or ValueError,
+                    a bad value was only seen by start().
+    - ModbusClient, DataBank: numpy booleans (numpy.bool_, like the items of a numpy bool array) are no longer
+                    accepted as coil values (TypeError, like NumPy 2 that refuses them as integers): convert them
+                    with bool() or tolist(). Numpy integers are still accepted.
+    - tools: mbtcp-client exits with status 130 when Ctrl-C interrupts a request (it was 0, a success). Ctrl-C is
+             still the normal end of a read repeated with -i (status 0).
+    - tools: the delays given on the command line (-t, -e, -i, --idle-timeout) must be greater than 0 and at most
+             86400 s (one day), the serial rate (-b) greater than 0, and the slave address of mbtcp-rtu2tcp (-a)
+             from 1 to 247: invalid values are refused at startup (status 2).
+
+    Security:
+
+    - fix tools: mbtcp-tcp2rtu serves the waiting requests in turn by client host (round robin), instead of one
+                 FIFO of 5 requests: 3 hosts (with 2 pending requests each) could fill it, every request of the
+                 other hosts got exception 0x0A (denial of service). A request now waits for at most one request of
+                 each other host. Up to 16 requests can wait for the serial line (the limit of 2 per host is kept).
+    - fix tools: mbtcp-tcp2rtu wrote the requests with an invalid function code (0, or 0x80 to 0xFF: the exception
+                 flag of a reply) on the serial line (out of --read-only mode): they get exception 0x01 now.
+    - fix tools: mbtcp-tcp2rtu no longer sends on the serial line a request that its client session doesn't wait for
+                 anymore (gateway timeout).
+    - fix ModbusServer: request_timeout is a limit for the whole request (MBAP header and PDU) from its first byte, as
+                        documented: the delay restarted for the PDU, a client could hold a session twice as long.
+    - fix ModbusServer: on Windows, the listening port is reserved with SO_EXCLUSIVEADDRUSE instead of SO_REUSEADDR,
+                        which allowed another local socket to bind the same port and take the connections of the
+                        server (port hijacking). No change on the other systems.
+    - improve ModbusServer: add max_connections_per_host (default 16), a single host can no longer take every
+                            connection of max_connections (denial of service).
+
+    Changes:
+
+    - tools: mbtcp-tcp2rtu limits the pending requests of a client host (at most 2, the next ones get exception
+      0x0A). Its refused requests are logged once per 10 s at most (with their count) instead of one line per
+      request. New options --max-connections and --max-connections-per-host for mbtcp-tcp2rtu,
+      --max-connections-per-host for mbtcp-server.
+    - tools: mbtcp-tcp2rtu and mbtcp-rtu2tcp stop cleanly on SIGTERM (systemd, docker stop...), like mbtcp-server.
+    - fix tools: -b 0 made mbtcp-tcp2rtu and mbtcp-rtu2tcp crash (ZeroDivisionError), a negative or "nan" timeout
+                 of mbtcp-tcp2rtu made every request fail, "-a 0" made mbtcp-rtu2tcp a silent slave, "-i inf" made
+                 mbtcp-client crash (OverflowError).
+    - fix utils: valid_host() accepted some non-ASCII chars (like the Kelvin sign "\u212a", taken for a "k" by a
+                 case-insensitive match), the resolver could then raise a UnicodeError at connect time.
+    - fix ModbusClient: a host name that the resolver can't encode (UnicodeError) is a connect error
+                        (MB_CONNECT_ERR), the request raised the exception.
+    - fix ModbusServer: start() no longer leaves the listening socket open when bind() raises something else than
+                        an OSError (like an OverflowError for a port changed to 70000 after the constructor).
+    - fix ModbusServer: a data handler that returns a value that can't be encoded in the response (like a register
+                        value out of 0-65535, or an exception code over 255) gets a SLAVE_DEVICE_FAILURE (0x04)
+                        exception, the session was closed.
+    - typing: type hints use the Python 3.10 syntax (X | None, list[int]...).
+    - build: tools/build_dist.sh -t (install test) ran "python -m pyModbusTCP.cli" (no such module) instead of
+      pyModbusTCP.tools, it also checks the release date of the CHANGES entry and the pre-release pins of the docs.
+    - build: tools/code_audit.sh runs the tools of the venv (python -m, never from the PATH), from any directory,
+      with a summary and an exit status (1 if a check fails), new options -a (with the tests), -s and -o.
+    - tests: type hints on the tests, "mypy --strict tests" passes.
+
+0.4.0a1 2026-10-15 (alpha: the command line tools, their options and output, may still change before 0.4.0)
 
     Breaking changes:
 
@@ -15,9 +80,6 @@ Revision history for pyModbusTCP
                     closed after 5 min (its next request fails once, then the client reconnects), set them to None
                     to get the previous behavior.
     - ModbusServer: start() raises a NetworkError if the server is already running (the call was silently ignored).
-    - ModbusServer: max_connections_per_host (16) is active by default: a client host (an IPv4 address, or a /64
-                    network for IPv6) can't open more connections, the next ones are closed at once. Clients
-                    behind a NAT share the same address: raise it, or set it to None to get the previous behavior.
     - ModbusServer: the internal request handler class ModbusService is replaced by ModbusRequestHandler and
                     CustomThreadingTCPServer, is_run is deprecated (use is_running).
     - examples: client_serial_gw.py and server_serial_gw.py are removed, replaced by the gateways of
@@ -39,14 +101,9 @@ Revision history for pyModbusTCP
     - new package pyModbusTCP.tools: command line tools (Modbus/TCP server and client, TCP to RTU and RTU to TCP
       gateways), run them with "python -m pyModbusTCP.tools {server,client,tcp2rtu,rtu2tcp}". The gateways need
       pyserial, a new optional dependency: "pip install pyModbusTCP[serial]".
-    - tools: mbtcp-tcp2rtu shares the serial line between the client hosts (at most 2 pending requests per host,
-      the next ones get exception 0x0A): a single host can no longer monopolize the line. Its refused requests are
-      logged once per 10 s at most (with their count) instead of one line per request. New options
-      --max-connections and --max-connections-per-host for mbtcp-tcp2rtu, --max-connections-per-host for
-      mbtcp-server.
     - new package pyModbusTCP-cli (directory of the same name, no code): installs the tools as the commands
       mbtcp-server, mbtcp-client, mbtcp-tcp2rtu and mbtcp-rtu2tcp, with pyserial. Install it with
-      "pip install pyModbusTCP[cli]" or "pipx install pyModbusTCP-cli". A plain "pip install pyModbusTCP" puts
+      "pip install pyModbusTCP[tools]" or "pipx install pyModbusTCP-cli". A plain "pip install pyModbusTCP" puts
       no command in the PATH and still has no dependency.
     - build: migrate from setup.py to pyproject.toml, with the hatchling build backend (no MANIFEST.in anymore, tests
       are no longer in the sdist).
@@ -73,20 +130,17 @@ Revision history for pyModbusTCP
     - fix ModbusServer: start() no longer modifies class attributes of socketserver, since ThreadingTCPServer can be
                         shared with the rest of the process.
     - fix ModbusServer: close the listening socket when start() fails to bind.
-    - fix ModbusServer: on Windows, the listening port is reserved with SO_EXCLUSIVEADDRUSE instead of SO_REUSEADDR,
-                        which allowed another local socket to bind the same port and take the connections of the
-                        server (port hijacking). No change on the other systems.
     - fix ModbusServer: make function Write/Read Multiple Registers (0x17) atomic to prevent writing when the read range
                         is out of bounds.
     - fix ModbusServer: ensure Write Single Coil (0x05) complies fully with the Modbus specification.
     - fix ModbusServer: for functions 0x0F, 0x10 and 0x17 the byte count must exactly match the quantity.
     - fix ModbusServer: Read Device Identification (0x2B/0x0E) compliance with the spec (stream access restarts at the
                         first object of the category, an unknown object in individual access gets exception 0x02).
-    - fix ModbusServer: support MBAP header length from 2 to 253.
+    - fix ModbusServer: support MBAP header length from 2 to 254.
     - fix ModbusServer: limit client info to (address, port) for IPv6 peers.
     - fix DataBank: set_coils(), set_discrete_inputs(), set_holding_registers() and set_input_registers() now check
-                    their input. Non-integer items (float, str, None...) raise a TypeError (numpy integers are
-                    accepted), and register values out of the 0-65535 range raise a ValueError.
+                    their input. Non-integer items (float, str, None...) raise a TypeError (numpy integers and
+                    booleans are accepted), and register values out of the 0-65535 range raise a ValueError.
                     Before, they were silently converted (a value like 70000 or -1 was truncated to 16 bits).
     - fix utils: valid_host() returns False for an empty host or a host with a NUL char, it raised an IndexError or a
                  ValueError (so ModbusClient(host='') raised an IndexError instead of a ValueError).
@@ -104,8 +158,6 @@ Revision history for pyModbusTCP
                             Set request_timeout=None to get the previous behavior.
     - improve ModbusServer: add idle_timeout (close a session without any request for this time, default 300 s) and
                             max_connections (reject connections over this limit, default 64), None disables them.
-    - improve ModbusServer: add max_connections_per_host (default 16), a single host can no longer take every
-                            connection of max_connections (denial of service).
     - improve ModbusServer: add allowed_hosts (whitelist of client IP addresses or networks, CIDR notation) and
                             read_only (refuse the write functions 0x05, 0x06, 0x0F, 0x10 and 0x17), see SECURITY.md.
     - improve ModbusServer: increase the listen backlog from 5 to 128, a burst of simultaneous connections (like clients

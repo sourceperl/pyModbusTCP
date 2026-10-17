@@ -1,6 +1,7 @@
 """Tests of the command line tools (pyModbusTCP.tools)."""
 
 import os
+import queue
 import signal
 import socket
 import struct
@@ -293,6 +294,177 @@ def test_tcp2rtu_invalid_allow(capsys: pytest.CaptureFixture[str]) -> None:
     assert 'not an IP address' in capsys.readouterr().err
 
 
+class RecordingSerial(SilentSerial):
+    """A silent serial port that records the frames written on the line."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.written: list[bytes] = []
+
+    def write(self, data: bytes) -> int:
+        self.written.append(bytes(data))
+        return len(data)
+
+
+def raw_request(port: int, pdu: bytes, unit_id: int = 1) -> bytes:
+    """Send a raw request PDU to a Modbus/TCP server, return the response PDU."""
+    with socket.create_connection(('127.0.0.1', port), timeout=5) as sock:
+        sock.sendall(struct.pack('>HHHB', 1, 0, len(pdu) + 1, unit_id) + pdu)
+        resp = b''
+        while len(resp) < 7 or len(resp) < 6 + struct.unpack('>H', resp[4:6])[0]:
+            chunk = sock.recv(260)
+            if not chunk:
+                break
+            resp += chunk
+        return resp[7:]
+
+
+@pytest.mark.parametrize('read_only', [False, True])
+def test_tcp2rtu_invalid_function_codes(read_only: bool) -> None:
+    """A function code 0 or with the exception flag (0x80 to 0xFF) is never written on the bus: exception 0x01."""
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import tcp_to_rtu_gw
+    serial_port = RecordingSerial()
+    worker = tcp_to_rtu_gw.ModbusSerialWorker(serial_port, timeout=0.1, read_only=read_only)  # type: ignore[arg-type]
+    thread = threading.Thread(target=worker.loop, daemon=True)
+    thread.start()
+    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, ext_engine=worker.srv_engine_entry)
+    _, tcp_port = srv.start()
+    try:
+        for pdu in (b'\x00', b'\x81\x00\x00\x00\x01', b'\x83\x00\x00\x00\x01', b'\xff'):
+            assert raw_request(tcp_port, pdu) == bytes([pdu[0] | 0x80, 0x01]), pdu.hex()
+        assert serial_port.written == []
+        # a valid read request still reaches the line (no answer from the slave: exception 0x0B)
+        assert raw_request(tcp_port, b'\x03\x00\x00\x00\x01') == b'\x83\x0b'
+        assert len(serial_port.written) == 1
+    finally:
+        worker.stop()
+        srv.stop()
+        thread.join(5.0)
+
+
+def test_tcp2rtu_fair_queue_round_robin() -> None:
+    """The requests are served in turn by client host, each host in the order of its requests."""
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import tcp_to_rtu_gw
+    q = tcp_to_rtu_gw.FairQueue(maxsize=8)
+    queries = {}
+    for name in ('a1', 'a2', 'a3', 'b1', 'c1', 'b2'):
+        queries[name] = tcp_to_rtu_gw.RtuQuery(host=name[0])
+        q.put(queries[name])
+    assert q.qsize() == 6
+    order = [q.get(timeout=0) for _ in range(6)]
+    assert order == [queries[n] for n in ('a1', 'b1', 'c1', 'a2', 'b2', 'a3')]
+    with pytest.raises(queue.Empty):
+        q.get_nowait()
+    for _ in range(8):
+        q.put(tcp_to_rtu_gw.RtuQuery(host='x'))
+    with pytest.raises(queue.Full):
+        q.put(tcp_to_rtu_gw.RtuQuery(host='y'))
+
+
+def test_tcp2rtu_fair_share_between_several_flooding_hosts() -> None:
+    """Several hosts that flood the gateway can't take every turn of the serial line: the requests of another host
+    still reach it (the slave doesn't answer: exception 0x0B, never 0x0A "gateway path unavailable")."""
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import tcp_to_rtu_gw
+    worker = tcp_to_rtu_gw.ModbusSerialWorker(SilentSerial(), timeout=0.2)  # type: ignore[arg-type]
+    thread = threading.Thread(target=worker.loop, daemon=True)
+    thread.start()
+    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, ext_engine=worker.srv_engine_entry)
+    _, tcp_port = srv.start()
+    stop = threading.Event()
+    request = struct.pack('>HHHBBHH', 1, 0, 6, 1, 0x03, 0, 1)
+
+    def flood(sock: socket.socket) -> None:
+        sock.settimeout(10)
+        try:
+            while not stop.is_set():
+                sock.sendall(request)
+                if len(sock.recv(64)) < 9:
+                    return
+        except OSError:
+            return
+
+    flood_socks: list[socket.socket] = []
+    threads: list[threading.Thread] = []
+    try:
+        # 4 flooding hosts with 4 connections each: they could fill a plain FIFO of the size of the queue
+        flood_socks = [connect_from(f'127.0.0.{i}', tcp_port) for i in (2, 3, 4, 5) for _ in range(4)]
+        threads = [threading.Thread(target=flood, args=(sock,), daemon=True) for sock in flood_socks]
+        for t in threads:
+            t.start()
+        time.sleep(0.5)
+        # 1 turn of each flooding host (0.2 s each) before the request of 127.0.0.1, at most
+        c = ModbusClient(host='127.0.0.1', port=tcp_port, timeout=5.0)
+        for _ in range(3):
+            assert c.read_holding_registers(0, 1) is None
+            assert c.last_except == 0x0B
+        c.close()
+    finally:
+        stop.set()
+        for t in threads:
+            t.join(10.0)
+        for sock in flood_socks:
+            sock.close()
+        worker.stop()
+        srv.stop()
+        thread.join(5.0)
+
+
+def test_tcp2rtu_cancelled_request_is_not_sent() -> None:
+    """A request that nobody waits for anymore (session timeout) never holds the serial line."""
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import tcp_to_rtu_gw
+    serial_port = RecordingSerial()
+    worker = tcp_to_rtu_gw.ModbusSerialWorker(serial_port, timeout=0.1)  # type: ignore[arg-type]
+    query = tcp_to_rtu_gw.RtuQuery(host='h')
+    query.request.build(raw_pdu=b'\x03\x00\x00\x00\x01', slave_ad=1)
+    query.cancelled = True
+    worker.rtu_queries_q.put(query)
+    thread = threading.Thread(target=worker.loop, daemon=True)
+    thread.start()
+    try:
+        assert query.completed.wait(5.0)
+        assert serial_port.written == []
+    finally:
+        worker.stop()
+        thread.join(5.0)
+
+
+@pytest.mark.parametrize('tool, args, error', [
+    ('tcp_to_rtu_gw', ['-b', '0'], '-b/--baudrate'),
+    ('tcp_to_rtu_gw', ['-t', '-1'], '-t/--timeout'),
+    ('tcp_to_rtu_gw', ['-t', 'nan'], '-t/--timeout'),
+    ('tcp_to_rtu_gw', ['-e', '0'], '-e/--eof'),
+    ('rtu_to_tcp_gw', ['-b', '-9600'], '-b/--baudrate'),
+    ('rtu_to_tcp_gw', ['-a', '0'], '-a/--address'),
+    ('rtu_to_tcp_gw', ['-a', '248'], '-a/--address'),
+    ('rtu_to_tcp_gw', ['-e', 'inf'], '-e/--eof'),
+    ('rtu_to_tcp_gw', ['-t', '0'], '-t/--timeout'),
+])
+def test_gateway_invalid_args(tool: str, args: list[str], error: str, capsys: pytest.CaptureFixture[str]) -> None:
+    """Invalid serial settings are refused at startup (they made the gateway crash, or fail at each request)."""
+    pytest.importorskip('serial')
+    import importlib
+    module = importlib.import_module('pyModbusTCP.tools.' + tool)
+    with pytest.raises(SystemExit) as exc:
+        module.main(args + ['/dev/null'])
+    assert exc.value.code == 2
+    assert error in capsys.readouterr().err
+
+
+def test_gateway_api_checks() -> None:
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import rtu_to_tcp_gw, tcp_to_rtu_gw
+    for t35 in (rtu_to_tcp_gw.t35, tcp_to_rtu_gw.t35):
+        with pytest.raises(ValueError):
+            t35(0, 8, 'N', 1)
+    for address in (0, 248, 255):
+        with pytest.raises(ValueError):
+            rtu_to_tcp_gw.SerialModbusWorker(SilentSerial(), ModbusClient(), slave_addr=address)  # type: ignore
+
+
 # --- mbtcp-rtu2tcp ---
 
 def rtu_frame(slave: int, pdu: bytes) -> bytes:
@@ -371,6 +543,61 @@ def test_dispatcher_usage() -> None:
                               capture_output=True, text=True, timeout=30)
         assert proc.returncode == status, args
         assert 'usage: python -m pyModbusTCP.tools' in proc.stdout + proc.stderr
+
+
+def test_argparse_types() -> None:
+    import argparse
+
+    from pyModbusTCP.tools import _common
+    assert _common.positive_float('0.5') == 0.5
+    assert _common.positive_float('86400') == 86400.0
+    for bad in ('0', '-1', 'nan', 'inf', '-inf', '1e300', '86401', 'abc'):
+        with pytest.raises(argparse.ArgumentTypeError):
+            _common.positive_float(bad)
+    assert _common.positive_int('9600') == 9600
+    for bad in ('0', '-1', '1.5', 'x'):
+        with pytest.raises(argparse.ArgumentTypeError):
+            _common.positive_int(bad)
+    assert [_common.slave_address(v) for v in ('1', '247', '0x1e')] == [1, 247, 30]
+    for bad in ('0', '248', '-1', 'x'):
+        with pytest.raises(argparse.ArgumentTypeError):
+            _common.slave_address(bad)
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='SIGTERM is not a catchable signal on Windows')
+def test_stop_on_sigterm() -> None:
+    """SIGTERM calls the stop function in the block, the previous handler is restored at the end."""
+    import logging
+
+    from pyModbusTCP.tools._common import stop_on_sigterm
+    previous = signal.getsignal(signal.SIGTERM)
+    stopped = threading.Event()
+    with stop_on_sigterm(stopped.set, logging.getLogger('test')):
+        os.kill(os.getpid(), signal.SIGTERM)
+        assert stopped.wait(5.0)
+    assert signal.getsignal(signal.SIGTERM) == previous
+    # from a thread other than the main one: nothing is changed (no ValueError)
+    result: list[object] = []
+
+    def in_thread() -> None:
+        with stop_on_sigterm(stopped.set, logging.getLogger('test')):
+            result.append(signal.getsignal(signal.SIGTERM))
+
+    t = threading.Thread(target=in_thread)
+    t.start()
+    t.join(5.0)
+    assert result == [previous]
+
+
+@pytest.mark.parametrize('extra_args, status', [([], 130), (['-i', '1'], 0)])
+def test_client_ctrl_c_status(extra_args: list[str], status: int, capsys: pytest.CaptureFixture[str],
+                              monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ctrl-C ends a repeated read normally (0), but a single interrupted request is a failure (130)."""
+    def interrupted(*_args: object) -> bool:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli_tool, 'run_command', interrupted)
+    assert run_client(capsys, ['read-holding', '0'] + extra_args)[0] == status
 
 
 @pytest.mark.parametrize('command', ['tcp2rtu', 'rtu2tcp'])

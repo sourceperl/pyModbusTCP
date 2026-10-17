@@ -34,11 +34,12 @@ HOW A REQUEST IS PROCESSED
 ERRORS SEEN BY THE TCP CLIENT
 -----------------------------
 - Request refused by the gateway filters (see ACCESS CONTROL): Modbus exception
-  0x01 "Illegal Function" (--read-only) or 0x0A "Gateway Path Unavailable"
-  (unit id 0 without --allow-broadcast, or reserved unit id 248 to 255).
+  0x01 "Illegal Function" (--read-only, or an invalid function code: 0 or 0x80
+  to 0xFF) or 0x0A "Gateway Path Unavailable" (unit id 0 without
+  --allow-broadcast, or reserved unit id 248 to 255).
 - No valid answer from the slave before the timeout (-t): Modbus exception
   0x0B "Gateway Target Device Failed To Respond".
-- More than 5 requests waiting, more than 2 requests waiting from the same
+- More than 16 requests waiting, more than 2 requests waiting from the same
   client host, or serial worker unavailable: Modbus exception 0x0A "Gateway
   Path Unavailable".
 
@@ -49,8 +50,8 @@ gateway does NOT stop: the TCP server stays up, requests get exception 0x0B
 while the port is down, and the port is reopened automatically (one attempt
 per second, on incoming requests) as soon as the device is back.
 The port must however be openable at startup, otherwise the gateway exits.
-Exit codes: 0 normal stop (Ctrl-C), 1 serial port cannot be opened at startup,
-2 Modbus server error.
+Exit codes: 0 normal stop (Ctrl-C or SIGTERM), 1 serial port cannot be opened at
+startup, 2 Modbus server error or invalid parameter.
 
 ACCESS CONTROL
 --------------
@@ -63,6 +64,8 @@ an "external engine" of ModbusServer), so it applies its own filters:
   networks (like -A 192.168.1.10 -A 10.0.0.0/24), others are disconnected.
 - --read-only only relays the read functions (0x01 to 0x04 and read device
   identification 0x2B/0x0E), every other function gets exception 0x01.
+- A request with an invalid function code (0, or 0x80 to 0xFF: the exception
+  flag of a reply) is never written on the bus: exception 0x01.
 - Broadcast requests (unit id 0) are a write to every slave of the bus: they
   are refused unless --allow-broadcast is set (and refused with --read-only).
   Unit ids 248 to 255 are reserved on a serial line and always refused.
@@ -70,13 +73,17 @@ an "external engine" of ModbusServer), so it applies its own filters:
 FAIR SHARE OF THE SERIAL LINE
 -----------------------------
 The serial line serves one request at a time, and a request to a slave that
-doesn't answer holds it for the whole timeout (-t). So a single client host
-can't monopolize it:
-- a client host has at most 2 requests waiting for the serial line (an IPv4
-  address, or a /64 network for IPv6), its next ones get exception 0x0A at
-  once, the requests of other hosts still reach the line;
+doesn't answer holds it for the whole timeout (-t). So no client host can
+monopolize it, nor a few of them:
+- the waiting requests are served in turn by client host (an IPv4 address, or
+  a /64 network for IPv6, round robin): a request waits for at most one request
+  of each other host, however many requests they send;
+- a client host has at most 2 requests waiting for the serial line, its next
+  ones get exception 0x0A at once;
 - --max-connections-per-host limits its number of TCP connections (default
   16), --max-connections the total (default 64).
+With N hosts that send requests at the same time, each one gets 1/N of the
+serial line: a client timeout must be long enough for N requests.
 Refused requests are logged once, then once per 10 s at most (with their
 count), so a request flood can't flood the log.
 
@@ -117,8 +124,8 @@ import queue
 import struct
 import sys
 import time
-from queue import Queue
-from threading import Event, Lock
+from collections import deque
+from threading import Condition, Event, Lock
 
 from ._common import (
     PORT_502_HELP,
@@ -126,6 +133,9 @@ from ._common import (
     add_version_arg,
     ip_or_network,
     is_permission_error,
+    positive_float,
+    positive_int,
+    stop_on_sigterm,
     tcp_port,
 )
 
@@ -169,10 +179,9 @@ logger = logging.getLogger("mbtcp-tcp2rtu")
 RECONNECT_DELAY = 1.0
 # max size of a modbus RTU frame (spec)
 MAX_RTU_FRAME = 256
-# pending requests accepted before "gateway overloaded" exception is returned
-QUEUE_SIZE = 5
-# pending requests (waiting for the serial line or in progress) of a single client host: a host can't take every
-# place of the queue, the requests of the other hosts still reach the serial line
+# requests waiting for the serial line, of all the client hosts, before the "gateway overloaded" exception is returned
+QUEUE_SIZE = 16
+# pending requests (waiting for the serial line or in progress) of a single client host: a host can't fill the queue
 MAX_PENDING_PER_HOST = 2
 # lower bound for the end-of-frame delay: USB-serial adapters add latency
 # (e.g. FTDI latency timer), so the theoretical 3.5 char time is too short
@@ -193,6 +202,8 @@ def hexdump(data: bytes) -> str:
 
 def t35(baudrate: int, bytesize: int, parity: str, stopbits: float) -> float:
     """Return the modbus RTU inter-frame silent interval (3.5 chars) in seconds."""
+    if baudrate <= 0:
+        raise ValueError(f'invalid baud rate: {baudrate}')
     if baudrate > 19200:
         # fixed value recommended by the modbus serial line spec
         return 0.00175
@@ -260,10 +271,67 @@ class ModbusRTUFrame:
 class RtuQuery:
     """Request container to deal with modbus serial worker."""
 
-    def __init__(self) -> None:
+    def __init__(self, host: str = '') -> None:
+        # client host of the request (see host_key()): the serial line is shared in turn between the hosts
+        self.host = host
         self.completed = Event()
+        # set when the client session stopped waiting: the worker skips the request (the line is not used for it)
+        self.cancelled = False
         self.request = ModbusRTUFrame()
         self.response = ModbusRTUFrame()
+
+
+class FairQueue:
+    """Queue of the requests waiting for the serial line, served in turn by client host (round robin).
+
+    Each host has its own FIFO, and get() takes one request of each host in turn: a request waits for at most one
+    request of each other host, however many requests they send. With a single FIFO, a few hosts could fill it and
+    get every turn of the serial line. Thread-safe.
+    """
+
+    def __init__(self, maxsize: int) -> None:
+        self.maxsize = maxsize
+        # host -> its waiting requests (dict order: the order of the hosts for the next turns)
+        self._queues: dict[str, deque[RtuQuery]] = {}
+        self._size = 0
+        self._cond = Condition()
+
+    def qsize(self) -> int:
+        with self._cond:
+            return self._size
+
+    def put(self, query: RtuQuery) -> None:
+        """Add a request (never blocks).
+
+        :raises queue.Full: if maxsize requests are already waiting
+        """
+        with self._cond:
+            if self._size >= self.maxsize:
+                raise queue.Full
+            self._queues.setdefault(query.host, deque()).append(query)
+            self._size += 1
+            self._cond.notify()
+
+    def get(self, timeout: float | None = None) -> RtuQuery:
+        """Return the next request: the oldest one of the next host in turn.
+
+        :param timeout: max time to wait for a request (None: wait forever, 0: don't wait)
+        :raises queue.Empty: if there is no request (after timeout)
+        """
+        with self._cond:
+            if not self._cond.wait_for(lambda: self._size > 0, timeout=timeout):
+                raise queue.Empty
+            # first host of the turn: take its oldest request, and put it at the end of the turn if it has others
+            host = next(iter(self._queues))
+            host_queue = self._queues.pop(host)
+            query = host_queue.popleft()
+            if host_queue:
+                self._queues[host] = host_queue
+            self._size -= 1
+            return query
+
+    def get_nowait(self) -> RtuQuery:
+        return self.get(timeout=0)
 
 
 class ModbusSerialWorker:
@@ -283,9 +351,9 @@ class ModbusSerialWorker:
         if end_of_frame is None:
             end_of_frame = max(self.interframe_delay, MIN_EOF_DELAY)
         self.end_of_frame = end_of_frame
-        # internal request queue
-        # accept QUEUE_SIZE simultaneous requests before overloaded exception is return
-        self.rtu_queries_q: Queue[RtuQuery] = Queue(maxsize=QUEUE_SIZE)
+        # internal request queue: the hosts are served in turn (round robin), QUEUE_SIZE waiting requests at most
+        # before the overloaded exception is returned
+        self.rtu_queries_q = FairQueue(maxsize=QUEUE_SIZE)
         # pending requests of each client host (see host_key()) and its lock (session threads)
         self._host_pending: dict[str, int] = {}
         self._host_pending_lock = Lock()
@@ -375,6 +443,10 @@ class ModbusSerialWorker:
                 rtu_query = self.rtu_queries_q.get(timeout=0.5)
             except queue.Empty:
                 continue
+            if rtu_query.cancelled:
+                # nobody waits for its answer anymore: don't hold the serial line for it
+                rtu_query.completed.set()
+                continue
             try:
                 if self._ensure_port_open():
                     rtu_query.response.raw = self._transaction(rtu_query.request.raw)
@@ -395,7 +467,6 @@ class ModbusSerialWorker:
             finally:
                 # mark all as done (always, or the TCP client thread would hang)
                 rtu_query.completed.set()
-                self.rtu_queries_q.task_done()
         # on exit, release anyone still waiting
         self._drain_queue()
 
@@ -406,7 +477,6 @@ class ModbusSerialWorker:
             except queue.Empty:
                 return
             rtu_query.completed.set()
-            self.rtu_queries_q.task_done()
 
     def is_allowed(self, unit_id: int, pdu: bytes) -> int:
         """Apply the gateway filters to a request.
@@ -415,6 +485,12 @@ class ModbusSerialWorker:
         :param pdu: request PDU (at least the function code)
         :return: 0 if the request can be relayed, else the modbus exception code to return
         """
+        # function codes are 1 to 127: a code with the exception flag (0x80 to 0xFF) or 0 is not a request, it is
+        # never written on the bus (a slave may take it for the reply of another one, and it holds the line until
+        # the timeout)
+        func_code = pdu[0]
+        if not 0x01 <= func_code <= 0x7F:
+            return EXP_ILLEGAL_FUNCTION
         # broadcast: a write to every slave of the bus (never allowed in read-only mode)
         if unit_id == BROADCAST_ADDRESS and (self.read_only or not self.allow_broadcast):
             return EXP_GATEWAY_PATH_UNAVAILABLE
@@ -422,7 +498,6 @@ class ModbusSerialWorker:
         if unit_id > MAX_SLAVE_ADDRESS:
             return EXP_GATEWAY_PATH_UNAVAILABLE
         if self.read_only:
-            func_code = pdu[0]
             if func_code not in READ_ONLY_FUNCTIONS:
                 return EXP_ILLEGAL_FUNCTION
             # 0x2B: other MEI types (like CANopen general reference 0x0D) can write
@@ -456,7 +531,7 @@ class ModbusSerialWorker:
             session_data.response.pdu.build_except(func_code=func_code, exp_status=EXP_GATEWAY_PATH_UNAVAILABLE)
             return
         try:
-            exp_status = self._relay(session_data)
+            exp_status = self._relay(session_data, host)
         finally:
             self._release_host_slot(host)
         if exp_status:
@@ -479,18 +554,19 @@ class ModbusSerialWorker:
             else:
                 self._host_pending.pop(host, None)
 
-    def _relay(self, session_data: ModbusServer.SessionData) -> int:
+    def _relay(self, session_data: ModbusServer.SessionData, host: str = '') -> int:
         """Relay the request to the serial line, set the response PDU.
 
+        :param host: client host of the request (see host_key()), the serial line is shared in turn between hosts
         :return: 0 if the response PDU is set, else the modbus exception code to return
         """
         # init a serial exchange from session data
-        rtu_query = RtuQuery()
+        rtu_query = RtuQuery(host)
         rtu_query.request.build(raw_pdu=session_data.request.pdu.raw,
                                 slave_ad=session_data.request.mbap.unit_id)
         try:
             # add a request in the serial worker queue, can raise queue.Full
-            self.rtu_queries_q.put(rtu_query, block=False)
+            self.rtu_queries_q.put(rtu_query)
         except queue.Full:
             # overloaded gateway
             self._overloaded_log.event('Gateway overloaded: %d request(s) rejected (queue full, last from %s)',
@@ -499,6 +575,8 @@ class ModbusSerialWorker:
         # wait result (bounded: worst case every queued request times out)
         wait_max = (QUEUE_SIZE + 1) * (self.timeout + self.end_of_frame) + 1.0
         if not rtu_query.completed.wait(timeout=wait_max):
+            # the worker must not use the serial line for a request that nobody waits for
+            rtu_query.cancelled = True
             logger.error('Serial worker not responding (unit %d)', rtu_query.request.slave_address)
             return EXP_GATEWAY_PATH_UNAVAILABLE
         # check receive frame status
@@ -528,12 +606,12 @@ def main(argv: list[str] | None = None) -> int:
                         help='max number of simultaneous connections of a client host (default: 16)')
     parser.add_argument('--allow-broadcast', action='store_true',
                         help='relay broadcast requests (unit id 0) to every slave')
-    parser.add_argument('-b', '--baudrate', type=int, default=9600, help='serial rate (default: 9600)')
+    parser.add_argument('-b', '--baudrate', type=positive_int, default=9600, help='serial rate (default: 9600)')
     parser.add_argument('--bytesize', type=int, choices=(7, 8), default=8, help='data bits (default: 8)')
     parser.add_argument('--parity', choices=('N', 'E', 'O'), default='N', help='parity (default: N)')
     parser.add_argument('--stopbits', type=float, choices=(1, 1.5, 2), default=1, help='stop bits (default: 1)')
-    parser.add_argument('-t', '--timeout', type=float, default=1.0, help='serial timeout in s (default: 1.0)')
-    parser.add_argument('-e', '--eof', type=float, default=None,
+    parser.add_argument('-t', '--timeout', type=positive_float, default=1.0, help='serial timeout in s (default: 1.0)')
+    parser.add_argument('-e', '--eof', type=positive_float, default=None,
                         help='serial end of frame delay in s (default: computed from baudrate, '
                              f'min {MIN_EOF_DELAY:.3f} s)')
     parser.add_argument('-d', '--debug', action='store_true', help='debug mode')
@@ -574,9 +652,10 @@ def main(argv: list[str] | None = None) -> int:
             logger.info('Read-only mode: only read functions are relayed')
         srv.start()
 
-        # start serial worker loop
+        # start serial worker loop (until Ctrl-C or SIGTERM)
         logger.info('Start serial worker')
-        serial_worker.loop()
+        with stop_on_sigterm(serial_worker.stop, logger):
+            serial_worker.loop()
         return 0
 
     except serialutil.SerialException as e:

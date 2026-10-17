@@ -6,10 +6,12 @@ import struct
 import threading
 import time
 import unittest
+from collections.abc import Callable
 from typing import Any
 from unittest import mock
 
-from pyModbusTCP.client import ModbusClient, _decode_regs
+from pyModbusTCP.client import ModbusClient
+from pyModbusTCP.client._functions import _decode_regs
 from pyModbusTCP.constants import (
     EXP_DATA_ADDRESS,
     EXP_NONE,
@@ -25,7 +27,7 @@ from pyModbusTCP.utils import _unpack_bits, set_bit
 class TestModbusClient(unittest.TestCase):
     """ ModbusClient tests class. """
 
-    def test_host(self):
+    def test_host(self) -> None:
         """Test of host property."""
         # default value
         self.assertEqual(ModbusClient().host, 'localhost')
@@ -43,7 +45,7 @@ class TestModbusClient(unittest.TestCase):
         except ValueError:
             self.fail('ModbusClient.host property raised ValueError unexpectedly')
 
-    def test_port(self):
+    def test_port(self) -> None:
         """Test of port property."""
         # default value
         self.assertEqual(ModbusClient().port, 502)
@@ -56,7 +58,7 @@ class TestModbusClient(unittest.TestCase):
         except ValueError:
             self.fail('ModbusClient.port property raised ValueError unexpectedly')
 
-    def test_unit_id(self):
+    def test_unit_id(self) -> None:
         """Test of unit_id property."""
         # default value
         self.assertEqual(ModbusClient().unit_id, 1)
@@ -70,7 +72,7 @@ class TestModbusClient(unittest.TestCase):
         except ValueError:
             self.fail('ModbusClient.unit_id property raised ValueError unexpectedly')
 
-    def test_timeout(self):
+    def test_timeout(self) -> None:
         """Test of timeout property."""
         # default value
         self.assertEqual(ModbusClient().timeout, 30.0)
@@ -88,7 +90,7 @@ class TestModbusClient(unittest.TestCase):
             with self.assertRaises(ValueError):
                 ModbusClient(timeout=bad_value)
 
-    def test_bool_is_not_an_int_param(self):
+    def test_bool_is_not_an_int_param(self) -> None:
         """A bool is not accepted where a number is expected (port=True would silently be port 1)."""
         self.assertRaises(TypeError, ModbusClient, port=True)
         self.assertRaises(TypeError, ModbusClient, unit_id=False)
@@ -99,19 +101,19 @@ class TestModbusClient(unittest.TestCase):
         with self.assertRaises(TypeError):
             c.unit_id = True
 
-    def test_misc(self):
+    def test_misc(self) -> None:
         """Check of misc default values."""
         self.assertEqual(ModbusClient().auto_open, True)
         self.assertEqual(ModbusClient().auto_close, False)
 
-    def test_is_open(self):
+    def test_is_open(self) -> None:
         """Test of is_open property (no connection: must be closed)."""
         c = ModbusClient()
         self.assertFalse(c.is_open)
         c.close()
         self.assertFalse(c.is_open)
 
-    def test_context_manager(self):
+    def test_context_manager(self) -> None:
         """The with statement closes the connection on exit (also on an exception)."""
         port = self._start_fake_server(lambda req: req[:2] + b'\x00\x00\x00\x05\x01\x03\x02\x00\x2a')
         with ModbusClient('127.0.0.1', port, timeout=2.0) as c:
@@ -123,26 +125,27 @@ class TestModbusClient(unittest.TestCase):
             raise RuntimeError('boom')
         self.assertFalse(c2.is_open)
 
-    def test_params_type_check(self):
+    def test_params_type_check(self) -> None:
         """Non-integer params must raise TypeError (not struct.error), bad ranges ValueError."""
         c = ModbusClient()
-        calls = [lambda v: c.read_coils(v, 1),
-                 lambda v: c.read_coils(0, v),
-                 lambda v: c.read_discrete_inputs(v, 1),
-                 lambda v: c.read_holding_registers(v, 1),
-                 lambda v: c.read_holding_registers(0, v),
-                 lambda v: c.read_input_registers(v, 1),
-                 lambda v: c.read_device_identification(v),
-                 lambda v: c.read_device_identification(1, v),
-                 lambda v: c.write_single_coil(v, True),
-                 lambda v: c.write_single_register(v, 0),
-                 lambda v: c.write_single_register(0, v),
-                 lambda v: c.write_multiple_coils(v, [True]),
-                 lambda v: c.write_multiple_registers(v, [0]),
-                 lambda v: c.write_multiple_registers(0, [v]),
-                 lambda v: c.write_read_multiple_registers(v, [0], 0),
-                 lambda v: c.write_read_multiple_registers(0, [v], 0),
-                 lambda v: c.write_read_multiple_registers(0, [0], v)]
+        calls: list[Callable[[Any], object]] = [
+            lambda v: c.read_coils(v, 1),
+            lambda v: c.read_coils(0, v),
+            lambda v: c.read_discrete_inputs(v, 1),
+            lambda v: c.read_holding_registers(v, 1),
+            lambda v: c.read_holding_registers(0, v),
+            lambda v: c.read_input_registers(v, 1),
+            lambda v: c.read_device_identification(v),
+            lambda v: c.read_device_identification(1, v),
+            lambda v: c.write_single_coil(v, True),
+            lambda v: c.write_single_register(v, 0),
+            lambda v: c.write_single_register(0, v),
+            lambda v: c.write_multiple_coils(v, [True]),
+            lambda v: c.write_multiple_registers(v, [0]),
+            lambda v: c.write_multiple_registers(0, [v]),
+            lambda v: c.write_read_multiple_registers(v, [0], 0),
+            lambda v: c.write_read_multiple_registers(0, [v], 0),
+            lambda v: c.write_read_multiple_registers(0, [0], v)]
         for call in calls:
             for bad_value in (1.0, '1', None):
                 with self.assertRaises(TypeError):
@@ -157,7 +160,7 @@ class TestModbusClient(unittest.TestCase):
         self.assertRaises(ValueError, c.write_multiple_coils, 0, [])
         self.assertRaises(ValueError, c.write_read_multiple_registers, 0, [], 0)
 
-    def test_custom_request_params(self):
+    def test_custom_request_params(self) -> None:
         """custom_request() rejects a PDU that can't be a modbus request (before any network I/O)."""
         c = ModbusClient()
         with mock.patch.object(c, '_req_pdu', side_effect=AssertionError('no request expected')):
@@ -177,7 +180,7 @@ class TestModbusClient(unittest.TestCase):
             for call in req_pdu.call_args_list:
                 self.assertIs(type(call.args[0]), bytes)
 
-    def test_transaction_id(self):
+    def test_transaction_id(self) -> None:
         """The MBAP transaction ID is a 16 bits counter: two consecutive requests never have the same ID."""
         c = ModbusClient()
         start = c._transaction_id
@@ -189,7 +192,7 @@ class TestModbusClient(unittest.TestCase):
         tids = [struct.unpack('>H', c._add_mbap(b'\x03\x00\x00\x00\x01')[:2])[0] for _ in range(3)]
         self.assertEqual(tids, [0xffff, 0x0000, 0x0001])
 
-    def test_decode_helpers(self):
+    def test_decode_helpers(self) -> None:
         """Compare bits/regs decoding helpers with a naive reference implementation."""
         rnd = random.Random(42)
         for nb in list(range(1, 40)) + [125, 1999, 2000]:
@@ -202,7 +205,7 @@ class TestModbusClient(unittest.TestCase):
             ref_regs = [raw[2 * i] << 8 | raw[2 * i + 1] for i in range(nb)]
             self.assertEqual(_decode_regs(raw, nb), ref_regs)
 
-    def test_host_resolution_error(self):
+    def test_host_resolution_error(self) -> None:
         """A name resolution failure must be reported like any connect error (no socket.gaierror raised)."""
         c = ModbusClient('localhost', 502, auto_open=True)
         with mock.patch('socket.getaddrinfo', side_effect=socket.gaierror(-2, 'Name or service not known')):
@@ -212,7 +215,18 @@ class TestModbusClient(unittest.TestCase):
             self.assertEqual(c.last_error, MB_CONNECT_ERR)
             self.assertFalse(c.is_open)
 
-    def test_open_resets_last_error(self):
+    def test_host_idna_encode_error(self) -> None:
+        """A name that the IDNA codec can't encode (UnicodeError) is a connect error too, never an exception."""
+        c = ModbusClient('localhost', 502, auto_open=True)
+        with mock.patch('socket.getaddrinfo', side_effect=UnicodeError('label too long')):
+            self.assertFalse(c.open())
+            self.assertEqual(c.last_error, MB_CONNECT_ERR)
+            self.assertIsNone(c.read_holding_registers(0))
+            self.assertEqual(c.last_error, MB_CONNECT_ERR)
+            self.assertFalse(c.write_single_coil(0, True))
+            self.assertEqual(c.last_error, MB_CONNECT_ERR)
+
+    def test_open_resets_last_error(self) -> None:
         """A successful open() clears the error of a previous failed open()."""
         port = self._start_fake_server(lambda req: b'')
         c = ModbusClient('127.0.0.1', port, timeout=2.0)
@@ -223,7 +237,7 @@ class TestModbusClient(unittest.TestCase):
         self.assertTrue(c.open())
         self.assertEqual(c.last_error, MB_NO_ERR)
 
-    def _start_fake_server(self, make_response):
+    def _start_fake_server(self, make_response: Callable[[bytes], bytes]) -> int:
         """Start a one-shot fake modbus server: one connection, one request, make_response(request) is sent back.
 
         :returns: the TCP port of the server
@@ -233,7 +247,7 @@ class TestModbusClient(unittest.TestCase):
         listener.bind(('127.0.0.1', 0))
         listener.listen()
 
-        def serve():
+        def serve() -> None:
             try:
                 conn, _ = listener.accept()
             except OSError:
@@ -252,16 +266,17 @@ class TestModbusClient(unittest.TestCase):
         thread = threading.Thread(target=serve, daemon=True)
         thread.start()
         self.addCleanup(thread.join, 5.0)
-        return listener.getsockname()[1]
+        port: int = listener.getsockname()[1]
+        return port
 
-    def _start_slow_server(self, byte_delay):
+    def _start_slow_server(self, byte_delay: float) -> int:
         """Start a fake modbus server which answers "read 1 holding register" (value 42) one byte at a time."""
         listener = socket.socket()
         self.addCleanup(listener.close)
         listener.bind(('127.0.0.1', 0))
         listener.listen()
 
-        def serve():
+        def serve() -> None:
             try:
                 conn, _ = listener.accept()
             except OSError:
@@ -279,9 +294,10 @@ class TestModbusClient(unittest.TestCase):
         thread = threading.Thread(target=serve, daemon=True)
         thread.start()
         self.addCleanup(thread.join, 5.0)
-        return listener.getsockname()[1]
+        port: int = listener.getsockname()[1]
+        return port
 
-    def test_timeout_is_for_the_whole_request(self):
+    def test_timeout_is_for_the_whole_request(self) -> None:
         """A server that sends its response byte by byte must not hold the client longer than timeout."""
         port = self._start_slow_server(byte_delay=0.2)  # 11 bytes: 2.2 s for the complete response
         c = ModbusClient('127.0.0.1', port, timeout=0.5)
@@ -293,14 +309,14 @@ class TestModbusClient(unittest.TestCase):
         self.assertFalse(c.is_open)
         self.assertLess(elapsed, 1.5, 'timeout is applied to each recv() instead of the whole request')
 
-    def test_split_response_within_timeout(self):
+    def test_split_response_within_timeout(self) -> None:
         """A response split in many TCP segments is still accepted if the whole request fit in timeout."""
         port = self._start_slow_server(byte_delay=0.02)  # 0.22 s for the complete response
         c = ModbusClient('127.0.0.1', port, timeout=2.0)
         self.addCleanup(c.close)
         self.assertEqual(c.read_holding_registers(0, 1), [42])
 
-    def test_reply_function_code_mismatch(self):
+    def test_reply_function_code_mismatch(self) -> None:
         """A reply with another function code than the request is an error, even an exception reply."""
         replies = {
             # a valid "read input registers" reply to a "read holding registers" request
@@ -310,26 +326,29 @@ class TestModbusClient(unittest.TestCase):
         }
         for name, reply in replies.items():
             with self.subTest(name):
-                port = self._start_fake_server(lambda req, reply=reply: req[:2] + reply)
+                def make_response(req: bytes, reply: bytes = reply) -> bytes:
+                    return req[:2] + reply
+                port = self._start_fake_server(make_response)
                 c = ModbusClient('127.0.0.1', port, timeout=2.0)
                 self.addCleanup(c.close)
                 self.assertIsNone(c.read_holding_registers(0))
                 self.assertEqual(c.last_error, MB_RECV_ERR)
                 self.assertEqual(c.last_except, EXP_NONE)
 
-    def test_mbap_length_out_of_range(self):
+    def test_mbap_length_out_of_range(self) -> None:
         """An MBAP length field out of the modbus range (2 to 254) is an error and closes the connection."""
         for length in (0, 1, 255, 0xffff):
             with self.subTest(length=length):
-                port = self._start_fake_server(
-                    lambda req, length=length: req[:2] + struct.pack('>HHB', 0, length, 1) + b'\x03\x02\x00\x2a')
+                def make_response(req: bytes, length: int = length) -> bytes:
+                    return req[:2] + struct.pack('>HHB', 0, length, 1) + b'\x03\x02\x00\x2a'
+                port = self._start_fake_server(make_response)
                 c = ModbusClient('127.0.0.1', port, timeout=2.0)
                 self.addCleanup(c.close)
                 self.assertIsNone(c.read_holding_registers(0))
                 self.assertEqual(c.last_error, MB_RECV_ERR)
                 self.assertFalse(c.is_open)
 
-    def test_modbus_exception_log(self):
+    def test_modbus_exception_log(self) -> None:
         """The debug message of a modbus exception gives the exception name (not the error name)."""
         port = self._start_fake_server(lambda req: req[:2] + b'\x00\x00\x00\x03\x01\x83\x02')
         c = ModbusClient('127.0.0.1', port, timeout=2.0)
@@ -340,7 +359,7 @@ class TestModbusClient(unittest.TestCase):
         self.assertEqual(c.last_except, EXP_DATA_ADDRESS)
         self.assertTrue(any('illegal data address' in line for line in logs.output), logs.output)
 
-    def test_read_device_identification_bad_reply(self):
+    def test_read_device_identification_bad_reply(self) -> None:
         """A device identification reply with a bad header or a truncated object is an error."""
         bad_replies = {
             # MEI type is not 0x0E
@@ -366,13 +385,13 @@ class TestModbusClient(unittest.TestCase):
             self.fail('ModbusClient.read_device_identification() failed unexpectedly')
         self.assertEqual(resp.vendor_name, b'ab')
 
-    def test_write_multiple_pdu(self):
+    def test_write_multiple_pdu(self) -> None:
         """The PDU sent by write_multiple_coils()/write_multiple_registers() must keep the modbus format."""
         rnd = random.Random(99)
         c = ModbusClient()
-        sent = []
+        sent: list[bytes] = []
 
-        def fake_req_pdu(tx_pdu, rx_min_len):
+        def fake_req_pdu(tx_pdu: bytes, rx_min_len: int) -> bytes:
             sent.append(tx_pdu)
             # echo address and quantity (the response of write multiple coils/registers)
             return struct.pack('>BHH', tx_pdu[0], *struct.unpack('>HH', tx_pdu[1:5]))
@@ -417,18 +436,19 @@ class TestModbusClient(unittest.TestCase):
             self.assertRaises(TypeError, c.write_multiple_coils, 0, [1.5])
             self.assertRaises(TypeError, c.write_multiple_coils, 0, [[]])
 
-    def test_write_multiple_reply_mismatch(self):
+    def test_write_multiple_reply_mismatch(self) -> None:
         """
         A reply that doesn't echo the address/quantity of the request is an error (last_error), not a silent False.
         """
-        def reply(addr_delta, qty_delta):
-            def fake_req_pdu(tx_pdu, rx_min_len):
+        def reply(addr_delta: int, qty_delta: int) -> Callable[[bytes, int], bytes]:
+            def fake_req_pdu(tx_pdu: bytes, rx_min_len: int) -> bytes:
                 addr, qty = struct.unpack('>HH', tx_pdu[1:5])
                 return struct.pack('>BHH', tx_pdu[0], addr + addr_delta, qty + qty_delta)
             return fake_req_pdu
 
-        calls = {'write_multiple_coils': lambda c: c.write_multiple_coils(10, [True, False, True]),
-                 'write_multiple_registers': lambda c: c.write_multiple_registers(10, [1, 2, 3])}
+        calls: dict[str, Callable[[ModbusClient], bool]] = {
+            'write_multiple_coils': lambda c: c.write_multiple_coils(10, [True, False, True]),
+            'write_multiple_registers': lambda c: c.write_multiple_registers(10, [1, 2, 3])}
         for name, call in calls.items():
             for addr_delta, qty_delta in ((0, 0), (1, 0), (0, 1), (0, -1)):
                 with self.subTest(method=name, addr_delta=addr_delta, qty_delta=qty_delta):

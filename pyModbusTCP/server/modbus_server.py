@@ -21,7 +21,7 @@ from ._transport import CustomThreadingTCPServer
 from .data_bank import DataBank
 from .data_handler import DataHandler
 from .device_id import DeviceIdentification
-from .errors import Error, NetworkError, PDUDecodeError
+from .errors import DataFormatError, Error, NetworkError, PDUDecodeError
 
 
 class ModbusServer(ServerFunctionsMixin):
@@ -77,8 +77,8 @@ class ModbusServer(ServerFunctionsMixin):
         :type ext_engine: callable
         :param device_id: instance of DeviceIdentification class for read device identification request (optional)
         :type device_id: DeviceIdentification
-        :param request_timeout: max time in seconds to receive a request once it has started (the MBAP header, then\
-            the PDU: a stalled request), on expiry the client session is closed, None to disable (default is 30.0)
+        :param request_timeout: max time in seconds to receive a whole request (MBAP header and PDU) from its first\
+            byte (a stalled request), on expiry the client session is closed, None to disable (default is 30.0)
         :type request_timeout: float or None
         :param idle_timeout: max time in seconds without any request from a client before closing its session,\
             None to disable (default is 300.0)
@@ -99,6 +99,10 @@ class ModbusServer(ServerFunctionsMixin):
             (default is 16)
         :type max_connections_per_host: int or None
         """
+        # validate network parameters (a bad value would only be seen by start())
+        host = _validators.validate_host(host)
+        port = _validators.validate_port(port)
+
         # validate complex objects (data storage and callbacks)
         _validators.validate_data_bank_and_handler(data_bank, data_hdl)
         _validators.validate_ext_engine(ext_engine)
@@ -247,6 +251,12 @@ class ModbusServer(ServerFunctionsMixin):
             # request PDU too short or malformed: the TCP stream is still in sync, answer with "illegal data value"
             logger.debug('Malformed request for function 0x%02X: %s from %s', func_code, e, client)
             send_pdu.build_except(func_code, EXP_DATA_VALUE)
+        except DataFormatError as e:
+            # the response can't be encoded: a data handler returned an invalid value (like a register value out of
+            # the 0-65535 range or an exception code over 255), the request itself was fine and the TCP stream is
+            # still in sync: answer with "slave device failure" instead of closing the session
+            logger.error('Unable to encode the response of function 0x%02X from %s: %s', func_code, client, e)
+            send_pdu.build_except(func_code, EXP_SLAVE_DEVICE_FAILURE)
         except Error:
             # network error or other frame error: let the session handler close the connection
             raise
@@ -288,11 +298,14 @@ class ModbusServer(ServerFunctionsMixin):
                 # bind and activate
                 tcp_server.server_bind()
                 tcp_server.server_activate()
-            except OSError as e:
-                # don't keep the listening socket open after a failed start
+            except BaseException as e:
+                # don't keep the listening socket open after a failed start (OSError, or a TypeError/OverflowError
+                # from bind() for an invalid host or port set after the constructor)
                 if tcp_server is not None:
                     tcp_server.server_close()
-                raise NetworkError(e) from e
+                if isinstance(e, OSError):
+                    raise NetworkError(e) from e
+                raise
             logger.info('Listening on %s:%d', *tcp_server.server_address[:2])
             self._tcp_server = tcp_server
 

@@ -98,7 +98,8 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
     def host(self) -> str:
         """Get or set the server to connect to.
 
-        This can be any string with a valid IPv4 / IPv6 address or hostname.
+        This can be any string with a valid IPv4 / IPv6 address or hostname. An internationalized domain name
+        must be given in its ASCII form (punycode, like ``'xn--caf-dma.fr'`` for ``'café.fr'``), see valid_host().
         Setting host to a new value will close the current socket.
         """
         return self._host

@@ -4,6 +4,12 @@ import argparse
 import errno
 import ipaddress
 import logging
+import math
+import signal
+import threading
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from types import FrameType
 
 from ..constants import VERSION
 
@@ -47,15 +53,66 @@ def tcp_port(value: str) -> int:
     return port
 
 
+# upper bound of the delays given on the command line (timeouts, intervals): one day, far above any useful value, but
+# never "inf", "nan" or a number too large for time.sleep() and the socket/serial timeouts (OverflowError)
+MAX_DELAY = 86400.0
+
+
 def positive_float(value: str) -> float:
-    """argparse type: a number of seconds greater than 0."""
+    """argparse type: a number of seconds greater than 0 (at most MAX_DELAY)."""
     try:
         f_value = float(value)
     except ValueError:
         raise argparse.ArgumentTypeError(f'{value!r} is not a number') from None
-    if not f_value > 0:
-        raise argparse.ArgumentTypeError('value must be greater than 0')
+    # "not >": also refuses nan
+    if not f_value > 0 or not math.isfinite(f_value) or f_value > MAX_DELAY:
+        raise argparse.ArgumentTypeError(f'value must be greater than 0 and at most {MAX_DELAY:.0f} s')
     return f_value
+
+
+def positive_int(value: str) -> int:
+    """argparse type: an integer greater than 0 (like a baud rate)."""
+    try:
+        i_value = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f'{value!r} is not an integer') from None
+    if i_value < 1:
+        raise argparse.ArgumentTypeError('value must be greater than 0')
+    return i_value
+
+
+def slave_address(value: str) -> int:
+    """argparse type: the address of a Modbus/RTU slave (1 to 247: 0 is the broadcast, 248 to 255 are reserved)."""
+    try:
+        address = int(value, 0)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f'{value!r} is not an integer') from None
+    if not 1 <= address <= 247:
+        raise argparse.ArgumentTypeError('slave address must be between 1 and 247')
+    return address
+
+
+@contextmanager
+def stop_on_sigterm(stop: Callable[[], None], log: logging.Logger) -> Iterator[None]:
+    """In this block, SIGTERM (systemd, docker stop, kill...) calls stop(): a clean shutdown, like Ctrl-C.
+
+    The previous handler is restored at the end. Only the main thread can set a signal handler: elsewhere (a tool run
+    from a thread, in a test for example), nothing is changed.
+    """
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    def on_sigterm(_signum: int, _frame: FrameType | None) -> None:
+        log.info('SIGTERM received, shutting down')
+        stop()
+
+    previous = signal.signal(signal.SIGTERM, on_sigterm)
+    try:
+        yield
+    finally:
+        # None: a handler not set from Python, it can't be restored (keep the default action)
+        signal.signal(signal.SIGTERM, signal.SIG_DFL if previous is None else previous)
 
 
 def is_permission_error(exc: BaseException) -> bool:
