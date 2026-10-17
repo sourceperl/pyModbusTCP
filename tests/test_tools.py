@@ -14,6 +14,7 @@ from collections.abc import Iterator
 import pytest
 
 from pyModbusTCP.client import ModbusClient
+from pyModbusTCP.constants import VERSION
 from pyModbusTCP.server import DeviceIdentification, ModbusServer
 from pyModbusTCP.tools import _entry
 from pyModbusTCP.tools import client as cli_tool
@@ -97,7 +98,86 @@ def test_client_errors(server: tuple[ModbusServer, int], capsys: pytest.CaptureF
     assert status == 1 and 'connect error' in err
 
 
+def test_client_output_formats(server: tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
+    import json
+    srv, port = server
+    srv.data_bank.set_holding_registers(10, [1, 0xFFFE, 0x4142])
+    base = ['-H', '127.0.0.1', '-p', str(port)]
+    # auto: plain when the output is not a terminal (scripts get a stable output)
+    assert run_client(capsys, base + ['read-holding', '10', '-n', '3'])[1] == '10 1\n11 65534\n12 16706\n'
+    assert run_client(capsys, base + ['read-holding', '10', '-n', '3', '-f', 'plain'])[1] == \
+        '10 1\n11 65534\n12 16706\n'
+    # csv: a header, then "timestamp,address,value"
+    lines = run_client(capsys, base + ['read-holding', '10', '-n', '3', '-f', 'csv', '--signed'])[1].splitlines()
+    assert lines[0] == 'timestamp,address,value'
+    assert [line.split(',', 1)[1] for line in lines[1:]] == ['10,1', '11,-2', '12,16706']
+    # json: one object per read
+    obj = json.loads(run_client(capsys, base + ['read-holding', '10', '-n', '3', '-f', 'json', '--hex'])[1])
+    assert obj['command'] == 'read-holding' and obj['address'] == 10
+    assert obj['values'] == ['0x0001', '0xFFFE', '0x4142']
+    srv.data_bank.set_coils(0, [True, False])
+    obj = json.loads(run_client(capsys, base + ['read-coils', '0', '-n', '2', '-f', 'json'])[1])
+    assert obj['values'] == [True, False]
+    obj = json.loads(run_client(capsys, base + ['device-id', '-f', 'json'])[1])
+    assert obj['objects'][0] == {'id': 0, 'name': 'VendorName', 'value': 'ACME'}
+    # the escape char sent by the server is escaped by json
+    assert '\x1b' not in run_client(capsys, base + ['device-id', '-f', 'json'])[1]
+    # writes: no output out of a terminal (like before)
+    assert run_client(capsys, base + ['write-register', '0', '1']) == (0, '', '')
+
+
+def test_client_table(server: tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
+    srv, port = server
+    srv.data_bank.set_holding_registers(10, [0x4142, 0xFFFF])
+    base = ['-H', '127.0.0.1', '-p', str(port)]
+    status, out, _ = run_client(capsys, base + ['read-holding', '10', '-n', '2', '-f', 'table'])
+    assert status == 0
+    # no colors out of a terminal
+    assert '\x1b' not in out
+    assert 'read-holding' in out and '2 holding registers @ 10..11' in out
+    rows = {line.split()[0]: line.split() for line in out.splitlines()[4:]}
+    assert rows['10'] == ['10', '0x000A', '0x4142', '16706', '16706', '0100', '0001', '0100', '0010', 'AB']
+    assert rows['11'][:5] == ['11', '0x000B', '0xFFFF', '65535', '-1']
+    # bits: a grid of 10 per row
+    srv.data_bank.set_coils(100, [True] * 12)
+    out = run_client(capsys, base + ['read-coils', '100', '-n', '12', '-f', 'table'])[1]
+    assert '12 on, 0 off' in out
+    assert [line.split()[:2] for line in out.splitlines() if line.strip()[:3] in ('100', '110')] == \
+        [['100', '0x0064'], ['110', '0x006E']]
+    # device identification: names of the standard objects, control chars escaped
+    out = run_client(capsys, base + ['device-id', '-f', 'table'])[1]
+    assert 'VendorName' in out and 'ProductCode' in out and 'X\\x1b[31m' in out
+
+
+def test_client_table_highlights_changes() -> None:
+    """With -i, the values changed since the previous read are marked (a "*" without colors)."""
+    import argparse
+    import io
+
+    args = argparse.Namespace(host='localhost', port=502, unit_id=1, command='read-holding', address=0, number=2,
+                              interval=1.0, debug=False, format='table', no_color=True, hex=False, signed=False)
+    stream = io.StringIO()
+    out = cli_tool.Output(args, stream)
+    assert not out.live  # not a terminal: the tables are printed one after the other
+    out.read(cli_tool.ReadResult(0, [1, 2], time.time(), 0.001))
+    out.read(cli_tool.ReadResult(0, [1, 3], time.time(), 0.001))
+    second = stream.getvalue().split('read-holding')[2]
+    marks = [line[0] for line in second.splitlines() if line[2:].strip()[:1].isdigit() and '0x' in line]
+    assert marks == [' ', '*']
+    out.read_error('connect error')
+    assert out.errors == 1
+
+
+def test_client_values() -> None:
+    assert cli_tool.register_ascii(0x4142) == 'AB'
+    assert cli_tool.register_ascii(0x0041) == '.A'
+    assert cli_tool.register_binary(0x1234) == '0001 0010 0011 0100'
+    assert cli_tool.device_object_name(0x03) == 'VendorUrl'
+    assert cli_tool.device_object_name(0x10) == 'reserved'
+    assert cli_tool.device_object_name(0x80) == 'private'
+
 # --- mbtcp-server ---
+
 
 def test_server_command() -> None:
     """mbtcp-server serves requests, refuses writes in read-only mode and stops cleanly on SIGTERM."""
@@ -528,13 +608,15 @@ def test_rtu2tcp_relay(server: tuple[ModbusServer, int]) -> None:
 def test_help_and_version(command: str) -> None:
     if command in ('tcp2rtu', 'rtu2tcp'):
         pytest.importorskip('serial')
-    for option in ('--help', '--version'):
+    for option in ('--help', '--version', '-v'):
         # through the dispatcher (python -m pyModbusTCP.tools) and the module itself
         for cmd in (['-m', 'pyModbusTCP.tools', command], ['-m', 'pyModbusTCP.tools.' + _entry.COMMANDS[command]]):
             proc = subprocess.run([sys.executable] + cmd + [option], check=False,
                                   capture_output=True, text=True, timeout=30)
             assert proc.returncode == 0, proc.stderr
             assert proc.stdout
+            if option != '--help':
+                assert proc.stdout.strip().endswith('(pyModbusTCP) ' + VERSION)
 
 
 def test_dispatcher_usage() -> None:
@@ -543,6 +625,11 @@ def test_dispatcher_usage() -> None:
                               capture_output=True, text=True, timeout=30)
         assert proc.returncode == status, args
         assert 'usage: python -m pyModbusTCP.tools' in proc.stdout + proc.stderr
+    for option in ('-v', '--version'):
+        proc = subprocess.run([sys.executable, '-m', 'pyModbusTCP.tools', option], check=False,
+                              capture_output=True, text=True, timeout=30)
+        assert proc.returncode == 0
+        assert proc.stdout == f'python -m pyModbusTCP.tools (pyModbusTCP) {VERSION}\n'
 
 
 def test_argparse_types() -> None:

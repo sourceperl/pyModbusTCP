@@ -1,5 +1,23 @@
 Revision history for pyModbusTCP
 
+0.4.0a3 2026-xx-xx (alpha: the command line tools, their options and output, may still change before 0.4.0)
+
+    Changes since 0.4.0a2.
+
+    Changes:
+
+    - tools: add the version option is -v/--version in every tool and in the dispatcher.
+    - tools: mbtcp-client has an output for humans: on a terminal, a header (server, request, response time) and
+             a table. The addresses are shown in decimal and hexadecimal, the registers in hexadecimal, unsigned,
+             signed, binary and ASCII, the bits in a grid of 10 per row (with the count of on/off bits), the device
+             identification objects with their names.
+             With -i, the table is refreshed in place, the values that changed are highlighted (and marked "*"),
+             a failed read shows the error and the last good values. A write prints a confirmation line.
+             New options -f/--format (auto, table, plain, csv, json) and --no-color (or NO_COLOR) for the read and
+             device-id commands. When the output is not a terminal (auto format), the output is unchanged: one
+             "address value" line per item, nothing for a write.
+    - tools: mbtcp-client stops quietly (status 1, no traceback) when its output is closed (like "| head").
+
 0.4.0a2 2026-10-17 (alpha: the command line tools, their options and output, may still change before 0.4.0)
 
     Changes since 0.4.0a1 (see 0.4.0a1 below for the changes since 0.3.1).

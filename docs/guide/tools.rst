@@ -74,6 +74,52 @@ Examples
     # an RTU master on /dev/ttyUSB0 reads the Modbus/TCP server 192.168.1.10 (the gateway is the RTU slave 30)
     mbtcp-rtu2tcp -a 30 -H 192.168.1.10 /dev/ttyUSB0
 
+Output of mbtcp-client
+----------------------
+
+On a terminal, ``mbtcp-client`` prints a header and a table: the addresses in decimal and hexadecimal, the
+registers in hexadecimal, unsigned, signed, binary and ASCII, the bits in a grid of 10 per row, the device
+identification objects with their names:
+
+.. code-block:: none
+
+    $ mbtcp-client -p 5020 read-holding 10 -n 3
+    read-holding · localhost:5020 · unit 1 · 3 holding registers @ 10..12 · 2.8 ms
+
+      Address  Addr hex     Hex  Unsigned  Signed  Binary               ASCII
+      ───────  ────────  ──────  ────────  ──────  ───────────────────  ─────
+           10    0x000A  0x0001         1       1  0000 0000 0000 0001  ..
+           11    0x000B  0xFFFE     65534      -2  1111 1111 1111 1110  ..
+           12    0x000C  0x4142     16706   16706  0100 0001 0100 0010  AB
+
+    $ mbtcp-client -p 5020 read-coils 100 -n 15
+    read-coils · localhost:5020 · unit 1 · 15 coils @ 100..114 · 4.6 ms
+
+      Address  Addr hex  +0 +1 +2 +3 +4  +5 +6 +7 +8 +9
+      ───────  ────────  ──────────────────────────────
+          100    0x0064   1  0  1  1  0   0  0  0  0  0
+          110    0x006E   0  0  0  0  1
+
+      4 on, 11 off
+
+With ``-i``, the table is refreshed in place (like ``watch``) and the values that changed are highlighted (and
+marked ``*``) for a few seconds. ``--no-color`` (or the ``NO_COLOR`` environment variable) turns the colors off.
+
+``-f/--format`` chooses another output, for a script:
+
+- ``plain``: one ``address value`` line per item (``--hex`` and ``--signed`` choose the notation of the registers);
+- ``csv``: ``timestamp,address,value`` lines, after a header line;
+- ``json``: one JSON object per read (JSON Lines with ``-i``);
+- ``auto`` (default): ``table`` on a terminal, ``plain`` otherwise (a pipe, a file), so the output of a script never
+  changes.
+
+.. code-block:: bash
+
+    # registers 0 to 9, every 5 s, in a CSV file
+    mbtcp-client -H 192.168.1.10 read-holding 0 -n 10 -i 5 -f csv > log.csv
+
+All the tools print their version (the one of pyModbusTCP) with ``-v/--version``.
+
 The exit status of ``mbtcp-client`` is 0 on success, 1 if the request failed, 2 for an invalid parameter and 130 for
 a request interrupted by Ctrl-C (Ctrl-C is the normal end of a read repeated with ``-i``: 0): it can be used in a
 shell script.

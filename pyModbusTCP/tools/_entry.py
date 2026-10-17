@@ -54,11 +54,18 @@ def main(argv: list[str] | None = None) -> int:
     """python -m pyModbusTCP.tools COMMAND [ARGS...]"""
     args = sys.argv[1:] if argv is None else argv
     commands = ','.join(COMMANDS)
-    usage = f'usage: python -m pyModbusTCP.tools {{{commands}}} [-h] [ARGS...]'
+    usage = f'usage: python -m pyModbusTCP.tools [-h] [-v] {{{commands}}} [ARGS...]'
     if not args or args[0] in ('-h', '--help'):
         print(usage)
         print('\nRun a pyModbusTCP command line tool, "COMMAND --help" for its options.')
+        print('\noptions:\n  -h, --help     show this help message and exit'
+              '\n  -v, --version  show the version of pyModbusTCP and exit')
         return 0 if args else 2
+    if args[0] in ('-v', '--version'):
+        # imported here: the dispatcher stays light (a tool module is only imported when it is run)
+        from ._common import version_text
+        print(version_text('python -m pyModbusTCP.tools'))
+        return 0
     if args[0] not in COMMANDS:
         print(usage, file=sys.stderr)
         print(f'error: unknown command {args[0]!r}', file=sys.stderr)

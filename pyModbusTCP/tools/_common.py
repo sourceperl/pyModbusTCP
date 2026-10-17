@@ -28,9 +28,16 @@ def setup_logging(debug: bool) -> None:
                         datefmt='%Y-%m-%d %H:%M:%S')
 
 
+def version_text(prog: str) -> str:
+    """Text printed by -v/--version: the name of the tool and the version of pyModbusTCP (where its code is)."""
+    return f'{prog} (pyModbusTCP) {VERSION}'
+
+
 def add_version_arg(parser: argparse.ArgumentParser) -> None:
-    """Add the -V/--version option to a parser."""
-    parser.add_argument('-V', '--version', action='version', version="%(prog)s " + VERSION)
+    """Add the -v/--version option to a parser."""
+    text = version_text(parser.prog)
+    parser.add_argument('-v', '--version', action='version', version=text,
+                        help="show the version of pyModbusTCP and exit")
 
 
 def ip_or_network(value: str) -> str:

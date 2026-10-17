@@ -55,7 +55,11 @@ mbtcp-tcp2rtu -H 0.0.0.0 -A 192.168.1.0/24 --read-only -b 19200 --parity E /dev/
 mbtcp-rtu2tcp -a 30 -H 192.168.1.10 /dev/ttyUSB0
 ```
 
-Run any command with `--help` for all its options.
+On a terminal, `mbtcp-client` prints a table (registers in hexadecimal, unsigned, signed, binary and ASCII, bits
+in a grid); with `-i` it is refreshed in place and the changed values are highlighted. For a script, `-f plain`,
+`-f csv` or `-f json` (the default output of a pipe is `plain`: one `address value` line per item).
+
+Run any command with `--help` for all its options, `-v/--version` for its version.
 
 ## Security
 
