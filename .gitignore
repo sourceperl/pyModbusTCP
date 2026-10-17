@@ -1,12 +1,24 @@
+# Also read by hatchling (the build backend): these files never go in the sdist or the wheel.
+
+# bytecode
+__pycache__/
+*.py[cod]
+
+# build outputs
 build/
 dist/
-*.pyc
 *.egg-info/
 
+# virtual environments
+/venv/
+/.venv/
+
+# editors and OS
 /.idea/
 /.vscode/
+.DS_Store
 
-/venv/
+# local experiments
 /lab/
 
 # Sphinx documentation (built pages and generated help of the tools)

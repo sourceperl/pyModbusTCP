@@ -46,9 +46,10 @@ Changelog = "https://github.com/sourceperl/pyModbusTCP/blob/master/CHANGES"
 path = "pyModbusTCP/constants.py"
 
 [tool.hatch.build.targets.sdist]
-# the library and its changelog (pyproject.toml, README.md and LICENSE are always included), without the tests,
-# examples, docs, tools/ and the pyModbusTCP-cli package
-include = ["/pyModbusTCP", "/CHANGES"]
+# the library, its changelog and its tests (pyproject.toml, README.md and LICENSE are always included): the tests can
+# be run from an unpacked sdist (pytest, settings of [tool.pytest.ini_options]), like the downstream packagers do.
+# Without the examples, docs, tools/ and the pyModbusTCP-cli package. The wheel has the package only (see below).
+include = ["/pyModbusTCP", "/tests", "/CHANGES"]
 
 [tool.hatch.build.targets.wheel]
 # the package and all its subpackages (client, server, tools)
