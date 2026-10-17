@@ -10,8 +10,14 @@ import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from types import FrameType
+from typing import TYPE_CHECKING
 
 from ..constants import VERSION
+
+if TYPE_CHECKING:
+    # pyserial is optional: only imported by the serial gateways
+    from serial import Serial
+    from serial.rs485 import RS485Settings
 
 # the serial gateways need pyserial, an optional dependency of pyModbusTCP
 SERIAL_MISSING_MSG = 'this gateway needs pyserial: pip install "pyModbusTCP[serial]" (or pyModbusTCP-cli)'
@@ -86,6 +92,87 @@ def positive_int(value: str) -> int:
     if i_value < 1:
         raise argparse.ArgumentTypeError('value must be greater than 0')
     return i_value
+
+
+# upper bound of the RS-485 delays around a transmission: the Linux kernel keeps them in ms and caps them at 100 ms
+MAX_RS485_DELAY = 0.1
+
+
+def rs485_delay(value: str) -> float:
+    """argparse type: a RS-485 delay in s, 0 to MAX_RS485_DELAY (the driver uses a resolution of 1 ms)."""
+    try:
+        f_value = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f'{value!r} is not a number') from None
+    # "not <=": also refuses nan
+    if not 0.0 <= f_value <= MAX_RS485_DELAY:
+        raise argparse.ArgumentTypeError(f'value must be between 0 and {MAX_RS485_DELAY:g} s')
+    return f_value
+
+
+def add_rs485_args(parser: argparse.ArgumentParser) -> None:
+    """Add the options of the RS-485 mode of the serial driver (the kernel drives RTS to switch the transceiver)."""
+    group = parser.add_argument_group(
+        'RS-485 mode', 'for a serial port whose RS-485 transceiver is switched by RTS (an UART of an embedded board); '
+                       'useless with an USB-RS485 adapter, it switches by itself')
+    group.add_argument('--rs485', action='store_true',
+                       help='enable the RS-485 mode of the serial driver (Linux; on Windows, default levels only)')
+    group.add_argument('--rs485-rts-tx', choices=('high', 'low'), default=None,
+                       help='RTS level while sending (default: high)')
+    group.add_argument('--rs485-rts-rx', choices=('high', 'low'), default=None,
+                       help='RTS level while receiving (default: low)')
+    group.add_argument('--rs485-delay-before-tx', type=rs485_delay, default=None, metavar='S',
+                       help=f'delay between RTS switch and the first byte sent, in s (0 to {MAX_RS485_DELAY:g}, '
+                            'default: driver value)')
+    group.add_argument('--rs485-delay-before-rx', type=rs485_delay, default=None, metavar='S',
+                       help=f'delay between the last byte sent and RTS switch back, in s (0 to {MAX_RS485_DELAY:g}, '
+                            'default: driver value)')
+
+
+def check_rs485_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Refuse a --rs485-* setting without --rs485 (it would be silently ignored)."""
+    if args.rs485:
+        return
+    for name in ('rs485_rts_tx', 'rs485_rts_rx', 'rs485_delay_before_tx', 'rs485_delay_before_rx'):
+        if getattr(args, name) is not None:
+            parser.error(f'--{name.replace("_", "-")} needs --rs485')
+
+
+def rs485_settings(args: argparse.Namespace) -> 'RS485Settings | None':
+    """The RS-485 settings for pyserial from the command line options, None without --rs485."""
+    if not args.rs485:
+        return None
+    from serial.rs485 import RS485Settings
+    return RS485Settings(rts_level_for_tx=args.rs485_rts_tx != 'low',
+                         rts_level_for_rx=args.rs485_rts_rx == 'high',
+                         delay_before_tx=args.rs485_delay_before_tx,
+                         delay_before_rx=args.rs485_delay_before_rx)
+
+
+def rs485_text(settings: 'RS485Settings') -> str:
+    """The RS-485 settings for the log: "RTS high on tx, low on rx, delays 0.000/0.000 s"."""
+    def level(high: bool) -> str:
+        return 'high' if high else 'low'
+
+    def delay(value: float | None) -> str:
+        return 'driver' if value is None else f'{value:.3f} s'
+
+    return (f'RTS {level(settings.rts_level_for_tx)} on tx, {level(settings.rts_level_for_rx)} on rx, '
+            f'delay before tx {delay(settings.delay_before_tx)}, before rx {delay(settings.delay_before_rx)}')
+
+
+def apply_rs485(port: 'Serial', settings: 'RS485Settings') -> None:
+    """Set the RS-485 mode of an open serial port, kept by pyserial when the port is reopened.
+
+    :raises ValueError: the platform or the serial driver refuses it (like a pseudo-terminal or an USB adapter)
+    """
+    try:
+        port.rs485_mode = settings
+    except NotImplementedError as e:
+        # pyserial on macOS and the BSDs
+        raise ValueError(f'RS-485 mode not supported on this platform ({e})') from None
+    except ValueError as e:
+        raise ValueError(f'RS-485 mode refused by the serial driver of {port.port}: {e}') from None
 
 
 def slave_address(value: str) -> int:

@@ -110,6 +110,20 @@ Same, reachable from one network only, read-only, 8E1 serial format:
 $ mbtcp-tcp2rtu -H 0.0.0.0 -A 192.168.1.0/24 --read-only \
     -b 19200 --parity E /dev/ttyUSB0
 
+RS-485 MODE
+-----------
+An USB-RS485 adapter switches its transceiver by itself: nothing to set. The
+UART of an embedded board often drives the transceiver with its RTS line:
+--rs485 enables the RS-485 mode of the serial driver (Linux), the kernel
+switches RTS around each frame with an exact timing. --rs485-rts-tx and
+--rs485-rts-rx set the RTS levels (default: high to send, low to receive),
+--rs485-delay-before-tx and --rs485-delay-before-rx the delays around a frame.
+The mode is applied again when a lost port is reopened. A driver without
+RS-485 support refuses it at startup (exit code 2). On Windows, only the
+default levels and delays are accepted; macOS has no RS-485 mode.
+For a board whose transceiver is enabled by RTS low:
+$ mbtcp-tcp2rtu --rs485 --rs485-rts-tx low --rs485-rts-rx high /dev/ttyRS485
+
 Add -d (--debug) to log every RTU frame exchanged on the serial line, as a
 hex dump (Tx = gateway to slave, Rx = slave to gateway), e.g.:
     DEBUG [mbtcp-tcp2rtu       ] RTU Tx [8 bytes] 01 03 00 00 00 01 84 0a
@@ -130,11 +144,16 @@ from threading import Condition, Event, Lock
 from ._common import (
     PORT_502_HELP,
     SERIAL_MISSING_MSG,
+    add_rs485_args,
     add_version_arg,
+    apply_rs485,
+    check_rs485_args,
     ip_or_network,
     is_permission_error,
     positive_float,
     positive_int,
+    rs485_settings,
+    rs485_text,
     stop_on_sigterm,
     tcp_port,
 )
@@ -615,8 +634,10 @@ def main(argv: list[str] | None = None) -> int:
                         help='serial end of frame delay in s (default: computed from baudrate, '
                              f'min {MIN_EOF_DELAY:.3f} s)')
     parser.add_argument('-d', '--debug', action='store_true', help='debug mode')
+    add_rs485_args(parser)
     add_version_arg(parser)
     args = parser.parse_args(argv)
+    check_rs485_args(parser, args)
 
     # init logging
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO,
@@ -633,6 +654,10 @@ def main(argv: list[str] | None = None) -> int:
         serial_port = Serial(port=args.device, baudrate=args.baudrate, bytesize=args.bytesize,
                              parity={'N': PARITY_NONE, 'E': PARITY_EVEN, 'O': PARITY_ODD}[args.parity],
                              stopbits=args.stopbits)
+        settings = rs485_settings(args)
+        if settings is not None:
+            apply_rs485(serial_port, settings)
+            logger.info('RS-485 mode: %s', rs485_text(settings))
 
         # init serial worker
         serial_worker = ModbusSerialWorker(serial_port, args.timeout, args.eof,
@@ -667,7 +692,7 @@ def main(argv: list[str] | None = None) -> int:
             logger.critical('Port %d is privileged: %s', args.port, PORT_502_HELP)
         return 2
     except ValueError as e:
-        # invalid parameter value (like a baudrate refused by the serial port)
+        # invalid parameter value (like a baudrate or a RS-485 mode refused by the serial port)
         logger.critical('Invalid parameter: %s', e)
         return 2
     except KeyboardInterrupt:

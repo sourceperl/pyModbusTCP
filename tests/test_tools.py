@@ -1,5 +1,6 @@
 """Tests of the command line tools (pyModbusTCP.tools)."""
 
+import logging
 import os
 import queue
 import signal
@@ -135,15 +136,15 @@ def test_client_table(server: tuple[ModbusServer, int], capsys: pytest.CaptureFi
     # no colors out of a terminal
     assert '\x1b' not in out
     assert 'read-holding' in out and '2 holding registers @ 10..11' in out
-    rows = {line.split()[0]: line.split() for line in out.splitlines()[4:]}
-    assert rows['10'] == ['10', '0x000A', '0x4142', '16706', '16706', '0100', '0001', '0100', '0010', 'AB']
-    assert rows['11'][:5] == ['11', '0x000B', '0xFFFF', '65535', '-1']
+    rows = {line.split()[1]: line.split() for line in out.splitlines()[4:]}
+    assert rows['10'] == ['0', '10', '0x000A', '0x4142', '16706', '16706', '0100', '0001', '0100', '0010', 'AB']
+    assert rows['11'][:6] == ['1', '11', '0x000B', '0xFFFF', '65535', '-1']
     # bits: a grid of 10 per row
     srv.data_bank.set_coils(100, [True] * 12)
     out = run_client(capsys, base + ['read-coils', '100', '-n', '12', '-f', 'table'])[1]
     assert '12 on, 0 off' in out
-    assert [line.split()[:2] for line in out.splitlines() if line.strip()[:3] in ('100', '110')] == \
-        [['100', '0x0064'], ['110', '0x006E']]
+    assert [line.split()[:3] for line in out.splitlines() if ' 0x00' in line] == \
+        [['0', '100', '0x0064'], ['10', '110', '0x006E']]
     # device identification: names of the standard objects, control chars escaped
     out = run_client(capsys, base + ['device-id', '-f', 'table'])[1]
     assert 'VendorName' in out and 'ProductCode' in out and 'X\\x1b[31m' in out
@@ -522,6 +523,11 @@ def test_tcp2rtu_cancelled_request_is_not_sent() -> None:
     ('rtu_to_tcp_gw', ['-a', '248'], '-a/--address'),
     ('rtu_to_tcp_gw', ['-e', 'inf'], '-e/--eof'),
     ('rtu_to_tcp_gw', ['-t', '0'], '-t/--timeout'),
+    ('tcp_to_rtu_gw', ['--rs485-rts-tx', 'low'], '--rs485-rts-tx needs --rs485'),
+    ('tcp_to_rtu_gw', ['--rs485', '--rs485-rts-rx', 'medium'], '--rs485-rts-rx'),
+    ('tcp_to_rtu_gw', ['--rs485', '--rs485-delay-before-tx', '0.5'], '--rs485-delay-before-tx'),
+    ('rtu_to_tcp_gw', ['--rs485-delay-before-rx', '0.001'], '--rs485-delay-before-rx needs --rs485'),
+    ('rtu_to_tcp_gw', ['--rs485', '--rs485-delay-before-rx', '-1'], '--rs485-delay-before-rx'),
 ])
 def test_gateway_invalid_args(tool: str, args: list[str], error: str, capsys: pytest.CaptureFixture[str]) -> None:
     """Invalid serial settings are refused at startup (they made the gateway crash, or fail at each request)."""
@@ -543,6 +549,84 @@ def test_gateway_api_checks() -> None:
     for address in (0, 248, 255):
         with pytest.raises(ValueError):
             rtu_to_tcp_gw.SerialModbusWorker(SilentSerial(), ModbusClient(), slave_addr=address)  # type: ignore
+
+
+def test_gateway_rs485_settings() -> None:
+    """The --rs485-* options give the RS485Settings of pyserial (RTS high to send, low to receive by default)."""
+    pytest.importorskip('serial')
+    import argparse
+
+    from pyModbusTCP.tools import _common
+
+    parser = argparse.ArgumentParser()
+    _common.add_rs485_args(parser)
+    assert _common.rs485_settings(parser.parse_args([])) is None
+    settings = _common.rs485_settings(parser.parse_args(['--rs485']))
+    assert settings is not None
+    assert (settings.rts_level_for_tx, settings.rts_level_for_rx) == (True, False)
+    assert (settings.delay_before_tx, settings.delay_before_rx) == (None, None)
+    assert not settings.loopback  # no echo of the frames sent
+    settings = _common.rs485_settings(parser.parse_args(
+        ['--rs485', '--rs485-rts-tx', 'low', '--rs485-rts-rx', 'high',
+         '--rs485-delay-before-tx', '0.002', '--rs485-delay-before-rx', '0']))
+    assert settings is not None
+    assert (settings.rts_level_for_tx, settings.rts_level_for_rx) == (False, True)
+    assert (settings.delay_before_tx, settings.delay_before_rx) == (0.002, 0.0)
+    assert _common.rs485_text(settings) == 'RTS low on tx, high on rx, delay before tx 0.002 s, before rx 0.000 s'
+
+
+class RS485Port:
+    """A serial port that accepts its RS-485 mode, or refuses it like pyserial (ValueError or NotImplementedError)."""
+
+    port = '/dev/ttyFAKE'
+
+    def __init__(self, error: BaseException | None = None) -> None:
+        self.error = error
+        self.mode: object = None
+
+    @property
+    def rs485_mode(self) -> object:
+        return self.mode
+
+    @rs485_mode.setter
+    def rs485_mode(self, settings: object) -> None:
+        if self.error is not None:
+            raise self.error
+        self.mode = settings
+
+
+def test_gateway_apply_rs485() -> None:
+    pytest.importorskip('serial')
+    from serial.rs485 import RS485Settings
+
+    from pyModbusTCP.tools import _common
+
+    settings = RS485Settings(rts_level_for_tx=False, rts_level_for_rx=True)
+    port = RS485Port()
+    _common.apply_rs485(port, settings)  # type: ignore[arg-type]
+    assert port.rs485_mode is settings
+    # refused by the driver (Linux, Windows) or not supported (macOS): a ValueError, the gateways exit with code 2
+    with pytest.raises(ValueError, match='refused by the serial driver of /dev/ttyFAKE'):
+        _common.apply_rs485(RS485Port(ValueError('Failed to set RS485 mode')), settings)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match='not supported on this platform'):
+        _common.apply_rs485(RS485Port(NotImplementedError('RS485')), settings)  # type: ignore[arg-type]
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='needs a pseudo-terminal (POSIX only)')
+@pytest.mark.parametrize('tool', ['tcp_to_rtu_gw', 'rtu_to_tcp_gw'])
+def test_gateway_rs485_refused(tool: str, caplog: pytest.LogCaptureFixture) -> None:
+    """A pseudo-terminal has no RS-485 mode: the gateway stops at startup with the exit code 2."""
+    pytest.importorskip('serial')
+    import importlib
+    module = importlib.import_module('pyModbusTCP.tools.' + tool)
+    master_fd, slave_fd = os.openpty()
+    try:
+        with caplog.at_level(logging.CRITICAL):
+            assert module.main(['--rs485', '-p', str(free_port()), os.ttyname(slave_fd)]) == 2
+        assert 'RS-485 mode' in caplog.text
+    finally:
+        os.close(master_fd)
+        os.close(slave_fd)
 
 
 # --- mbtcp-rtu2tcp ---

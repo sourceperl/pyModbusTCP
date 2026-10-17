@@ -23,10 +23,10 @@ Values accept the decimal, hexadecimal (0x...), octal (0o...) and binary (0b...)
 
 OUTPUT FORMATS (-f/--format)
 ----------------------------
-table  for a human: a header (server, request, response time) and a table. Addresses are shown in decimal and
-       hexadecimal. Registers are shown in hexadecimal, unsigned, signed, binary and ASCII; bits in a grid of 10 per
-       row. With -i, the screen is refreshed in place and the values that changed since the previous read are
-       highlighted.
+table  for a human: a header (server, request, response time) and a table. Each row shows the offset from the
+       first address, then the address in decimal and hexadecimal. Registers are shown in hexadecimal, unsigned,
+       signed, binary and ASCII; bits in a grid of 10 per row. With -i, the screen is refreshed in place and the
+       values that changed since the previous read are highlighted.
 plain  one line per item, "address value" (--hex and --signed choose the notation of the registers).
 csv    "timestamp,address,value" lines, with a header line.
 json   one JSON object per read (JSON Lines with -i).
@@ -382,15 +382,15 @@ class Output:
 
     def register_table(self, res: ReadResult) -> list[str]:
         s = self.style
-        heads = ('Address', 'Addr hex', 'Hex', 'Unsigned', 'Signed', 'Binary', 'ASCII')
+        heads = ('Offset', 'Address', 'Addr hex', 'Hex', 'Unsigned', 'Signed', 'Binary', 'ASCII')
         rows: list[tuple[str, ...]] = []
         values = [v for v in res.values if isinstance(v, int)]
         for offset, value in enumerate(values):
             address = res.address + offset
-            rows.append((str(address), address_hex(address), f'0x{value:04X}', str(value), str(to_signed(value)),
+            rows.append((str(offset), str(address), address_hex(address), f'0x{value:04X}', str(value), str(to_signed(value)),
                          register_binary(value), register_ascii(value)))
         widths = [max(len(heads[i]), *(len(r[i]) for r in rows)) for i in range(len(heads))]
-        right = (True, True, True, True, True, False, False)
+        right = (True, True, True, True, True, True, False, False)
 
         def cell(text: str, i: int) -> str:
             return text.rjust(widths[i]) if right[i] else text.ljust(widths[i])
@@ -402,15 +402,15 @@ class Output:
             changed = self.changed(offset)
             # the last column without padding (no trailing spaces)
             cells = [cell(t, i) for i, t in enumerate(row[:-1])] + [row[-1]]
-            # the 2 address columns (decimal and hexadecimal) are never highlighted, only the value
-            text = '  '.join(cells[2:])
+            # the offset and the 2 address columns (decimal and hexadecimal) are never highlighted, only the value
+            text = '  '.join(cells[3:])
             if changed:
                 text = s.changed(text)
             elif value == 0:
                 text = s.dim(text)
             # "*": a value changed since the previous read (also seen without colors)
             mark = s.changed('*') if changed and s.enabled else ('*' if changed else ' ')
-            lines.append(mark + ' ' + cells[0] + '  ' + s.dim(cells[1]) + '  ' + text)
+            lines.append(mark + ' ' + s.dim(cells[0]) + '  ' + cells[1] + '  ' + s.dim(cells[2]) + '  ' + text)
         return lines
 
     def bit_table(self, res: ReadResult) -> list[str]:
@@ -419,6 +419,7 @@ class Output:
         n_cols = min(BITS_PER_ROW, len(values))
         addr_w = max(len('Address'), len(str(res.address + len(values) - 1)))
         hex_w = max(len('Addr hex'), len(address_hex(res.address + len(values) - 1)))
+        off_w = max(len('Offset'), len(str(len(values) - 1)))
 
         def group(cells: list[str]) -> str:
             # a wider gap in the middle of the row, to count the bits at a glance
@@ -428,8 +429,9 @@ class Output:
 
         heads = [f'+{i}'.rjust(2) for i in range(n_cols)]
         head_txt = group(heads)
-        lines = ['  ' + s.bold('Address'.rjust(addr_w) + '  ' + 'Addr hex'.rjust(hex_w) + '  ' + head_txt),
-                 '  ' + self.rule([addr_w, hex_w, len(head_txt)])]
+        lines = ['  ' + s.bold('Offset'.rjust(off_w) + '  ' + 'Address'.rjust(addr_w) + '  '
+                               + 'Addr hex'.rjust(hex_w) + '  ' + head_txt),
+                 '  ' + self.rule([off_w, addr_w, hex_w, len(head_txt)])]
         for row_start in range(0, len(values), BITS_PER_ROW):
             cells = []
             for offset in range(row_start, min(row_start + BITS_PER_ROW, len(values))):
@@ -441,8 +443,8 @@ class Output:
                 else:
                     cells.append(' ' + (s.green(s.bold(txt)) if bit else s.dim(txt)))
             row_addr = res.address + row_start
-            lines.append('  ' + str(row_addr).rjust(addr_w) + '  ' + s.dim(address_hex(row_addr).rjust(hex_w))
-                         + '  ' + group(cells))
+            lines.append('  ' + s.dim(str(row_start).rjust(off_w)) + '  ' + str(row_addr).rjust(addr_w)
+                         + '  ' + s.dim(address_hex(row_addr).rjust(hex_w)) + '  ' + group(cells))
         on = sum(values)
         lines.append('')
         lines.append('  ' + s.dim(f'{on} on, {len(values) - on} off'))

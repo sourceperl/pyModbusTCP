@@ -74,31 +74,52 @@ Examples
     # an RTU master on /dev/ttyUSB0 reads the Modbus/TCP server 192.168.1.10 (the gateway is the RTU slave 30)
     mbtcp-rtu2tcp -a 30 -H 192.168.1.10 /dev/ttyUSB0
 
+RS-485 mode of the gateways
+---------------------------
+
+An USB-RS485 adapter switches its transceiver between send and receive by itself: nothing to set. The UART of an
+embedded board often drives the transceiver with its RTS line: ``--rs485`` enables the RS-485 mode of the serial
+driver (Linux), the kernel switches RTS around each frame with an exact timing.
+
+- ``--rs485-rts-tx {high,low}``: RTS level while sending (default: high);
+- ``--rs485-rts-rx {high,low}``: RTS level while receiving (default: low);
+- ``--rs485-delay-before-tx S`` and ``--rs485-delay-before-rx S``: delays around a frame, 0 to 0.1 s (default: the
+  value of the driver).
+
+.. code-block:: bash
+
+    # a board whose transceiver is enabled by RTS low
+    mbtcp-tcp2rtu --rs485 --rs485-rts-tx low --rs485-rts-rx high /dev/ttyRS485
+
+The mode is applied again when a lost port is reopened. A driver without RS-485 support (a pseudo-terminal, most USB
+adapters) refuses it at startup: the gateway exits with the code 2. On Windows, only the default levels and delays are
+accepted; macOS has no RS-485 mode. Without these options, the serial port is opened as before.
+
 Output of mbtcp-client
 ----------------------
 
-On a terminal, ``mbtcp-client`` prints a header and a table: the addresses in decimal and hexadecimal, the
-registers in hexadecimal, unsigned, signed, binary and ASCII, the bits in a grid of 10 per row, the device
-identification objects with their names:
+On a terminal, ``mbtcp-client`` prints a header and a table: the offset from the first address and the addresses
+in decimal and hexadecimal, the registers in hexadecimal, unsigned, signed, binary and ASCII, the bits in a grid of
+10 per row, the device identification objects with their names:
 
 .. code-block:: none
 
     $ mbtcp-client -p 5020 read-holding 10 -n 3
     read-holding · localhost:5020 · unit 1 · 3 holding registers @ 10..12 · 2.8 ms
 
-      Address  Addr hex     Hex  Unsigned  Signed  Binary               ASCII
-      ───────  ────────  ──────  ────────  ──────  ───────────────────  ─────
-           10    0x000A  0x0001         1       1  0000 0000 0000 0001  ..
-           11    0x000B  0xFFFE     65534      -2  1111 1111 1111 1110  ..
-           12    0x000C  0x4142     16706   16706  0100 0001 0100 0010  AB
+      Offset  Address  Addr hex     Hex  Unsigned  Signed  Binary               ASCII
+      ──────  ───────  ────────  ──────  ────────  ──────  ───────────────────  ─────
+           0       10    0x000A  0x0001         1       1  0000 0000 0000 0001  ..
+           1       11    0x000B  0xFFFE     65534      -2  1111 1111 1111 1110  ..
+           2       12    0x000C  0x4142     16706   16706  0100 0001 0100 0010  AB
 
     $ mbtcp-client -p 5020 read-coils 100 -n 15
     read-coils · localhost:5020 · unit 1 · 15 coils @ 100..114 · 4.6 ms
 
-      Address  Addr hex  +0 +1 +2 +3 +4  +5 +6 +7 +8 +9
-      ───────  ────────  ──────────────────────────────
-          100    0x0064   1  0  1  1  0   0  0  0  0  0
-          110    0x006E   0  0  0  0  1
+      Offset  Address  Addr hex  +0 +1 +2 +3 +4  +5 +6 +7 +8 +9
+      ──────  ───────  ────────  ──────────────────────────────
+           0      100    0x0064   1  0  1  1  0   0  0  0  0  0
+          10      110    0x006E   0  0  0  0  1
 
       4 on, 11 off
 
