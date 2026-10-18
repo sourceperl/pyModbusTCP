@@ -159,7 +159,7 @@ if [[ "$INSTALL_TEST" -eq 1 ]]; then
         echo "Error: pyModbusTCP-cli or pyserial installed with the library alone" >&2
         exit 1
     fi
-    if ls "$BIN_LIB" | grep -q '^mbtcp-'; then
+    if compgen -G "$BIN_LIB/mbtcp-*" >/dev/null; then
         echo "Error: mbtcp-* command installed with the library alone" >&2
         exit 1
     fi
@@ -169,7 +169,7 @@ if [[ "$INSTALL_TEST" -eq 1 ]]; then
     "$PYTHON" -m venv "$TMP_DIR/with-cli"
     BIN_CLI="$(venv_bin "$TMP_DIR/with-cli")"
     # both wheels in one call: the library comes from OUT_DIR, never from the index (where VERSION may already exist)
-    "$BIN_CLI/python" -m pip install --quiet --disable-pip-version-check "$LIB_WHL[serial]" "$CLI_WHL"
+    "$BIN_CLI/python" -m pip install --quiet --disable-pip-version-check "${LIB_WHL}[serial]" "$CLI_WHL"
     for cmd in mbtcp-server mbtcp-client mbtcp-tcp2rtu mbtcp-rtu2tcp; do
         if ! "$BIN_CLI/$cmd" --version | grep -qF "$VERSION"; then
             echo "Error: '$cmd --version' doesn't show $VERSION" >&2

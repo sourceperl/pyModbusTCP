@@ -237,9 +237,9 @@ class ModbusRequestHandler(BaseRequestHandler):
     def handle(self) -> None:
         # try/except: end current thread on ModbusServer._InternalError, OSError or socket.error
         # this also close the current TCP session associated with it
+        session_data = SessionData()
         try:
-            # init and update server info structure
-            session_data = SessionData()
+            # update server info structure
             (session_data.client.address, session_data.client.port) = self.request.getpeername()[:2]
             # debug message
             logger.debug('Accept new connection from %r', session_data.client)

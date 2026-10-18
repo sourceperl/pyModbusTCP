@@ -9,10 +9,14 @@ from threading import RLock, Thread, current_thread
 from typing import TypeAlias
 
 from ..constants import (
+    ENCAPSULATED_INTERFACE_TRANSPORT,
     EXP_DATA_VALUE,
     EXP_GATEWAY_PATH_UNAVAILABLE,
     EXP_ILLEGAL_FUNCTION,
     EXP_SLAVE_DEVICE_FAILURE,
+    MAX_PDU_SIZE,
+    MEI_TYPE_READ_DEVICE_ID,
+    READ_FUNCTION_CODES,
     WRITE_FUNCTION_CODES,
 )
 from . import _transport, _validators, errors, frames, session
@@ -94,8 +98,9 @@ class ModbusServer:
         :param max_connections: max number of simultaneous client connections, the next ones are closed immediately,\
             None for no limit (default is 64)
         :type max_connections: int or None
-        :param read_only: refuse every request that writes data (functions 0x05, 0x06, 0x0F, 0x10 and 0x17) with an\
-            "illegal function" exception, whatever their handler (default is False)
+        :param read_only: refuse every request that writes data (functions 0x05, 0x06, 0x0F, 0x10, 0x15, 0x16 and\
+            0x17) with an "illegal function" exception, whatever their handler; the fallback handler only gets the\
+            read functions (0x01 to 0x04, 0x2B/0x0E) (default is False)
         :type read_only: bool
         :param allowed_hosts: whitelist of the clients allowed to connect: IP addresses or networks in CIDR notation\
             (like ['192.168.1.10', '10.0.0.0/24', '::1']), other connections are closed at once, None to accept\
@@ -256,7 +261,7 @@ class ModbusServer:
             send_pdu.build_except(func_code & 0x7F, EXP_ILLEGAL_FUNCTION)
             return
         unit_id = request.mbap.unit_id
-        routed = self._route(func_code, unit_id, client)
+        routed = self._route(request.pdu.raw, unit_id, client)
         if isinstance(routed, int):
             send_pdu.build_except(func_code, routed)
             return
@@ -264,9 +269,7 @@ class ModbusServer:
         ctx = RequestContext(client=client, unit_id=unit_id, function_code=func_code)
         try:
             response = handler(Request(pdu=request.pdu.raw, ctx=ctx, store=store, device_id=self.device_id))
-            if not isinstance(response, (bytes, bytearray)) or not response:
-                raise DataFormatError(f'the handler returned {type(response).__name__}, a non empty bytes expected')
-            send_pdu.raw = bytes(response)
+            send_pdu.raw = _checked_response(response)
         except ModbusException as e:
             logger.debug('Function 0x%02X from %s: exception 0x%02X (%s)', func_code, client, e.code, e)
             send_pdu.build_except(func_code, e.code)
@@ -287,13 +290,18 @@ class ModbusServer:
             logger.exception('Unexpected error during processing of function 0x%02X from %s', func_code, client)
             send_pdu.build_except(func_code, EXP_SLAVE_DEVICE_FAILURE)
 
-    def _route(self, func_code: int, unit_id: int,
-               client: session.ClientInfo) -> tuple[FunctionHandler, DataStore] | int:
+    def _route(self, pdu: bytes, unit_id: int, client: session.ClientInfo) -> tuple[FunctionHandler, DataStore] | int:
         """Return the handler and the store of a request, or the exception code to answer."""
-        # read-only server: a function that writes data is not available
-        if self.read_only and func_code in WRITE_FUNCTION_CODES:
-            logger.debug('Write function 0x%02X refused (read-only mode) from %s', func_code, client)
-            return EXP_ILLEGAL_FUNCTION
+        func_code = pdu[0]
+        # read-only server: a function that writes data is not available, and the fallback only gets the read
+        # functions (it may relay any function: 0x08 diagnostics, a private function... can write)
+        if self.read_only:
+            relayed = func_code not in self.functions
+            is_read = func_code in READ_FUNCTION_CODES and (func_code != ENCAPSULATED_INTERFACE_TRANSPORT
+                                                            or pdu[1:2] == bytes([MEI_TYPE_READ_DEVICE_ID]))
+            if func_code in WRITE_FUNCTION_CODES or (relayed and not is_read):
+                logger.debug('Function 0x%02X refused (read-only mode) from %s', func_code, client)
+                return EXP_ILLEGAL_FUNCTION
         # the store of the unit id
         store = self._stores.get(unit_id, self._stores.get(None))
         if store is None:
@@ -397,3 +405,15 @@ class ModbusServer:
             # actively shutdown every session instead of waiting for them to notice the flag
             tcp_server.shutdown_sessions()
             tcp_server.server_close()
+
+
+def _checked_response(response: object) -> bytes:
+    """The response PDU of a handler: non empty bytes, at most MAX_PDU_SIZE (253) bytes.
+
+    :raises DataFormatError: for another response (the client gets a "slave device failure")
+    """
+    if not isinstance(response, (bytes, bytearray)) or not response:
+        raise DataFormatError(f'the handler returned {type(response).__name__}, a non empty bytes expected')
+    if len(response) > MAX_PDU_SIZE:
+        raise DataFormatError(f'the handler returned a PDU of {len(response)} bytes (max {MAX_PDU_SIZE})')
+    return bytes(response)

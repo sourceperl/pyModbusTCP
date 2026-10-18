@@ -48,7 +48,7 @@ supported.
 |---|---|---|
 | `host` | `'localhost'` | Interface the server listens on. |
 | `allowed_hosts` | `None` (every client) | Whitelist of IP addresses or networks (CIDR notation, IPv4 and IPv6). Other clients are disconnected at once, before any function handler (or fallback) is called. Refusals are logged (one message per 10 s at most). An empty list allows no client at all (a warning is logged at startup). |
-| `read_only` | `False` | Every request that writes data (functions 0x05, 0x06, 0x0F, 0x10 and 0x17) gets an "illegal function" exception, whatever its handler (a custom function or a fallback too). For finer rules (some spaces, some clients), stack the `ReadOnly`, `AccessControl` or `Guard` wrappers on the data store. |
+| `read_only` | `False` | Every request that writes data (functions 0x05, 0x06, 0x0F, 0x10, 0x15, 0x16 and 0x17) gets an "illegal function" exception, whatever its handler (a custom function or a fallback too). A fallback handler (like a gateway) only gets the read functions (0x01 to 0x04, 0x2B/0x0E): any other function may write. For finer rules (some spaces, some clients), stack the `ReadOnly`, `AccessControl` or `Guard` wrappers on the data store. |
 
 `allowed_hosts` is a filter on the source IP address, **not an authentication**: on a shared network segment
 an attacker can spoof an allowed address (ARP spoofing for example). Use it as a second line of defense behind
@@ -130,8 +130,9 @@ the connections of the previous one are fully closed by the system.
 These points are not vulnerabilities of the code, but behaviors to take into account in the design of an
 application.
 
-- **`read_only` only knows the standard write function codes**: a custom function (0x41 to 0x48 for example)
-  that writes data must refuse the writes on its own, or use a store with a `ReadOnly` wrapper.
+- **`read_only` only knows the standard write function codes for the custom functions**: a custom function
+  (0x41 to 0x48 for example) that writes data must refuse the writes on its own, or use a store with a
+  `ReadOnly` wrapper. A fallback handler is safe: in read-only mode, it only gets the read functions.
 - **`ModbusClient` is not thread-safe**: share an instance between threads only with an external lock.
 - **Client name resolution** is not limited by `timeout`, and the connection timeout applies to each address
   returned by the resolver in turn.

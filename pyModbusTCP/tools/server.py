@@ -13,7 +13,7 @@ Modbus/TCP has no authentication: any client that can reach the server can read 
 - The server listens on localhost by default. Use -H with the address of the network interface that needs it
   (or 0.0.0.0 for every IPv4 interface, only if every network of the host is trusted).
 - -A/--allow (repeatable) restricts the clients to some IP addresses or networks.
-- --read-only refuses every write request (functions 0x05, 0x06, 0x0F, 0x10 and 0x17).
+- --read-only refuses every write request (functions 0x05, 0x06, 0x0F, 0x10, 0x15, 0x16 and 0x17).
 - --max-connections-per-host (default 16) keeps a single client host from taking every connection of
   --max-connections (default 64).
 - The default port is 5020: port 502 is a privileged port on Unix systems. Never run this command as root (or

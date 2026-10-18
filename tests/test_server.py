@@ -13,6 +13,7 @@ from collections.abc import Iterable
 from typing import Any, ClassVar, cast
 from unittest import mock
 
+from pyModbusTCP.client import ModbusClient
 from pyModbusTCP.server import (
     ChangeEvent,
     DeviceIdentification,
@@ -884,7 +885,7 @@ class TestIPv6Option(unittest.TestCase):
 
 
 class TestReadOnlyOption(unittest.TestCase):
-    """The requests that write data (0x05, 0x06, 0x0F, 0x10 and 0x17) are refused with an ILLEGAL FUNCTION exception."""
+    """The requests that write data (0x05, 0x06, 0x0F, 0x10, 0x15, 0x16, 0x17) get an ILLEGAL FUNCTION exception."""
 
     # request PDU (as hex string) of every function that writes data
     WRITE_REQUESTS: ClassVar[dict[str, str]] = {
@@ -990,12 +991,39 @@ class TestReadOnlyOption(unittest.TestCase):
         self._start_server(read_only=True, functions={}, fallback=fallback)
         self.assertEqual(self.exchange('06 0005 002a'), '8601')
         self.assertEqual(self.exchange('03 0005 0001'), '0300050001')
-        self.assertEqual(received, [0x03])
+        # the fallback only gets the read functions: mask write (0x16), write file record (0x15), diagnostics (0x08),
+        # a private function or a MEI type other than 0x0E may write
+        for pdu in ('16 0000 00ff 0000', '15 07 06 0001 0000 0001 0000', '08 0004 0000', '41 00', '2b 0d 00'):
+            with self.subTest(pdu):
+                self.assertEqual(self.exchange(pdu), f'{bytes.fromhex(pdu)[0] | 0x80:02x}01')
+        self.assertEqual(self.exchange('2b 0e 01 00'), '2b0e0100')
+        self.assertEqual(received, [0x03, 0x2B])
+
+    def test_custom_function_not_refused(self) -> None:
+        """A custom function of the server is not a fallback: it decides what read_only means for it."""
+        server = self._start_server(read_only=True)
+        server.function(0x41)(lambda req: req.reply('B', 7))
+        self.assertEqual(self.exchange('41'), '4107')
 
     def test_with_allowed_hosts(self) -> None:
         self._start_server(read_only=True, allowed_hosts=['127.0.0.1'])
         self.assertEqual(self.exchange('06 0005 002a'), '8601')
         self.assertEqual(self.exchange('03 0000 0001'), '03020000')
+
+
+def test_response_pdu_too_long() -> None:
+    """A handler that returns a PDU over 253 bytes: "slave device failure", never an invalid frame."""
+    server = ModbusServer(host='127.0.0.1', port=0, no_block=True)
+    server.function(0x41)(lambda req: req.reply('253s', b'x' * 253))
+    server.function(0x42)(lambda req: req.reply('252s', b'x' * 252))
+    _, port = server.start()
+    try:
+        c = ModbusClient(host='127.0.0.1', port=port, timeout=2.0)
+        assert c.custom_request(b'\x41') is None and c.last_except == 0x04
+        assert c.custom_request(b'\x42') == b'\x42' + b'x' * 252
+        c.close()
+    finally:
+        server.stop()
 
 
 """Tests for the ModbusServer `allowed_hosts` option."""

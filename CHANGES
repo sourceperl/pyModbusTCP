@@ -37,6 +37,9 @@ Revision history for pyModbusTCP
       with an exception instead of closing the session, port hijacking on Windows (SO_EXCLUSIVEADDRUSE).
     - tools: mbtcp-tcp2rtu fair queue by client host (denial of service), invalid function codes refused.
     - utils: valid_host() edge cases (empty host, NUL and non-ASCII chars).
+    - server: read_only also refuses 0x15 (write file record) and 0x16 (mask write register), and a fallback
+      handler only gets the read functions (0x01 to 0x04, 0x2B/0x0E): 0x08 or a private function could write.
+    - server: a handler that returns a PDU over 253 bytes gets a "slave device failure" (no oversized frame).
 
     Build: pyproject.toml with hatchling, Python 3.10 to 3.14.
 

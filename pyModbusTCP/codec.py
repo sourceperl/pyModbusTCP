@@ -207,10 +207,12 @@ class Codec:
             return str(value)
         if self.data_type is DataType.FLOAT64:
             return repr(value)
+        # 9 significant digits always give back a float32: keep them unless a shorter text gives it back too
         text = f'{value:.9g}'
         for precision in range(6, 9):
-            text = f'{value:.{precision}g}'
-            if struct.unpack('>f', struct.pack('>f', float(text)))[0] == value:
+            shorter = f'{value:.{precision}g}'
+            if struct.unpack('>f', struct.pack('>f', float(shorter)))[0] == value:
+                text = shorter
                 break
         return text if any(c in text for c in '.en') else text + '.0'
 

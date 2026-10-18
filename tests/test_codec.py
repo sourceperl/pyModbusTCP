@@ -78,6 +78,13 @@ def test_text() -> None:
     assert [f32.text(v) for v in (0.1, 10.0, 1e-45, float('nan'), float('-inf'))] == \
         ['0.1', '10.0', '1e-45', 'nan', '-inf']
     assert f32.text(f32.decode(f32.encode([0.1]))[0]) == '0.1'
+    # a float32 that needs 9 significant digits
+    value = f32.decode(f32.encode([0.0110045085]))[0]
+    assert f32.text(value) == '0.0110045085'
+    # every text gives back its float32
+    for raw in range(0x3C000000, 0x3C000000 + 0x200000, 997):
+        value = f32.decode([raw >> 16, raw & 0xFFFF])[0]
+        assert f32.decode(f32.encode([float(f32.text(value))]))[0] == value, hex(raw)
     assert Codec(DataType.FLOAT64).text(0.1) == '0.1' and Codec(DataType.INT32).text(-2) == '-2'
     assert Codec(DataType.INT32).parse('-0x10') == -16 and Codec(DataType.FLOAT64).parse('1e300') == 1e300
     for data_type, text in ((DataType.INT32, '0x80000000'), (DataType.UINT16, '-1'), (F32, '1e39'),
