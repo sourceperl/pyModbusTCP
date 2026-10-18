@@ -2,260 +2,51 @@ Revision history for pyModbusTCP
 
 0.4.0a3 2026-xx-xx (alpha: the command line tools, their options and output, may still change before 0.4.0)
 
-    Changes since 0.4.0a2.
+    Summary of the changes since 0.3.1 (0.4.0a1 and 0.4.0a2 included).
 
-    Breaking changes (server data model, see "Migrating from DataBank and DataHandler" in the server guide):
+    Breaking changes:
 
-    - server: DataBank and DataHandler are replaced by a data store. The default one is MemoryStore (argument
-              store of ModbusServer, attribute server.store), the application accesses it with server.store.app
-              (like server.store.app.holding_registers.write(0, [1, 2])). An address out of the space raises
-              IllegalDataAddress instead of returning None, nothing is written.
-    - server: every request runs in a transaction of the store: atomic (one lock for the 4 spaces) and restored
-              on an exception. Function 0x17 writes then reads in one transaction: its response contains its own
-              write, and an invalid read cancels the write. The application groups its updates with
-              store.app.transaction().
-    - server: the Modbus exceptions are exceptions (IllegalDataAddress, IllegalFunction... subclasses of
-              ModbusException) instead of DataHandler.Return(exp_code).
-    - server: the change callbacks on_coils_change() and on_holding_registers_change() are replaced by
-              store.subscribe(listener): one ChangeEvent per committed request with every change (all the spaces),
-              the request context (client, unit id, function code), optionally the writes of the application
-              (app_writes=True), and a delivery in a thread of the store (threaded=True). An exception of a
-              listener is logged, the client no longer gets a "slave device failure".
-    - server: srv_info (ServerInfo) is replaced by a RequestContext (client, unit_id, function_code).
-    - server: DataBank(virtual_mode=True) is replaced by mapped ranges: store.map(space, address, count, read,
-              write=None) computes the values of a range at each access.
-    - server: ext_engine is replaced by a registry of function handlers: server.functions, the decorator
-              @server.function(code), STANDARD_FUNCTIONS, and a fallback handler for the other codes. A handler
-              takes a Request and returns the response PDU. read_only=True also applies to a fallback.
+    - server: DataBank and DataHandler are replaced by a data store (MemoryStore, server.store), see "Migrating
+      from DataBank and DataHandler" in the server guide: on_*_change() callbacks -> store.subscribe(), virtual
+      mode -> store.map(), ext_engine -> function handlers (@server.function), DataHandler.Return -> exceptions
+      (IllegalDataAddress...), srv_info -> RequestContext.
+    - server: secure defaults: idle_timeout (300 s), request_timeout (30 s), max_connections (64) and
+      max_connections_per_host (16), None disables them. start() raises NetworkError if already running.
+    - client/server: stricter argument checks (TypeError/ValueError instead of a silent conversion or truncation),
+      numpy booleans are no longer accepted as coil values.
+    - client: the function code of a reply must match the request (MB_RECV_ERR otherwise).
+    - examples: client_serial_gw.py and server_serial_gw.py are removed (replaced by the gateways of the tools).
 
     New features:
 
-    - server: one convention for every allow list (allowed_hosts of ModbusServer, read_hosts and write_hosts of
-              AccessControl): None for every host, an empty list for no host at all. An empty allowed_hosts is no
-              longer an error: the server refuses every connection, with a warning at startup.
-    - server: access rules stacked on a store: ReadOnly (some spaces), AccessControl (client addresses allowed to
-              read, to write), Guard (a check function), StoreWrapper (base class).
-    - server: one store per unit id (store={1: store_a, 2: store_b}), to simulate several devices: another unit id
-              gets a "gateway path unavailable" exception.
-    - server: typed access of the registers for the application: read/write_float32, _float64, _int32, _uint32.
-    - examples: new server_mailbox, server_multi_unit and server_custom_function; the server examples use the
-                data store.
+    - server: transactions (every request is atomic, 0x17 included), access rules (ReadOnly, AccessControl,
+      Guard), one store per unit id, read_only, allowed_hosts (None: every host, []: no host).
+    - codec: Codec(DataType, ByteOrder) converts 16/32/64 bits integers and IEEE floats to registers and back, in
+      the ABCD, CDAB, BADC or DCBA byte order, for the client and the server store (read_values/write_values).
+    - client: context manager, TCP_NODELAY (no_delay), timeout for the whole request.
+    - tools: command line tools (python -m pyModbusTCP.tools, or the mbtcp-* commands of pyModbusTCP-cli with
+      "pip install pyModbusTCP[cli]"): mbtcp-server, mbtcp-client (table output, csv/json, write-read, typed
+      values with -T/-b), mbtcp-tcp2rtu and mbtcp-rtu2tcp gateways (with RS-485 mode, needs pyserial).
+    - typing: type hints on the whole package (py.typed).
+    - docs: Sphinx documentation rewritten (guides, tools, security, examples), SECURITY.md.
 
-    Changes:
+    Fixes:
 
-    - tools: add the version option -v/--version to every tool and to the dispatcher.
-    - tools: mbtcp-tcp2rtu and mbtcp-rtu2tcp can enable the RS-485 mode of the serial driver (Linux), for an
-             UART that switches its RS-485 transceiver with RTS: new options --rs485, --rs485-rts-tx,
-             --rs485-rts-rx, --rs485-delay-before-tx and --rs485-delay-before-rx. A RTS level not given keeps the
-             one of the driver when its RS-485 mode is already set (like by the device tree). A driver without
-             RS-485 support refuses it at startup (exit code 2). Without these options, the serial port is opened as
-             before.
-    - tools: mbtcp-client has an output for humans: on a terminal, a header (server, request, response time) and
-             a table. Each row shows the offset from the first address and the address in decimal and
-             hexadecimal, the registers in hexadecimal, unsigned, signed, binary and ASCII, the bits in a grid of
-             10 per row (with the count of on/off bits), the device identification objects with their names.
-             With -i, the table is refreshed in place, the values that changed are highlighted (and marked "*"),
-             a failed read shows the error and the last good values. A write prints a confirmation line.
-             New options -f/--format (auto, table, plain, csv, json) and --no-color (or NO_COLOR) for the read and
-             device-id commands. When the output is not a terminal (auto format), the output is unchanged: one
-             "address value" line per item, nothing for a write.
-    - tools: mbtcp-client has a write-read command (function 0x17): it writes holding registers, then reads holding
-             registers (-r/--read for another address, -n/--number for another count) in one request, with the
-             output formats of the reads (the json object also gives the values written). In the table, a
-             "Written" column gives the value written at each address, and "!" marks a register read with another
-             value (changed by the server in the same request). The ranges are checked before the request, with a
-             clear message.
-    - new module pyModbusTCP.codec: Codec(data_type, byte_order) converts values to registers and back (encode(),
-      decode()). The enum DataType gives the types (UINT16, INT16, UINT32, INT32, FLOAT32, UINT64, INT64,
-      FLOAT64), the enum ByteOrder the byte orders: ABCD (alias BIG_ENDIAN), CDAB (WORD_SWAP), BADC (BYTE_SWAP),
-      DCBA (LITTLE_ENDIAN). A value out of the range of its type raises ValueError (never truncated). The utils
-      functions are kept.
-    - server: RegistersAccess.read_values(address, codec, count) and write_values(address, values, codec) read
-              and write typed values in the store (store.app.holding_registers...). The shortcuts read_float32(),
-              write_int32()... use a Codec.
-    - examples: client_float.py uses a Codec (no more ModbusClient subclass), and runs against a local server.
-    - tools: mbtcp-client reads and writes values on several registers: -T/--type (uint16, int16, uint32, int32,
-             float32, uint64, int64, float64) and -b/--byte-order (ABCD big endian, CDAB word swap, BADC byte swap,
-             DCBA little endian, the notation of most Modbus software: there is no standard) on read-holding,
-             read-input-regs, write-registers and write-read. -n then counts the values. The table shows each
-             value with its bits in hexadecimal and its registers as read; plain and csv give the address of the
-             first register of each value, json the type and the byte order. Without these options, nothing
-             changes.
-    - tools: mbtcp-client stops quietly (status 1, no traceback) when its output is closed (like "| head").
+    - client: many robustness fixes (timeouts, invalid replies, transaction ids, is_open, write replies check).
+    - server: Modbus compliance (0x05, 0x0F, 0x10, 0x17, 0x2B/0x0E, MBAP length), malformed requests answered
+      with an exception instead of closing the session, port hijacking on Windows (SO_EXCLUSIVEADDRUSE).
+    - tools: mbtcp-tcp2rtu fair queue by client host (denial of service), invalid function codes refused.
+    - utils: valid_host() edge cases (empty host, NUL and non-ASCII chars).
 
-0.4.0a2 2026-10-17 (alpha: the command line tools, their options and output, may still change before 0.4.0)
+    Build: pyproject.toml with hatchling, Python 3.10 to 3.14.
 
-    Changes since 0.4.0a1 (see 0.4.0a1 below for the changes since 0.3.1).
+0.4.0a2 2026-10-17 (alpha)
 
-    Breaking changes:
+    See 0.4.0a3.
 
-    - extras: "pyModbusTCP[tools]" is renamed "pyModbusTCP[cli]" (the mbtcp-* commands of pyModbusTCP-cli).
-    - ModbusServer: max_connections_per_host (16) is active by default: a client host (an IPv4 address, or a /64
-                    network for IPv6) can't open more connections, the next ones are closed at once. Clients
-                    behind a NAT share the same address: raise it, or set it to None to get the previous behavior.
-    - ModbusServer: the constructor checks host (a str) and port (an int from 0 to 65535): TypeError or ValueError,
-                    a bad value was only seen by start().
-    - ModbusClient, DataBank: numpy booleans (numpy.bool_, like the items of a numpy bool array) are no longer
-                    accepted as coil values (TypeError, like NumPy 2 that refuses them as integers): convert them
-                    with bool() or tolist(). Numpy integers are still accepted.
-    - tools: mbtcp-client exits with status 130 when Ctrl-C interrupts a request (it was 0, a success). Ctrl-C is
-             still the normal end of a read repeated with -i (status 0).
-    - tools: the delays given on the command line (-t, -e, -i, --idle-timeout) must be greater than 0 and at most
-             86400 s (one day), the serial rate (-b) greater than 0, and the slave address of mbtcp-rtu2tcp (-a)
-             from 1 to 247: invalid values are refused at startup (status 2).
+0.4.0a1 2026-10-15 (alpha)
 
-    Security:
-
-    - fix tools: mbtcp-tcp2rtu serves the waiting requests in turn by client host (round robin), instead of one
-                 FIFO of 5 requests: 3 hosts (with 2 pending requests each) could fill it, every request of the
-                 other hosts got exception 0x0A (denial of service). A request now waits for at most one request of
-                 each other host. Up to 16 requests can wait for the serial line (the limit of 2 per host is kept).
-    - fix tools: mbtcp-tcp2rtu wrote the requests with an invalid function code (0, or 0x80 to 0xFF: the exception
-                 flag of a reply) on the serial line (out of --read-only mode): they get exception 0x01 now.
-    - fix tools: mbtcp-tcp2rtu no longer sends on the serial line a request that its client session doesn't wait for
-                 anymore (gateway timeout).
-    - fix ModbusServer: request_timeout is a limit for the whole request (MBAP header and PDU) from its first byte, as
-                        documented: the delay restarted for the PDU, a client could hold a session twice as long.
-    - fix ModbusServer: on Windows, the listening port is reserved with SO_EXCLUSIVEADDRUSE instead of SO_REUSEADDR,
-                        which allowed another local socket to bind the same port and take the connections of the
-                        server (port hijacking). No change on the other systems.
-    - improve ModbusServer: add max_connections_per_host (default 16), a single host can no longer take every
-                            connection of max_connections (denial of service).
-
-    Changes:
-
-    - tools: mbtcp-tcp2rtu limits the pending requests of a client host (at most 2, the next ones get exception
-      0x0A). Its refused requests are logged once per 10 s at most (with their count) instead of one line per
-      request. New options --max-connections and --max-connections-per-host for mbtcp-tcp2rtu,
-      --max-connections-per-host for mbtcp-server.
-    - tools: mbtcp-tcp2rtu and mbtcp-rtu2tcp stop cleanly on SIGTERM (systemd, docker stop...), like mbtcp-server.
-    - fix tools: -b 0 made mbtcp-tcp2rtu and mbtcp-rtu2tcp crash (ZeroDivisionError), a negative or "nan" timeout
-                 of mbtcp-tcp2rtu made every request fail, "-a 0" made mbtcp-rtu2tcp a silent slave, "-i inf" made
-                 mbtcp-client crash (OverflowError).
-    - fix utils: valid_host() accepted some non-ASCII chars (like the Kelvin sign "\u212a", taken for a "k" by a
-                 case-insensitive match), the resolver could then raise a UnicodeError at connect time.
-    - fix ModbusClient: a host name that the resolver can't encode (UnicodeError) is a connect error
-                        (MB_CONNECT_ERR), the request raised the exception.
-    - fix ModbusServer: start() no longer leaves the listening socket open when bind() raises something else than
-                        an OSError (like an OverflowError for a port changed to 70000 after the constructor).
-    - fix ModbusServer: a data handler that returns a value that can't be encoded in the response (like a register
-                        value out of 0-65535, or an exception code over 255) gets a SLAVE_DEVICE_FAILURE (0x04)
-                        exception, the session was closed.
-    - typing: type hints use the Python 3.10 syntax (X | None, list[int]...).
-    - build: tools/build_dist.sh -t (install test) ran "python -m pyModbusTCP.cli" (no such module) instead of
-      pyModbusTCP.tools, it also checks the release date of the CHANGES entry and the pre-release pins of the docs.
-    - build: tools/code_audit.sh runs the tools of the venv (python -m, never from the PATH), from any directory,
-      with a summary and an exit status (1 if a check fails), new options -a (with the tests), -s and -o.
-    - tests: type hints on the tests, "mypy --strict tests" passes.
-
-0.4.0a1 2026-10-15 (alpha: the command line tools, their options and output, may still change before 0.4.0)
-
-    Breaking changes:
-
-    - DataBank: remove deprecated class methods (get_bits, set_bits, get_words and set_words).
-    - DataBank: set_*() methods raise a TypeError on non-integer items and a ValueError on register values out of
-                the 0-65535 range (values were silently converted before, see below).
-    - ModbusClient: non-integer arguments raise a TypeError, custom_request() checks its pdu argument
-                    (TypeError/ValueError) and auto_open, auto_close and no_delay only accept bool or int values.
-    - ModbusClient: the function code of a reply must match the request (or with the exception flag), else the
-                    request fails with MB_RECV_ERR (this also applies to custom_request()).
-    - ModbusServer: idle_timeout (300 s) and max_connections (64) are active by default: an idle client session is
-                    closed after 5 min (its next request fails once, then the client reconnects), set them to None
-                    to get the previous behavior.
-    - ModbusServer: start() raises a NetworkError if the server is already running (the call was silently ignored).
-    - ModbusServer: the internal request handler class ModbusService is replaced by ModbusRequestHandler and
-                    CustomThreadingTCPServer, is_run is deprecated (use is_running).
-    - examples: client_serial_gw.py and server_serial_gw.py are removed, replaced by the gateways of
-                pyModbusTCP.tools ("python -m pyModbusTCP.tools tcp2rtu/rtu2tcp", or the commands mbtcp-tcp2rtu and
-                mbtcp-rtu2tcp of pyModbusTCP-cli).
-
-    Changes:
-
-    - docs: README.rst converted to Markdown (README.md), like the other docs of the repository.
-    - docs: Sphinx documentation rewritten: up to date quick start, user guides for the client (connection, errors,
-      threads), the server (data bank, change callbacks, custom handler, access restrictions) and the data conversion
-      functions, new pages for the command line tools (with their generated --help), the security policy, the
-      changelog and the constants, every example documented. tools/build_docs.sh builds it (HTML, PDF...) in a
-      temporary venv, the docs build is checked by the CI (warnings are errors).
-    - pyModbusTCP.client and pyModbusTCP.server are now packages (one module per concern: main class, Modbus
-      functions, TCP layer, argument checks...) with the same layout for both. No change for the users: same
-      imports, same logger names, nested names kept (ModbusServer.PDU, ModbusServer.NetworkError...). Exceptions
-      of the server are now shown as pyModbusTCP.server.errors.NetworkError (and so on) in tracebacks.
-    - new package pyModbusTCP.tools: command line tools (Modbus/TCP server and client, TCP to RTU and RTU to TCP
-      gateways), run them with "python -m pyModbusTCP.tools {server,client,tcp2rtu,rtu2tcp}". The gateways need
-      pyserial, a new optional dependency: "pip install pyModbusTCP[serial]".
-    - new package pyModbusTCP-cli (directory of the same name, no code): installs the tools as the commands
-      mbtcp-server, mbtcp-client, mbtcp-tcp2rtu and mbtcp-rtu2tcp, with pyserial. Install it with
-      "pip install pyModbusTCP[tools]" or "pipx install pyModbusTCP-cli". A plain "pip install pyModbusTCP" puts
-      no command in the PATH and still has no dependency.
-    - build: migrate from setup.py to pyproject.toml, with the hatchling build backend (no MANIFEST.in anymore, tests
-      are no longer in the sdist).
-    - fix ModbusClient: is_open is now False only for a closed socket (file descriptor 0 is valid).
-    - fix ModbusClient: non-integer arguments (float, str...) now raise a TypeError instead of an uncaught struct.error.
-    - fix ModbusClient: treat socket.gaierror as MB_CONNECT_ERR (like any other connect error).
-    - fix ModbusClient: timeout is now a limit for the whole request (send + receive) and no longer for each socket I/O.
-                        A server sending its response byte by byte could hold the client much longer than timeout.
-    - fix ModbusClient: validate write_multiple_coils items to reject non-integer values (like 'a', None, [], 1.5),
-                        matching write_single_coil behavior.
-    - fix ModbusClient: write_multiple_coils() and write_multiple_registers() now set last_error (MB_RECV_ERR) when the
-                        server reply does not match the request, they returned False with last_error == MB_NO_ERR.
-    - fix ModbusClient: close the connection on an invalid MBAP header in a reply (the stream can't be trusted).
-    - fix ModbusClient: use an incremental MBAP transaction ID (from a random start value) instead of a random one at
-                        each request, a late reply to the previous request is always detected.
-    - fix ModbusClient: avoid an AttributeError in __del__() when __init__() fails.
-    - fix ModbusServer: close the session on send timeout (a partial send leaves the TCP stream out of sync).
-    - fix ModbusServer.PDU: is_valid property was inverted.
-    - fix ModbusServer: an unexpected exception during a request (like one raised by a user callback) is now logged and
-                        answered with a SLAVE_DEVICE_FAILURE (0x04) exception instead of dropping the TCP session.
-    - fix ModbusServer: a malformed request PDU (too short...) is answered with ILLEGAL DATA VALUE (0x03) and a request
-                        with a function code >= 0x80 with ILLEGAL FUNCTION (0x01), the session was closed before.
-    - fix ModbusServer: a data handler that returns a wrong number of items gets a SLAVE_DEVICE_FAILURE (0x04).
-    - fix ModbusServer: start() no longer modifies class attributes of socketserver, since ThreadingTCPServer can be
-                        shared with the rest of the process.
-    - fix ModbusServer: close the listening socket when start() fails to bind.
-    - fix ModbusServer: make function Write/Read Multiple Registers (0x17) atomic to prevent writing when the read range
-                        is out of bounds.
-    - fix ModbusServer: ensure Write Single Coil (0x05) complies fully with the Modbus specification.
-    - fix ModbusServer: for functions 0x0F, 0x10 and 0x17 the byte count must exactly match the quantity.
-    - fix ModbusServer: Read Device Identification (0x2B/0x0E) compliance with the spec (stream access restarts at the
-                        first object of the category, an unknown object in individual access gets exception 0x02).
-    - fix ModbusServer: support MBAP header length from 2 to 254.
-    - fix ModbusServer: limit client info to (address, port) for IPv6 peers.
-    - fix DataBank: set_coils(), set_discrete_inputs(), set_holding_registers() and set_input_registers() now check
-                    their input. Non-integer items (float, str, None...) raise a TypeError (numpy integers and
-                    booleans are accepted), and register values out of the 0-65535 range raise a ValueError.
-                    Before, they were silently converted (a value like 70000 or -1 was truncated to 16 bits).
-    - fix utils: valid_host() returns False for an empty host or a host with a NUL char, it raised an IndexError or a
-                 ValueError (so ModbusClient(host='') raised an IndexError instead of a ValueError).
-    - improve ModbusClient: decode/encode registers and bits in one pass (faster reads and writes).
-    - improve ModbusClient: set TCP_NODELAY on connect (new no_delay argument, on by default) to reduce latency on small
-                            request/response frames.
-    - improve ModbusClient: improve socket lifecycle, parameter validation, and timeout safety.
-    - improve ModbusClient: add context manager support (with ModbusClient(...) as c:), closes the connection on exit.
-    - improve ModbusServer: decode/encode registers and bits in one pass for requests 0x01, 0x02, 0x0F, 0x10 and 0x17
-                            (like the client), instead of one Python loop iteration per bit or register.
-    - improve ModbusServer: stop() is now faster, the main loop polls the stop request every 50 ms instead of 500 ms.
-    - improve ModbusServer: stop() now closes the active sessions and waits for the server thread.
-    - improve ModbusServer: add request_timeout (default 30 s): a client session with a stalled request (incomplete MBAP
-                            header or PDU) is now closed, it was kept (with its thread) until the client closed it.
-                            Set request_timeout=None to get the previous behavior.
-    - improve ModbusServer: add idle_timeout (close a session without any request for this time, default 300 s) and
-                            max_connections (reject connections over this limit, default 64), None disables them.
-    - improve ModbusServer: add allowed_hosts (whitelist of client IP addresses or networks, CIDR notation) and
-                            read_only (refuse the write functions 0x05, 0x06, 0x0F, 0x10 and 0x17), see SECURITY.md.
-    - improve ModbusServer: increase the listen backlog from 5 to 128, a burst of simultaneous connections (like clients
-                            reconnecting together) no longer waits for a TCP retransmission (1 s or more).
-    - improve ModbusServer: allow dynamic TCP port allocation (port=0), start() returns the bound (host, port).
-    - improve ModbusServer: add is_running, wait(), active_sessions and shutdown_sessions().
-    - improve ModbusServer: an exception raised by an external engine (ext_engine) is logged and closes the session.
-    - improve DataBank: set_coils() and set_holding_registers() now compare the whole slice before writing, and
-                        only build the list of changes when a server request needs it for the on_*_change()
-                        callbacks. Writing unchanged values is much faster.
-    - improve DeviceIdentification: support the "in" operator, an object value over 244 bytes raises a ValueError.
-    - improve typing: type hints on the whole package and add py.typed (PEP 561).
-    - add SECURITY.md (threat model, deployment recommendations, server and client protections).
-    - add tools/ (benchmark, server fuzzing, code audit) and init_dev_venv.sh (test and build venv).
-    - examples: add server_dynamic_port.py, add type hints to examples.
+    See 0.4.0a3.
 
 0.3.1 2026-09-29
 
