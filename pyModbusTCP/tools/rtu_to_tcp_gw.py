@@ -416,7 +416,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('device', type=str, help='serial device (like /dev/ttyUSB0)')
     parser.add_argument('-a', '--address', type=slave_address, default=1,
                         help='slave address of the gateway, 1 to 247 (default: 1)')
-    parser.add_argument('--allow-broadcast', action='store_true', help='relay broadcast frames (address 0) to the server')
+    parser.add_argument('--allow-broadcast', action='store_true',
+                        help='relay broadcast frames (address 0) to the server')
     parser.add_argument('-b', '--baudrate', type=positive_int, default=9600, help='serial rate (default: 9600)')
     parser.add_argument('--bytesize', type=int, choices=(7, 8), default=8, help='data bits (default: 8)')
     parser.add_argument('--parity', choices=('N', 'E', 'O'), default='N', help='parity (default: N)')

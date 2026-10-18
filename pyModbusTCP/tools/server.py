@@ -4,7 +4,7 @@ mbtcp-server: a Modbus/TCP server
 
 Run it as "mbtcp-server" (pyModbusTCP-cli package) or "python -m pyModbusTCP.tools server".
 
-A Modbus/TCP server with the default data bank of pyModbusTCP (65536 coils, discrete inputs, holding registers
+A Modbus/TCP server with the default data store of pyModbusTCP (65536 coils, discrete inputs, holding registers
 and input registers, all set to 0 at startup). Useful to test a Modbus client, a SCADA, a gateway...
 
 SECURITY
@@ -33,7 +33,7 @@ import signal
 import sys
 from types import FrameType
 
-from ..server import DataBank, ModbusServer
+from ..server import ChangeEvent, MemoryStore, ModbusServer, Space
 from ._common import (
     PORT_502_HELP,
     add_version_arg,
@@ -49,17 +49,13 @@ logger = logging.getLogger('mbtcp-server')
 DEFAULT_PORT = 5020
 
 
-class ChangeLogDataBank(DataBank):
-    """A data bank that logs every change done by a client (coils and holding registers)."""
-
-    def on_coils_change(self, address: int, from_value: bool, to_value: bool,
-                        srv_info: ModbusServer.ServerInfo) -> None:
-        logger.info('Coil @%d: %s -> %s (from %s)', address, from_value, to_value, srv_info.client.address)
-
-    def on_holding_registers_change(self, address: int, from_value: int, to_value: int,
-                                    srv_info: ModbusServer.ServerInfo) -> None:
-        logger.info('Holding register @%d: %d -> %d (from %s)', address, from_value, to_value,
-                    srv_info.client.address)
+def log_changes(event: ChangeEvent) -> None:
+    """Change listener: log every coil and holding register changed by a client request."""
+    assert event.ctx is not None
+    for change in event.changes:
+        kind = 'Coil' if change.space is Space.COILS else 'Holding register'
+        logger.info('%s @%d: %s -> %s (from %s)', kind, change.address, change.old, change.new,
+                    event.ctx.client.address)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -116,9 +112,12 @@ def main(argv: list[str] | None = None) -> int:
     if not args.debug:
         # the library logs every session event at debug level only
         logging.getLogger('pyModbusTCP').setLevel(logging.INFO)
+    store = MemoryStore()
+    if args.log_changes:
+        # threaded: the log never delays the response of a client
+        store.subscribe(log_changes, threaded=True)
     try:
-        server = ModbusServer(host=args.host, port=args.port, ipv6=args.ipv6,
-                              data_bank=ChangeLogDataBank() if args.log_changes else None,
+        server = ModbusServer(host=args.host, port=args.port, ipv6=args.ipv6, store=store,
                               allowed_hosts=args.allow, read_only=args.read_only,
                               max_connections=args.max_connections,
                               max_connections_per_host=args.max_connections_per_host,

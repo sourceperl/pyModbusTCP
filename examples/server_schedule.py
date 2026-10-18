@@ -30,7 +30,7 @@ def alive_word_job() -> None:
 
     Job called every 10s by scheduler.
     """
-    server.data_bank.set_holding_registers(0, [int(time.time()) % (24*3600) // 10])
+    server.store.app.holding_registers.write(0, [int(time.time()) % (24*3600) // 10])
 
 
 # parse args

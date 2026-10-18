@@ -3,47 +3,94 @@ pyModbusTCP.server
 
 .. module:: pyModbusTCP.server
 
-The Modbus/TCP server, its data space and the interface to customize it. See :doc:`../guide/server` for an
+The Modbus/TCP server, its data store, the access rules and the function handlers. See :doc:`../guide/server` for an
 introduction.
 
 .. code-block:: python
 
-    from pyModbusTCP.server import DataBank, DataHandler, DeviceIdentification, ModbusServer
+    from pyModbusTCP.server import MemoryStore, ModbusServer, Space
 
 ModbusServer
 ------------
 
 .. autoclass:: ModbusServer
    :members:
-   :exclude-members: Error, NetworkError, DataFormatError, PDUDecodeError, ClientInfo, ServerInfo, SessionData,
+   :exclude-members: Error, NetworkError, DataFormatError, PDUDecodeError, ClientInfo, SessionData,
                      Frame, MBAP, PDU, CustomThreadingTCPServer, ModbusRequestHandler
 
-DataBank
---------
+Data store
+----------
 
-.. autoclass:: DataBank
+.. autoclass:: Space
    :members:
 
-DataHandler
------------
-
-.. autoclass:: DataHandler
+.. autoclass:: DataStore
    :members:
-   :exclude-members: Return
 
-.. class:: DataHandler.Return(exp_code, data=None)
+.. autoclass:: MemoryStore
+   :members:
 
-   The result of a :class:`DataHandler` method.
+.. autoclass:: Transaction
+   :members:
 
-   :param exp_code: ``EXP_NONE`` if the request succeeded, else the Modbus exception code to send to the client
-       (constants ``EXP_*`` of :mod:`pyModbusTCP.constants`)
-   :type exp_code: int
-   :param data: the values of a read request (list of bool or int), None for a write request or an error
-   :type data: list or None
+.. autoclass:: RequestContext
+   :members:
 
-   .. attribute:: ok
+The ``client`` of a request context is a ``ModbusServer.ClientInfo``: ``client.address`` is the IP address of the
+client (str), ``client.port`` its TCP port (int).
 
-      True if ``exp_code`` is ``EXP_NONE`` (no exception).
+Change notifications
+--------------------
+
+.. autoclass:: ChangeEvent
+   :members:
+
+.. autoclass:: Change
+   :members:
+
+Application access
+------------------
+
+.. autoclass:: AppAccess
+   :members:
+
+.. autoclass:: SpaceAccess
+   :members:
+
+.. autoclass:: RegistersAccess
+   :members:
+   :show-inheritance:
+
+Access rules
+------------
+
+.. autoclass:: StoreWrapper
+   :members: check
+
+.. autoclass:: ReadOnly
+   :show-inheritance:
+
+.. autoclass:: AccessControl
+   :show-inheritance:
+
+.. autoclass:: Guard
+   :show-inheritance:
+
+Function handlers
+-----------------
+
+.. autoclass:: Request
+   :members:
+
+.. data:: FunctionHandler
+
+   The type of a function handler: ``Callable[[Request], bytes]``, it returns the response PDU (the function code
+   first) and raises a :class:`ModbusException` for an exception response.
+
+.. data:: STANDARD_FUNCTIONS
+
+   The handlers of the standard functions, by function code (0x01 to 0x06, 0x0F, 0x10, 0x17 and 0x2B/0x0E). A copy is
+   the default of ``ModbusServer.functions``.
 
 DeviceIdentification
 --------------------
@@ -51,22 +98,39 @@ DeviceIdentification
 .. autoclass:: DeviceIdentification
    :members:
 
-Server and client information
------------------------------
+Modbus exceptions
+-----------------
 
-The ``srv_info`` argument of the :class:`DataBank` and :class:`DataHandler` methods is a ``ModbusServer.ServerInfo``
-object, with the information of the client that sent the request:
+Raise them from a store, a wrapper, a mapped range or a function handler: the client gets the exception response,
+its session goes on.
 
-- ``srv_info.client.address``: IP address of the client (str);
-- ``srv_info.client.port``: TCP port of the client (int);
-- ``srv_info.recv_frame``: the received request (a ``ModbusServer.Frame``, with its ``mbap`` and ``pdu``).
+.. autoclass:: ModbusException
+.. autoclass:: IllegalFunction
+   :show-inheritance:
+.. autoclass:: IllegalDataAddress
+   :show-inheritance:
+.. autoclass:: IllegalDataValue
+   :show-inheritance:
+.. autoclass:: SlaveDeviceFailure
+   :show-inheritance:
+.. autoclass:: SlaveDeviceBusy
+   :show-inheritance:
+.. autoclass:: GatewayPathUnavailable
+   :show-inheritance:
+.. autoclass:: GatewayTargetFailed
+   :show-inheritance:
 
-Exceptions
-----------
+Errors of the server
+--------------------
 
-The exceptions of the server are also available as attributes of :class:`ModbusServer` (like
+The errors of the server are also available as attributes of :class:`ModbusServer` (like
 ``ModbusServer.NetworkError``).
 
-.. automodule:: pyModbusTCP.server.errors
-   :members:
+.. autoclass:: pyModbusTCP.server.errors.Error
+   :show-inheritance:
+.. autoclass:: pyModbusTCP.server.errors.NetworkError
+   :show-inheritance:
+.. autoclass:: pyModbusTCP.server.errors.DataFormatError
+   :show-inheritance:
+.. autoclass:: pyModbusTCP.server.errors.PDUDecodeError
    :show-inheritance:

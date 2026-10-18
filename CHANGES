@@ -4,14 +4,52 @@ Revision history for pyModbusTCP
 
     Changes since 0.4.0a2.
 
+    Breaking changes (server data model, see "Migrating from DataBank and DataHandler" in the server guide):
+
+    - server: DataBank and DataHandler are replaced by a data store. The default one is MemoryStore (argument
+              store of ModbusServer, attribute server.store), the application accesses it with server.store.app
+              (like server.store.app.holding_registers.write(0, [1, 2])). An address out of the space raises
+              IllegalDataAddress instead of returning None, nothing is written.
+    - server: every request runs in a transaction of the store: atomic (one lock for the 4 spaces) and restored
+              on an exception. Function 0x17 writes then reads in one transaction: its response contains its own
+              write, and an invalid read cancels the write. The application groups its updates with
+              store.app.transaction().
+    - server: the Modbus exceptions are exceptions (IllegalDataAddress, IllegalFunction... subclasses of
+              ModbusException) instead of DataHandler.Return(exp_code).
+    - server: the change callbacks on_coils_change() and on_holding_registers_change() are replaced by
+              store.subscribe(listener): one ChangeEvent per committed request with every change (all the spaces),
+              the request context (client, unit id, function code), optionally the writes of the application
+              (app_writes=True), and a delivery in a thread of the store (threaded=True). An exception of a
+              listener is logged, the client no longer gets a "slave device failure".
+    - server: srv_info (ServerInfo) is replaced by a RequestContext (client, unit_id, function_code).
+    - server: DataBank(virtual_mode=True) is replaced by mapped ranges: store.map(space, address, count, read,
+              write=None) computes the values of a range at each access.
+    - server: ext_engine is replaced by a registry of function handlers: server.functions, the decorator
+              @server.function(code), STANDARD_FUNCTIONS, and a fallback handler for the other codes. A handler
+              takes a Request and returns the response PDU. read_only=True also applies to a fallback.
+
+    New features:
+
+    - server: one convention for every allow list (allowed_hosts of ModbusServer, read_hosts and write_hosts of
+              AccessControl): None for every host, an empty list for no host at all. An empty allowed_hosts is no
+              longer an error: the server refuses every connection, with a warning at startup.
+    - server: access rules stacked on a store: ReadOnly (some spaces), AccessControl (client addresses allowed to
+              read, to write), Guard (a check function), StoreWrapper (base class).
+    - server: one store per unit id (store={1: store_a, 2: store_b}), to simulate several devices: another unit id
+              gets a "gateway path unavailable" exception.
+    - server: typed access of the registers for the application: read/write_float32, _float64, _int32, _uint32.
+    - examples: new server_mailbox, server_multi_unit and server_custom_function; the server examples use the
+                data store.
+
     Changes:
 
-    - tools: add the version option is -v/--version in every tool and in the dispatcher.
+    - tools: add the version option -v/--version to every tool and to the dispatcher.
     - tools: mbtcp-tcp2rtu and mbtcp-rtu2tcp can enable the RS-485 mode of the serial driver (Linux), for an
              UART that switches its RS-485 transceiver with RTS: new options --rs485, --rs485-rts-tx,
              --rs485-rts-rx, --rs485-delay-before-tx and --rs485-delay-before-rx. A RTS level not given keeps the
              one of the driver when its RS-485 mode is already set (like by the device tree). A driver without
-             RS-485 support refuses it at startup (exit code 2). Without these options, the serial port is opened as before.
+             RS-485 support refuses it at startup (exit code 2). Without these options, the serial port is opened as
+             before.
     - tools: mbtcp-client has an output for humans: on a terminal, a header (server, request, response time) and
              a table. Each row shows the offset from the first address and the address in decimal and
              hexadecimal, the registers in hexadecimal, unsigned, signed, binary and ASCII, the bits in a grid of
@@ -21,6 +59,12 @@ Revision history for pyModbusTCP
              New options -f/--format (auto, table, plain, csv, json) and --no-color (or NO_COLOR) for the read and
              device-id commands. When the output is not a terminal (auto format), the output is unchanged: one
              "address value" line per item, nothing for a write.
+    - tools: mbtcp-client has a write-read command (function 0x17): it writes holding registers, then reads holding
+             registers (-r/--read for another address, -n/--number for another count) in one request, with the
+             output formats of the reads (the json object also gives the values written). In the table, a
+             "Written" column gives the value written at each address, and "!" marks a register read with another
+             value (changed by the server in the same request). The ranges are checked before the request, with a
+             clear message.
     - tools: mbtcp-client stops quietly (status 1, no traceback) when its output is closed (like "| head").
 
 0.4.0a2 2026-10-17 (alpha: the command line tools, their options and output, may still change before 0.4.0)

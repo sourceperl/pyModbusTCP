@@ -10,12 +10,17 @@ import time
 import unittest
 import warnings
 from collections.abc import Iterable
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 from unittest import mock
 
-from pyModbusTCP.constants import EXP_NONE
-from pyModbusTCP.server import DataBank, DataHandler, DeviceIdentification, ModbusServer
-from pyModbusTCP.utils import _to_bool_list
+from pyModbusTCP.server import (
+    ChangeEvent,
+    DeviceIdentification,
+    MemoryStore,
+    ModbusServer,
+    Request,
+    Space,
+)
 
 
 class TestModbusServer(unittest.TestCase):
@@ -491,154 +496,27 @@ class TestModbusServerLimits(unittest.TestCase):
             server.stop()
             self.port = server.start()[1]
 
-    def test_allowed_hosts_with_external_engine(self) -> None:
-        """The whitelist is checked before any engine: an external engine is never called for a refused client."""
-        calls: list[ModbusServer.SessionData] = []
-        self._start_server(allowed_hosts=['10.1.2.3'], ext_engine=lambda session_data: calls.append(session_data))
+    def test_allowed_hosts_with_fallback(self) -> None:
+        """The whitelist is checked before any function: a fallback handler is never called for a refused client."""
+        calls: list[Request] = []
+
+        def fallback(req: Request) -> bytes:
+            calls.append(req)
+            return req.pdu
+
+        self._start_server(allowed_hosts=['10.1.2.3'], functions={}, fallback=fallback)
         with self.assertLogs('pyModbusTCP.server', level='WARNING'):
             self.assertIsNotNone(self._closed_after(self._connect(), 2.0), 'host out of allowed_hosts is not closed')
         self.assertEqual(calls, [])
-
-
-class TestDataBankSetters(unittest.TestCase):
-    """Tests of the DataBank set_xxx() methods."""
-
-    class RecordingDataBank(DataBank):
-        """A data bank that records the changes notified by the set_coils() and set_holding_registers() methods."""
-
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            super().__init__(*args, **kwargs)
-            self.changes: list[tuple[str, int, int, int]] = []
-
-        def on_coils_change(self, address: int, from_value: bool, to_value: bool,
-                            srv_info: ModbusServer.ServerInfo) -> None:
-            self.changes.append(('coil', address, from_value, to_value))
-
-        def on_holding_registers_change(self, address: int, from_value: int, to_value: int,
-                                        srv_info: ModbusServer.ServerInfo) -> None:
-            self.changes.append(('reg', address, from_value, to_value))
-
-    def test_set_coils(self) -> None:
-        bank = TestDataBankSetters.RecordingDataBank()
-        srv_info = ModbusServer.ServerInfo()
-        # any true value: the data bank is called by the server
-        self.assertTrue(bank.set_coils(10, [True, False, True, False, True]))
-        self.assertEqual(bank.changes, [], 'no change notification without srv_info')
-        # same values: no change
-        self.assertTrue(bank.set_coils(10, [True, False, True, False, True], srv_info))
-        self.assertEqual(bank.changes, [])
-        # partial change: only the modified coils are notified, with their address and previous value
-        self.assertTrue(bank.set_coils(10, [True, True, True, False, False], srv_info))
-        self.assertEqual(bank.changes, [('coil', 11, False, True), ('coil', 14, True, False)])
-        self.assertEqual(bank.get_coils(8, 9), [False, False, True, True, True, False, False, False, False])
-        # items are converted to bool
-        self.assertTrue(bank.set_coils(0, [1, 0, 1, 0]))  # type: ignore
-        self.assertEqual(bank.get_coils(0, 4), [True, False, True, False])
-
-    def test_set_holding_registers(self) -> None:
-        bank = TestDataBankSetters.RecordingDataBank()
-        srv_info = ModbusServer.ServerInfo()
-        self.assertTrue(bank.set_holding_registers(100, [1, 2, 3, 4], srv_info))
-        self.assertEqual(bank.changes, [('reg', 100, 0, 1), ('reg', 101, 0, 2), ('reg', 102, 0, 3), ('reg', 103, 0, 4)])
-        bank.changes.clear()
-        self.assertTrue(bank.set_holding_registers(100, [1, 2, 3, 4], srv_info))
-        self.assertEqual(bank.changes, [])
-        self.assertTrue(bank.set_holding_registers(101, [2, 30, 3], srv_info))
-        self.assertEqual(bank.changes, [('reg', 102, 3, 30), ('reg', 103, 4, 3)])
-        self.assertEqual(bank.get_holding_registers(99, 6), [0, 1, 2, 30, 3, 0])
-        # items are converted to int, with a max size of 16 bits
-        self.assertTrue(bank.set_holding_registers(0, [0xffff, True, 1]))
-        self.assertEqual(bank.get_holding_registers(0, 3), [0xffff, 1, 1])
-
-    def test_set_discrete_inputs_and_input_registers(self) -> None:
-        bank = DataBank()
-        self.assertTrue(bank.set_discrete_inputs(5, [True, False, True]))
-        self.assertEqual(bank.get_discrete_inputs(4, 5), [False, True, False, True, False])
-        self.assertTrue(bank.set_input_registers(5, [7, 0x1, 9]))
-        self.assertEqual(bank.get_input_registers(4, 5), [0, 7, 1, 9, 0])
-
-    def test_set_out_of_range(self) -> None:
-        """Out of range writes return None and must not modify anything (even partially)."""
-        bank = TestDataBankSetters.RecordingDataBank()
-        srv_info = ModbusServer.ServerInfo()
-        self.assertTrue(bank.set_coils(0xffff, [True], srv_info))
-        self.assertTrue(bank.set_holding_registers(0xffff, [5], srv_info))
-        bank.changes.clear()
-        self.assertIsNone(bank.set_coils(0xffff, [False, True], srv_info))
-        self.assertIsNone(bank.set_coils(-1, [True], srv_info))
-        self.assertIsNone(bank.set_holding_registers(0xffff, [1, 2], srv_info))
-        self.assertIsNone(bank.set_holding_registers(-1, [1], srv_info))
-        self.assertIsNone(bank.set_discrete_inputs(0xffff, [True, True]))
-        self.assertIsNone(bank.set_input_registers(0xffff, [1, 2]))
-        self.assertEqual(bank.changes, [])
-        self.assertEqual(bank.get_coils(0xffff), [True])
-        self.assertEqual(bank.get_holding_registers(0xffff), [5])
-        self.assertEqual(bank.get_discrete_inputs(0xffff), [False])
-        self.assertEqual(bank.get_input_registers(0xffff), [0])
-
-
-class TestDataBankValidation(unittest.TestCase):
-    def setUp(self) -> None:
-        self.db = DataBank(coils_size=16, d_inputs_size=16, h_regs_size=16, i_regs_size=16)
-
-    def test_empty_lists_are_a_noop(self) -> None:
-        # an empty write is valid and must succeed, whatever the table
-        self.assertIs(self.db.set_coils(0, []), True)
-        self.assertIs(self.db.set_discrete_inputs(0, []), True)
-        self.assertIs(self.db.set_holding_registers(0, []), True)
-        self.assertIs(self.db.set_input_registers(0, []), True)
-
-    def test_registers_range_and_type(self) -> None:
-        for method in (self.db.set_holding_registers, self.db.set_input_registers):
-            with self.subTest(method=method.__name__):
-                self.assertIs(method(0, [0, 0xffff]), True)
-                with self.assertRaises(ValueError):
-                    method(0, [-1])
-                with self.assertRaises(ValueError):
-                    method(0, [0x10000])
-                for bad_value in (1.0, '5', None):
-                    with self.assertRaises(TypeError):
-                        method(0, [bad_value])  # type: ignore
-
-    def test_out_of_bank_returns_none(self) -> None:
-        self.assertIsNone(self.db.set_holding_registers(14, [1, 2, 3]))
-        self.assertIsNone(self.db.set_coils(15, [True, False]))
-        self.assertIsNone(self.db.set_coils(-1, [True]))
-
-    def test_bool_list_accepts_bool_like(self) -> None:
-        self.assertEqual(_to_bool_list([True, 0, 2], 'x'), [True, False, True])
-        self.assertEqual(_to_bool_list((1, 0), 'x'), [True, False])
-        # one-shot iterators must not be lost by the validation fallback
-        self.assertEqual(_to_bool_list(iter([1, 0, 1]), 'x'), [True, False, True])
-        for bad_value in (1.0, 'a', None):
-            with self.assertRaises(TypeError):
-                _to_bool_list([True, bad_value], 'x')
-
-    def test_int_like_values(self) -> None:
-        """Any object with __index__ is accepted as an item."""
-
-        class IntLike:
-            def __init__(self, value: int) -> None:
-                self.value = value
-
-            def __index__(self) -> int:
-                return self.value
-
-        self.assertIs(self.db.set_coils(0, [IntLike(1), IntLike(0), True]), True)  # type: ignore
-        self.assertEqual(self.db.get_coils(0, 3), [True, False, True])
-        self.assertIs(self.db.set_holding_registers(0, (IntLike(1), IntLike(65535))), True)  # type: ignore
-        self.assertEqual(self.db.get_holding_registers(0, 2), [1, 65535])
-        with self.assertRaises(ValueError):
-            self.db.set_holding_registers(0, [IntLike(65536)])  # type: ignore
 
 
 class TestModbusServerSpecFrames(unittest.TestCase):
     """The examples of the Modbus Application Protocol specification, on raw frames: an independent reference."""
 
     def setUp(self) -> None:
-        self.bank = DataBank()
+        self.store = MemoryStore()
         # port=0: a free TCP port chosen by the OS
-        self.server = ModbusServer(host='127.0.0.1', port=0, no_block=True, data_bank=self.bank)
+        self.server = ModbusServer(host='127.0.0.1', port=0, no_block=True, store=self.store)
         _host, port = self.server.start()
         self.addCleanup(self.server.stop)
         self.port = port
@@ -666,58 +544,58 @@ class TestModbusServerSpecFrames(unittest.TestCase):
 
     def test_read_coils(self) -> None:
         # coils 20 to 38 of the spec (address 19 to 37, 19 coils) are CD 6B 05
-        self.bank.set_coils(19, self.bits_of(bytes.fromhex('cd6b05'))[:19])
+        self.store.app.coils.write(19, self.bits_of(bytes.fromhex('cd6b05'))[:19])
         self.assertEqual(self.exchange('01 00 13 00 13'), '0103cd6b05')
         # same bits, but the quantity is not a multiple of 8 and padding bits must be zero
-        self.bank.set_coils(19 + 19, [True] * 5)
+        self.store.app.coils.write(19 + 19, [True] * 5)
         self.assertEqual(self.exchange('01 00 13 00 13'), '0103cd6b05')
 
     def test_read_discrete_inputs(self) -> None:
         # spec: inputs 197 to 218 (address 196 to 217, 22 inputs) are AC DB 35
-        self.bank.set_discrete_inputs(196, self.bits_of(bytes.fromhex('acdb35'))[:22])
+        self.store.app.discrete_inputs.write(196, self.bits_of(bytes.fromhex('acdb35'))[:22])
         self.assertEqual(self.exchange('02 00 c4 00 16'), '0203acdb35')
 
     def test_write_multiple_coils(self) -> None:
         # spec: write 10 coils from address 19: CD 01
         self.assertEqual(self.exchange('0f 00 13 00 0a 02 cd 01'), '0f0013000a')
-        self.assertEqual(self.bank.get_coils(19, 10), self.bits_of(bytes.fromhex('cd01'))[:10])
-        self.assertEqual(self.bank.get_coils(29, 1), [False], 'only 10 coils must be written')
+        self.assertEqual(self.store.app.coils.read(19, 10), self.bits_of(bytes.fromhex('cd01'))[:10])
+        self.assertEqual(self.store.app.coils.read(29, 1), [False], 'only 10 coils must be written')
 
     def test_read_holding_registers(self) -> None:
         # spec: read registers 108 to 110, values 022B 0000 0064
-        self.bank.set_holding_registers(107, [0x022b, 0, 0x64])
+        self.store.app.holding_registers.write(107, [0x022b, 0, 0x64])
         self.assertEqual(self.exchange('03 00 6b 00 03'), '030602 2b0000 0064'.replace(' ', ''))
 
     def test_write_multiple_registers(self) -> None:
         # spec: write 2 registers from address 1: 000A 0102
         self.assertEqual(self.exchange('10 00 01 00 02 04 00 0a 01 02'), '1000010002')
-        self.assertEqual(self.bank.get_holding_registers(0, 4), [0, 0x000a, 0x0102, 0])
+        self.assertEqual(self.store.app.holding_registers.read(0, 4), [0, 0x000a, 0x0102, 0])
 
     def test_read_write_multiple_registers(self) -> None:
         # spec: read 6 registers from address 3 and write 3 registers (00FF) from address 14
-        self.bank.set_holding_registers(3, [0x00fe, 0x0acd, 0x0001, 0x0003, 0x000d, 0x00ff])
+        self.store.app.holding_registers.write(3, [0x00fe, 0x0acd, 0x0001, 0x0003, 0x000d, 0x00ff])
         resp = self.exchange('17 00 03 00 06 00 0e 00 03 06 00 ff 00 ff 00 ff')
         self.assertEqual(resp, '170c00fe0acd00010003000d00ff')
-        self.assertEqual(self.bank.get_holding_registers(13, 5), [0, 0xff, 0xff, 0xff, 0])
+        self.assertEqual(self.store.app.holding_registers.read(13, 5), [0, 0xff, 0xff, 0xff, 0])
 
     def test_write_single_coil_values(self) -> None:
         # the only legal values are 0x0000 (off) and 0xFF00 (on), any other one is an ILLEGAL DATA VALUE (03)
-        self.bank.set_coils(10, [True])
+        self.store.app.coils.write(10, [True])
         for value in ('0001', '00ff', '8000', 'ff01', 'ffff'):
             self.assertEqual(self.exchange(f'05 000a {value}'), '8503', value)
-            self.assertEqual(self.bank.get_coils(10, 1), [True], 'a refused request must not write')
+            self.assertEqual(self.store.app.coils.read(10, 1), [True], 'a refused request must not write')
         self.assertEqual(self.exchange('05 000a 0000'), '05000a0000')
-        self.assertEqual(self.bank.get_coils(10, 1), [False])
+        self.assertEqual(self.store.app.coils.read(10, 1), [False])
         self.assertEqual(self.exchange('05 000a ff00'), '05000aff00')
-        self.assertEqual(self.bank.get_coils(10, 1), [True])
+        self.assertEqual(self.store.app.coils.read(10, 1), [True])
 
     def test_read_write_multiple_registers_refused_request(self) -> None:
         # a refused request (exception response) must not write anything: here the read area is out of the table
         self.assertEqual(self.exchange('17 ffff 0002 0032 0001 02 0457'), '9702')
-        self.assertEqual(self.bank.get_holding_registers(50, 1), [0])
+        self.assertEqual(self.store.app.holding_registers.read(50, 1), [0])
         # quantities: read from 1 to 125 (0x7D), write from 1 to 121 (0x79)
         self.assertEqual(self.exchange('17 0000 007e 0000 0001 02 0007'), '9703')
-        self.assertEqual(self.bank.get_holding_registers(0, 1), [0])
+        self.assertEqual(self.store.app.holding_registers.read(0, 1), [0])
         resp = self.exchange('17 0000 007d 0000 0001 02 0007')
         self.assertEqual(resp[:4], '17fa')
         self.assertEqual(len(resp), 2 * (2 + 250))
@@ -740,49 +618,50 @@ class TestModbusServerSpecFrames(unittest.TestCase):
             with self.subTest(name):
                 self.assertEqual(self.exchange(pdu), f'{bytes.fromhex(pdu)[0] | 0x80:02x}03')
         # nothing is written and the session is still in sync
-        self.assertEqual(self.bank.get_coils(0, 16), [False] * 16)
-        self.assertEqual(self.bank.get_holding_registers(0, 2), [0, 0])
+        self.assertEqual(self.store.app.coils.read(0, 16), [False] * 16)
+        self.assertEqual(self.store.app.holding_registers.read(0, 2), [0, 0])
         self.assertEqual(self.exchange('03 0000 0001'), '03020000')
 
     def test_extra_bytes_are_ignored(self) -> None:
         """Bytes after a complete and consistent request are ignored (the MBAP length keeps the stream in sync)."""
-        self.bank.set_holding_registers(0, [0x1234])
+        self.store.app.holding_registers.write(0, [0x1234])
         self.assertEqual(self.exchange('03 0000 0001 ffff'), '03021234')
         self.assertEqual(self.exchange('06 0001 abcd 00'), '060001abcd')
         self.assertEqual(self.exchange('0f 0010 000a 02 ff 03 ee'), '0f0010000a')
-        self.assertEqual(self.bank.get_coils(16, 11), [True] * 10 + [False])
+        self.assertEqual(self.store.app.coils.read(16, 11), [True] * 10 + [False])
         self.assertEqual(self.exchange('10 0002 0001 02 5678 9abc'), '1000020001')
         self.assertEqual(self.exchange('17 0000 0003 0003 0001 02 0042 ff'), '17061234abcd5678')
-        self.assertEqual(self.bank.get_holding_registers(0, 5), [0x1234, 0xabcd, 0x5678, 0x42, 0])
+        self.assertEqual(self.store.app.holding_registers.read(0, 5), [0x1234, 0xabcd, 0x5678, 0x42, 0])
 
-    def test_handler_ok_without_data(self) -> None:
-        """A data handler that returns "ok" without data is a SLAVE DEVICE FAILURE (04), never an exception code 0."""
-        with mock.patch.object(self.server.data_hdl, 'read_h_regs', return_value=DataHandler.Return(EXP_NONE)):
-            for pdu in ('03 0000 0001', '17 0000 0001 0005 0001 02 1234'):
-                with self.subTest(pdu), self.assertLogs('pyModbusTCP.server', level='ERROR'):
-                    self.assertEqual(self.exchange(pdu), f'{bytes.fromhex(pdu)[0] | 0x80:02x}04')
-        # the write of function 0x17 is not done
-        self.assertEqual(self.bank.get_holding_registers(5, 1), [0])
+    def test_mapped_read_without_the_right_count(self) -> None:
+        """A mapped range that returns a wrong number of values is a SLAVE DEVICE FAILURE (04), never a bad frame."""
+        self.store.map(Space.HOLDING_REGISTERS, 1000, 2, read=lambda address, count, ctx: [1])
+        for pdu in ('03 03e8 0002', '17 03e8 0002 0005 0001 02 1234'):
+            with self.subTest(pdu), self.assertLogs('pyModbusTCP.server', level='ERROR'):
+                self.assertEqual(self.exchange(pdu), f'{bytes.fromhex(pdu)[0] | 0x80:02x}04')
+        # the write of function 0x17 is cancelled: the read failed in the same transaction
+        self.assertEqual(self.store.app.holding_registers.read(5, 1), [0])
 
-    def test_handler_bad_data_count(self) -> None:
-        """The first read of function 0x17 must also check the number of registers returned by the data handler."""
-        with (mock.patch.object(self.server.data_hdl, 'read_h_regs', return_value=DataHandler.Return(EXP_NONE, [1])),
-              self.assertLogs('pyModbusTCP.server', level='ERROR')):
-            self.assertEqual(self.exchange('17 0000 0002 0005 0001 02 1234'), '9704')
-        self.assertEqual(self.bank.get_holding_registers(5, 1), [0])
-
-    def test_handler_values_that_cant_be_encoded(self) -> None:
-        """A data handler that returns a value out of its field (a register over 65535, an exception code over 255):
-        SLAVE DEVICE FAILURE (04), and the session is kept (the request was valid, the TCP stream is still in sync)."""
-        cases = (('read_h_regs', DataHandler.Return(EXP_NONE, [70000]), '03 0000 0001', '8304'),
-                 ('read_i_regs', DataHandler.Return(EXP_NONE, [-1]), '04 0000 0001', '8404'),
-                 ('read_coils', DataHandler.Return(0x1FF), '01 0000 0001', '8104'),
-                 ('write_h_regs', DataHandler.Return(256), '06 0000 0001', '8604'))
-        for method, ret, pdu, expected in cases:
-            with (self.subTest(method), mock.patch.object(self.server.data_hdl, method, return_value=ret),
-                  self.assertLogs('pyModbusTCP.server', level='ERROR')):
+    def test_mapped_values_that_cant_be_encoded(self) -> None:
+        """A mapped range that returns a value out of its field (a register over 65535): SLAVE DEVICE FAILURE (04),
+        and the session is kept (the request was valid, the TCP stream is still in sync)."""
+        self.store.map(Space.HOLDING_REGISTERS, 1000, 1, read=lambda address, count, ctx: [70000])
+        self.store.map(Space.INPUT_REGISTERS, 1000, 1, read=lambda address, count, ctx: [-1])
+        self.store.map(Space.COILS, 1000, 1, read=lambda address, count, ctx: ['on'])
+        for pdu, expected in (('03 03e8 0001', '8304'), ('04 03e8 0001', '8404'), ('01 03e8 0001', '8104')):
+            with self.subTest(pdu), self.assertLogs('pyModbusTCP.server', level='ERROR'):
                 self.assertEqual(self.exchange(pdu), expected)
         # same connection: still in sync
+        self.assertEqual(self.exchange('03 0000 0001'), '03020000')
+
+    def test_handler_bad_response(self) -> None:
+        """A function handler that returns no response, or a response that can't be encoded: SLAVE DEVICE FAILURE."""
+        self.server.functions[0x41] = lambda req: b''
+        self.server.functions[0x42] = lambda req: req.reply('B', 300)
+        self.server.functions[0x43] = lambda req: cast(bytes, None)
+        for pdu in ('41 00', '42 00', '43 00'):
+            with self.subTest(pdu), self.assertLogs('pyModbusTCP.server', level='ERROR'):
+                self.assertEqual(self.exchange(pdu), f'{bytes.fromhex(pdu)[0] | 0x80:02x}04')
         self.assertEqual(self.exchange('03 0000 0001'), '03020000')
 
     def test_unsupported_function_without_parameter(self) -> None:
@@ -1050,43 +929,47 @@ class TestReadOnlyOption(unittest.TestCase):
         self.assertIn('read_only=False', repr(ModbusServer()))
 
     def test_default_is_read_write(self) -> None:
-        bank = TestDataBankSetters.RecordingDataBank()
-        self._start_server(data_bank=bank)
+        store = MemoryStore()
+        events: list[ChangeEvent] = []
+        store.subscribe(events.append)
+        self._start_server(store=store)
         for name, pdu in self.WRITE_REQUESTS.items():
             self.assertEqual(self.exchange(pdu)[:2], pdu[:2], name)
-        self.assertEqual(bank.get_holding_registers(5, 1), [0x2a])
-        self.assertTrue(bank.changes, 'writes must be notified to the data bank')
+        self.assertEqual(store.app.holding_registers.read(5, 1), [0x2a])
+        self.assertTrue(events, 'writes must be notified to the listeners')
 
     def test_read_functions_are_allowed(self) -> None:
-        bank = DataBank()
-        bank.set_holding_registers(0, [0x1234])
-        bank.set_input_registers(0, [0x5678])
-        bank.set_coils(0, [True] + [False] * 7)
-        bank.set_discrete_inputs(1, [True])
-        self._start_server(read_only=True, data_bank=bank)
+        store = MemoryStore()
+        store.app.holding_registers.write(0, [0x1234])
+        store.app.input_registers.write(0, [0x5678])
+        store.app.coils.write(0, [True] + [False] * 7)
+        store.app.discrete_inputs.write(1, [True])
+        self._start_server(read_only=True, store=store)
         self.assertEqual(self.exchange('01 0000 0008'), '010101')
         self.assertEqual(self.exchange('02 0000 0008'), '020102')
         self.assertEqual(self.exchange('03 0000 0001'), '03021234')
         self.assertEqual(self.exchange('04 0000 0001'), '04025678')
 
     def test_write_functions_are_refused(self) -> None:
-        bank = TestDataBankSetters.RecordingDataBank()
-        self._start_server(read_only=True, data_bank=bank)
+        store = MemoryStore()
+        events: list[ChangeEvent] = []
+        store.subscribe(events.append)
+        self._start_server(read_only=True, store=store)
         for name, pdu in self.WRITE_REQUESTS.items():
             with self.subTest(name):
                 # exception response: function code + 0x80, then the exception code 1 (ILLEGAL FUNCTION)
                 self.assertEqual(self.exchange(pdu), f'{bytes.fromhex(pdu)[0] | 0x80:02x}01')
         # nothing is written, nothing is notified
-        self.assertEqual(bank.get_coils(0, 16), [False] * 16)
-        self.assertEqual(bank.get_holding_registers(0, 16), [0] * 16)
-        self.assertEqual(bank.changes, [])
+        self.assertEqual(store.app.coils.read(0, 16), [False] * 16)
+        self.assertEqual(store.app.holding_registers.read(0, 16), [0] * 16)
+        self.assertEqual(events, [])
         # the session is still open and in sync
         self.assertEqual(self.exchange('03 0000 0001'), '03020000')
 
     def test_server_side_writes_are_still_possible(self) -> None:
-        """read_only is for the requests of the clients, not for the application that owns the data bank."""
+        """read_only is for the requests of the clients, not for the application that owns the data store."""
         server = self._start_server(read_only=True)
-        self.assertTrue(server.data_bank.set_holding_registers(0, [9]))
+        server.store.app.holding_registers.write(0, [9])
         self.assertEqual(self.exchange('03 0000 0001'), '03020009')
 
     def test_other_functions_are_not_concerned(self) -> None:
@@ -1096,17 +979,18 @@ class TestReadOnlyOption(unittest.TestCase):
         # an unknown function keeps its own exception
         self.assertEqual(self.exchange('55 00'), 'd501')
 
-    def test_not_applied_to_an_external_engine(self) -> None:
-        """With an ext_engine the requests are handled by user code: read_only has no effect on them."""
+    def test_applied_to_every_handler(self) -> None:
+        """read_only refuses the write function codes whatever their handler, even a fallback (like a gateway)."""
         received: list[int] = []
 
-        def engine(session_data: ModbusServer.SessionData) -> None:
-            received.append(session_data.request.pdu.func_code)
-            session_data.response.pdu.raw = session_data.request.pdu.raw
+        def fallback(req: Request) -> bytes:
+            received.append(req.function_code)
+            return req.pdu
 
-        self._start_server(read_only=True, ext_engine=engine)
-        self.assertEqual(self.exchange('06 0005 002a'), '06 0005 002a'.replace(' ', ''))
-        self.assertEqual(received, [0x06])
+        self._start_server(read_only=True, functions={}, fallback=fallback)
+        self.assertEqual(self.exchange('06 0005 002a'), '8601')
+        self.assertEqual(self.exchange('03 0005 0001'), '0300050001')
+        self.assertEqual(received, [0x03])
 
     def test_with_allowed_hosts(self) -> None:
         self._start_server(read_only=True, allowed_hosts=['127.0.0.1'])
@@ -1141,14 +1025,31 @@ class TestAllowedHostsOption(unittest.TestCase):
         # host bits of a network are ignored
         self.assertEqual(ModbusServer(allowed_hosts=['192.168.1.5/24']).allowed_hosts, ['192.168.1.0/24'])
 
+    def test_empty_list_allows_no_host(self) -> None:
+        """The convention of every allow list: None for every host, an empty list for no host at all."""
+        empty_lists: tuple[Iterable[str], ...] = ([], (), set())
+        for hosts in empty_lists:
+            server = ModbusServer(allowed_hosts=hosts)
+            self.assertEqual(server.allowed_hosts, [])
+            tcp_server = self._tcp_server(hosts)
+            self.assertFalse(tcp_server.is_allowed(('127.0.0.1', 50000)))
+            self.assertFalse(tcp_server.is_allowed(('::1', 50000, 0, 0)))
+        self.assertTrue(self._tcp_server(None).is_allowed(('127.0.0.1', 50000)))
+        # a warning at startup: an empty list from a configuration is often a mistake
+        server = ModbusServer(host='127.0.0.1', port=0, no_block=True, allowed_hosts=[])
+        with self.assertLogs('pyModbusTCP.server', level='WARNING') as logs:
+            server.start()
+        server.stop()
+        self.assertIn('every connection will be refused', '\n'.join(logs.output))
+
     def test_any_iterable_is_accepted(self) -> None:
         for hosts in (('127.0.0.1',), iter(['127.0.0.1']), {'127.0.0.1'}, (host for host in ['127.0.0.1'])):
             self.assertEqual(ModbusServer(allowed_hosts=hosts).allowed_hosts, ['127.0.0.1/32'])
 
     def test_params_check(self) -> None:
-        # an empty whitelist is an error (None is for "no whitelist"), and hostnames are not supported
+        # hostnames are not supported
         bad_values: tuple[Iterable[str], ...] = (
-            [], (), set(), ['localhost'], ['example.com'], [''], ['999.1.1.1'], ['1.2.3'], ['10.0.0.0/33'],
+            ['localhost'], ['example.com'], [''], ['999.1.1.1'], ['1.2.3'], ['10.0.0.0/33'],
             ['::1/129'], ['10.0.0.0/a'], ['127.0.0.1', 'localhost'])
         for hosts in bad_values:
             with self.assertRaises(ValueError, msg=repr(hosts)):

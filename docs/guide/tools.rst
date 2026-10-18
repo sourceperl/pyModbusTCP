@@ -63,6 +63,8 @@ Examples
     # read 4 holding registers from address 0, write some values
     mbtcp-client -p 5020 read-holding 0 -n 4
     mbtcp-client -p 5020 write-registers 0 100 200 0x1234
+    # write 3 registers from address 0, then read 4 registers from address 0, in one request (function 0x17)
+    mbtcp-client -p 5020 write-read 0 20 22 1 -n 4
     mbtcp-client -p 5020 write-coil 10 on
 
     # read a device every second, show the frames
@@ -128,6 +130,9 @@ in decimal and hexadecimal, the registers in hexadecimal, unsigned, signed, bina
           10      110    0x006E   0  0  0  0  1
 
       4 on, 11 off
+
+For ``write-read`` (function 0x17), the table has a ``Written`` column with the value written at each address, and
+``!`` marks a register read with another value than the one written (changed by the server in the same request).
 
 With ``-i``, the table is refreshed in place (like ``watch``) and the values that changed are highlighted (and
 marked ``*``) for a few seconds. ``--no-color`` (or the ``NO_COLOR`` environment variable) turns the colors off.

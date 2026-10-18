@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import ipaddress
 import math
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
+from typing import TYPE_CHECKING, Any
 
 from ._common import _IPNetwork
-from .data_bank import DataBank
-from .data_handler import DataHandler
 from .device_id import DeviceIdentification
-from .session import SessionData
+
+if TYPE_CHECKING:
+    from .store import DataStore
 
 
 def validate_host(host: str) -> str:
@@ -29,18 +30,55 @@ def validate_port(port: int) -> int:
     return port
 
 
-def validate_data_bank_and_handler(data_bank: DataBank | None, data_hdl: DataHandler | None) -> None:
-    if data_bank and not isinstance(data_bank, DataBank):
-        raise TypeError('data_bank is not a DataBank instance')
-    if data_hdl and not isinstance(data_hdl, DataHandler):
-        raise TypeError('data_hdl is not a DataHandler instance')
-    if data_hdl and data_bank:
-        raise ValueError('when data_hdl is set, you must define data_bank in it')
+def validate_store(store: Any) -> dict[int | None, DataStore]:
+    """Check the store argument: a DataStore, a mapping {unit id: DataStore} or None (a MemoryStore is created).
+
+    :returns: unit id -> store, the key None for the store of every unit id
+    """
+    from .store import DataStore, MemoryStore
+    if store is None:
+        return {None: MemoryStore()}
+    if isinstance(store, DataStore):
+        return {None: store}
+    if isinstance(store, Mapping):
+        if not store:
+            raise ValueError('store mapping must not be empty')
+        stores: dict[int | None, DataStore] = {}
+        for unit_id, unit_store in store.items():
+            if isinstance(unit_id, bool) or not isinstance(unit_id, int) or not 0 <= unit_id <= 255:
+                raise ValueError(f'unit id {unit_id!r} must be an int between 0 and 255')
+            if not isinstance(unit_store, DataStore):
+                raise TypeError(f'store of unit id {unit_id} is not a DataStore')
+            stores[unit_id] = unit_store
+        return stores
+    raise TypeError('store must be a DataStore, a mapping {unit id: DataStore} or None')
 
 
-def validate_ext_engine(ext_engine: Callable[[SessionData], None] | None) -> None:
-    if ext_engine and not callable(ext_engine):
-        raise TypeError('ext_engine must be callable')
+def validate_function_code(code: Any) -> int:
+    if isinstance(code, bool) or not isinstance(code, int) or not 1 <= code <= 0x7F:
+        raise ValueError(f'function code {code!r} must be an int between 1 and 127')
+    return code
+
+
+def validate_functions(functions: Mapping[int, Callable[..., bytes]] | None) -> dict[int, Callable[..., bytes]]:
+    """Check the function handlers (None: the standard functions) and return them as a new dict."""
+    from .functions import STANDARD_FUNCTIONS
+    if functions is None:
+        return dict(STANDARD_FUNCTIONS)
+    if not isinstance(functions, Mapping):
+        raise TypeError('functions must be a mapping {function code: handler} or None')
+    checked: dict[int, Callable[..., bytes]] = {}
+    for code, handler in functions.items():
+        if not callable(handler):
+            raise TypeError(f'handler of function {code!r} is not callable')
+        checked[validate_function_code(code)] = handler
+    return checked
+
+
+def validate_fallback(fallback: Callable[..., bytes] | None) -> Callable[..., bytes] | None:
+    if fallback is not None and not callable(fallback):
+        raise TypeError('fallback must be callable or None')
+    return fallback
 
 
 def validate_device_id(device_id: DeviceIdentification | None) -> DeviceIdentification | None:
@@ -79,27 +117,30 @@ def validate_read_only(read_only: bool) -> bool:
     return read_only
 
 
-def validate_allowed_hosts(allowed_hosts: Iterable[str] | None) -> tuple[_IPNetwork, ...] | None:
-    """Check the whitelist (None or an iterable of IP addresses/networks) and return it as networks (or None)."""
+def validate_allowed_hosts(allowed_hosts: Iterable[str] | None,
+                           name: str = 'allowed_hosts') -> tuple[_IPNetwork, ...] | None:
+    """Check an allow list and return it as networks.
+
+    The convention of every allow list: None for no restriction (every host), an empty list for no host at all,
+    else IP addresses or networks.
+    """
     if allowed_hosts is None:
         return None
     # a lone string would be read char by char
     if isinstance(allowed_hosts, (str, bytes)):
-        raise TypeError('allowed_hosts must be an iterable of str (or None), not a single str')
+        raise TypeError(f'{name} must be an iterable of str (or None), not a single str')
     try:
         hosts = list(allowed_hosts)
     except TypeError:
-        raise TypeError('allowed_hosts must be an iterable of str or None') from None
-    if not hosts:
-        raise ValueError('allowed_hosts must not be empty (use None to allow every host)')
+        raise TypeError(f'{name} must be an iterable of str or None') from None
     networks: list[_IPNetwork] = []
     for host in hosts:
         if not isinstance(host, str):
-            raise TypeError(f'allowed_hosts items must be str, got {type(host).__name__}')
+            raise TypeError(f'{name} items must be str, got {type(host).__name__}')
         try:
             # strict=False: "192.168.1.5/24" is accepted as the network 192.168.1.0/24
             networks.append(ipaddress.ip_network(host.strip(), strict=False))
         except ValueError:
-            raise ValueError(f'allowed_hosts item {host!r} is not an IP address or a network (hostnames are not '
+            raise ValueError(f'{name} item {host!r} is not an IP address or a network (hostnames are not '
                              'supported)') from None
     return tuple(networks)

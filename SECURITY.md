@@ -47,8 +47,8 @@ supported.
 | Option | Default | Effect |
 |---|---|---|
 | `host` | `'localhost'` | Interface the server listens on. |
-| `allowed_hosts` | `None` (every client) | Whitelist of IP addresses or networks (CIDR notation, IPv4 and IPv6). Other clients are disconnected at once, before any engine (internal or external) is called. Refusals are logged (one message per 10 s at most). |
-| `read_only` | `False` | Every request that writes data (functions 0x05, 0x06, 0x0F, 0x10 and 0x17) gets an "illegal function" exception. |
+| `allowed_hosts` | `None` (every client) | Whitelist of IP addresses or networks (CIDR notation, IPv4 and IPv6). Other clients are disconnected at once, before any function handler (or fallback) is called. Refusals are logged (one message per 10 s at most). An empty list allows no client at all (a warning is logged at startup). |
+| `read_only` | `False` | Every request that writes data (functions 0x05, 0x06, 0x0F, 0x10 and 0x17) gets an "illegal function" exception, whatever its handler (a custom function or a fallback too). For finer rules (some spaces, some clients), stack the `ReadOnly`, `AccessControl` or `Guard` wrappers on the data store. |
 
 `allowed_hosts` is a filter on the source IP address, **not an authentication**: on a shared network segment
 an attacker can spoof an allowed address (ARP spoofing for example). Use it as a second line of defense behind
@@ -109,9 +109,10 @@ the connections of the previous one are fully closed by the system.
   count that matches the quantity for the write functions, no missing data. An invalid request gets an
   "illegal data value" exception and the session stays in sync. Bytes after a complete and consistent request
   are ignored.
-- An exception raised by user code (data handler, `on_coils_change()`, `on_holding_registers_change()`...) is
-  logged and answered with a "slave device failure" exception, the session is kept. An exception raised by an
-  external engine (`ext_engine`) closes the session.
+- An unexpected exception raised by user code (function handler, fallback, store wrapper, mapped range) is
+  logged and answered with a "slave device failure" exception, the session is kept. Every value written by the
+  request is restored (the request runs in a transaction of the data store). An exception raised by a change
+  listener is logged only: the request is already committed.
 
 ## Client protections
 
@@ -129,8 +130,8 @@ the connections of the previous one are fully closed by the system.
 These points are not vulnerabilities of the code, but behaviors to take into account in the design of an
 application.
 
-- **`read_only` has no effect with an external engine** (`ext_engine`): an external engine handles every
-  request itself and must refuse the writes on its own.
+- **`read_only` only knows the standard write function codes**: a custom function (0x41 to 0x48 for example)
+  that writes data must refuse the writes on its own, or use a store with a `ReadOnly` wrapper.
 - **`ModbusClient` is not thread-safe**: share an instance between threads only with an external lock.
 - **Client name resolution** is not limited by `timeout`, and the connection timeout applies to each address
   returned by the resolver in turn.

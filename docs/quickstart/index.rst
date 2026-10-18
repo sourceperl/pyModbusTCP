@@ -49,9 +49,8 @@ Package overview
    * - :mod:`pyModbusTCP.client`
      - :class:`~pyModbusTCP.client.ModbusClient`: the Modbus/TCP client.
    * - :mod:`pyModbusTCP.server`
-     - :class:`~pyModbusTCP.server.ModbusServer`: the Modbus/TCP server, with its data space
-       (:class:`~pyModbusTCP.server.DataBank`) and the interface to customize it
-       (:class:`~pyModbusTCP.server.DataHandler`).
+     - :class:`~pyModbusTCP.server.ModbusServer`: the Modbus/TCP server, with its data store
+       (:class:`~pyModbusTCP.server.MemoryStore`), the access rules and the function handlers to customize it.
    * - :mod:`pyModbusTCP.utils`
      - Functions for Modbus data conversion: 32/64 bits values, IEEE floats, two's complement, bits.
    * - :mod:`pyModbusTCP.constants`
@@ -100,7 +99,7 @@ Start a server on port 5020 and update its data from the application:
         while True:
             # clients see the current time in the holding registers 0 and 1
             now = time.localtime()
-            server.data_bank.set_holding_registers(0, [now.tm_hour, now.tm_min])
+            server.store.app.holding_registers.write(0, [now.tm_hour, now.tm_min])
             time.sleep(1.0)
     finally:
         server.stop()

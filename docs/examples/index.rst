@@ -38,17 +38,23 @@ Server
    :widths: 35 65
 
    * - :doc:`server`
-     - A Modbus/TCP server with its default data bank, host and port from the command line.
+     - A Modbus/TCP server with its default data store, host and port from the command line.
    * - :doc:`server_allow`
-     - A custom DataHandler that allows reads and writes only for some client addresses.
+     - allowed_hosts for the clients that can connect, an AccessControl wrapper for the ones that can write.
    * - :doc:`server_change_log`
-     - A custom DataBank that logs every coil and holding register changed by a client.
+     - A change listener that logs every coil and holding register changed by a client.
+   * - :doc:`server_custom_function`
+     - Add a function 0x41, replace the standard function 0x06, log the unsupported functions with a fallback.
    * - :doc:`server_dynamic_port`
      - Let the operating system choose a free port (port=0) and read it back.
    * - :doc:`server_schedule`
      - A server stopped every day from 18:00 to 06:00, with a life word updated every 10 seconds (needs the schedule package).
+   * - :doc:`server_mailbox`
+     - A command mailbox: a mapped command register runs the command in the request, 0x17 gets its result at once.
+   * - :doc:`server_multi_unit`
+     - One data store per unit id: a power meter (32 bits floats) and a valve controller on one server.
    * - :doc:`server_virtual_data`
-     - A virtual DataBank: the holding registers 0 to 5 give the current date and time, computed at each request.
+     - A mapped range: the holding registers 0 to 5 give the current date and time, computed at each request.
 
 .. toctree::
    :hidden:
@@ -63,6 +69,9 @@ Server
    server
    server_allow
    server_change_log
+   server_custom_function
    server_dynamic_port
    server_schedule
+   server_mailbox
+   server_multi_unit
    server_virtual_data

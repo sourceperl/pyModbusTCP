@@ -1,4 +1,4 @@
-""" pyModbusTCP server: session containers (client info, server info and session data passed to engines). """
+""" pyModbusTCP server: session containers (client info and the data of the current request of a session). """
 
 from __future__ import annotations
 
@@ -16,14 +16,6 @@ class ClientInfo:
         return f'ClientInfo(address={self.address!r}, port={self.port!r})'
 
 
-class ServerInfo:
-    """ Container class for server information """
-
-    def __init__(self) -> None:
-        self.client = ClientInfo()
-        self.recv_frame = Frame()
-
-
 class SessionData:
     """ Container class for server session data. """
 
@@ -31,13 +23,6 @@ class SessionData:
         self.client = ClientInfo()
         self.request = Frame()
         self.response = Frame()
-
-    @property
-    def srv_info(self) -> ServerInfo:
-        info = ServerInfo()
-        info.client = self.client
-        info.recv_frame = self.request
-        return info
 
     def new_request(self) -> None:
         self.request = Frame()

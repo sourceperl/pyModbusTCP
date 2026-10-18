@@ -16,6 +16,7 @@ $ mbtcp-client -H 192.168.1.10 read-holding 0 -n 4 -f json          # one JSON o
 $ mbtcp-client -H 192.168.1.10 write-register 10 0x1234
 $ mbtcp-client -H 192.168.1.10 write-registers 10 1 2 3
 $ mbtcp-client -H 192.168.1.10 write-coil 5 on
+$ mbtcp-client -H 192.168.1.10 write-read 0 20 22 1 -n 4     # write @0..2, then read @0..3 in one request
 $ mbtcp-client -H 192.168.1.10 device-id
 
 Values accept the decimal, hexadecimal (0x...), octal (0o...) and binary (0b...) notations. Coil values accept
@@ -86,6 +87,7 @@ _READ_KINDS = {
     'read-inputs': 'discrete input',
     'read-holding': 'holding register',
     'read-input-regs': 'input register',
+    'write-read': 'holding register',
 }
 
 
@@ -161,6 +163,32 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('address', type=int_value, help='first register address (0 to 65535)')
     p.add_argument('values', type=int_value, nargs='+',
                    help='values (0 to 65535, or -32768 to -1 for a signed value, 1 to 123 values)')
+
+    # write then read in one request
+    txt = 'write then read holding registers in one request (function 0x17)'
+    p = sub.add_parser('write-read', help=txt, parents=[output], formatter_class=argparse.RawDescriptionHelpFormatter,
+                       description=txt + '\n\nThe server writes the values, then reads the registers, in this order '
+                                         'and in one request: the\nregisters read include the values just written (and '
+                                         'what the server did with them).',
+                       epilog='examples:\n'
+                              '  write-read 0 20 22 1          write @0..2, read @0..2 back\n'
+                              '  write-read 0 20 22 1 -n 4     write @0..2, read @0..3\n'
+                              '  write-read 10 7 -r 100 -n 2   write @10, read @100..101\n'
+                              '\nIn the table, the "Written" column gives the value written at each address, and '
+                              '"!" marks\na register whose value read differs from the value written.')
+    p.add_argument('address', type=int_value, help='first register address of the write (0 to 65535)')
+    p.add_argument('values', type=int_value, nargs='+',
+                   help='values to write (0 to 65535, or -32768 to -1 for a signed value, 1 to 121 values)')
+    p.add_argument('-r', '--read', type=int_value, default=None, metavar='ADDRESS',
+                   help='first register address of the read (default: the address of the write)')
+    p.add_argument('-n', '--number', type=int_value, default=None,
+                   help='number of registers to read, 1 to 125 (default: the number of values written)')
+    p.add_argument('--hex', action='store_true',
+                   help='values in hexadecimal (plain, csv and json formats: the table shows them all)')
+    p.add_argument('--signed', action='store_true',
+                   help='values as signed 16 bits integers (plain, csv and json formats)')
+    # its own parser, for the errors of check_write_read_args() (with the usage of the command)
+    p.set_defaults(command_parser=p)
 
     # device identification
     txt = 'read device identification (function 0x2B/0x0E)'
@@ -370,6 +398,25 @@ class Output:
         span = f'{address}' if number == 1 else f'{address}..{last}'
         return f'{number} {kind}{plural} @ {span}'
 
+    def result_detail(self, res: ReadResult) -> str:
+        """The detail of the header: the registers read (and written, for write-read)."""
+        detail = self.read_detail(res.address, len(res.values))
+        if self.args.command != 'write-read':
+            return detail
+        n_written = len(self.args.values)
+        last = self.args.address + n_written - 1
+        span = f'{self.args.address}' if n_written == 1 else f'{self.args.address}..{last}'
+        return f'{n_written} written @ {span}{self.sep}{detail} read'
+
+    def json_read(self, res: ReadResult) -> dict[str, object]:
+        """The json object of a read (with the values written, for write-read)."""
+        obj: dict[str, object] = {'timestamp': iso_time(res.timestamp), 'command': self.args.command,
+                                  'address': res.address, 'values': [json_value(v, self.args) for v in res.values]}
+        if self.args.command == 'write-read':
+            obj['written'] = {'address': self.args.address,
+                              'values': [json_value(to_unsigned(v), self.args) for v in self.args.values]}
+        return obj
+
     def rule(self, widths: Sequence[int]) -> str:
         return self.style.dim('  '.join(self.rule_char * w for w in widths))
 
@@ -380,37 +427,65 @@ class Output:
         when = self.changed_at.get(offset)
         return when is not None and time.monotonic() - when < HIGHLIGHT_TIME
 
+    def written_values(self) -> dict[int, int]:
+        """write-read: address -> value written (empty for the other commands)."""
+        if self.args.command != 'write-read':
+            return {}
+        return {self.args.address + i: to_unsigned(v) for i, v in enumerate(self.args.values)}
+
     def register_table(self, res: ReadResult) -> list[str]:
         s = self.style
-        heads = ('Offset', 'Address', 'Addr hex', 'Hex', 'Unsigned', 'Signed', 'Binary', 'ASCII')
+        written = self.written_values()
+        # write-read: a "Written" column after the address columns
+        extra = 1 if written else 0
+        heads = ('Offset', 'Address', 'Addr hex') + (('Written',) if written else ()) + \
+            ('Hex', 'Unsigned', 'Signed', 'Binary', 'ASCII')
         rows: list[tuple[str, ...]] = []
         values = [v for v in res.values if isinstance(v, int)]
         for offset, value in enumerate(values):
             address = res.address + offset
-            rows.append((str(offset), str(address), address_hex(address), f'0x{value:04X}', str(value), str(to_signed(value)),
-                         register_binary(value), register_ascii(value)))
+            written_cell = (f'0x{written[address]:04X}' if address in written else '',) if written else ()
+            rows.append((str(offset), str(address), address_hex(address)) + written_cell
+                        + (f'0x{value:04X}', str(value), str(to_signed(value)), register_binary(value),
+                           register_ascii(value)))
         widths = [max(len(heads[i]), *(len(r[i]) for r in rows)) for i in range(len(heads))]
-        right = (True, True, True, True, True, True, False, False)
+        right = (True,) * (6 + extra) + (False, False)
 
         def cell(text: str, i: int) -> str:
             return text.rjust(widths[i]) if right[i] else text.ljust(widths[i])
 
         lines = ['  ' + s.bold('  '.join(cell(h, i) for i, h in enumerate(heads))),
                  '  ' + self.rule(widths)]
+        differs = 0
         for offset, row in enumerate(rows):
             value = values[offset]
+            address = res.address + offset
             changed = self.changed(offset)
             # the last column without padding (no trailing spaces)
             cells = [cell(t, i) for i, t in enumerate(row[:-1])] + [row[-1]]
-            # the offset and the 2 address columns (decimal and hexadecimal) are never highlighted, only the value
-            text = '  '.join(cells[3:])
+            # the offset, the address and the written columns are never highlighted, only the value
+            text = '  '.join(cells[3 + extra:])
             if changed:
                 text = s.changed(text)
             elif value == 0:
                 text = s.dim(text)
-            # "*": a value changed since the previous read (also seen without colors)
-            mark = s.changed('*') if changed and s.enabled else ('*' if changed else ' ')
-            lines.append(mark + ' ' + s.dim(cells[0]) + '  ' + cells[1] + '  ' + s.dim(cells[2]) + '  ' + text)
+            prefix = s.dim(cells[0]) + '  ' + cells[1] + '  ' + s.dim(cells[2]) + '  '
+            if written:
+                prefix += s.cyan(cells[3]) + '  '
+            # "*": a value changed since the previous read, "!": a value read that differs from the value written
+            # (also seen without colors)
+            if changed:
+                mark = s.changed('*') if s.enabled else '*'
+            elif address in written and written[address] != value:
+                mark = s.bold('!')
+                differs += 1
+            else:
+                mark = ' '
+            lines.append(mark + ' ' + prefix + text)
+        if differs:
+            lines.append('')
+            lines.append('  ' + s.dim(f'! {differs} register{"s" if differs > 1 else ""} read with another value '
+                                      'than the one written (changed by the server in the same request)'))
         return lines
 
     def bit_table(self, res: ReadResult) -> list[str]:
@@ -486,11 +561,10 @@ class Output:
                 writer.writerow((stamp, res.address + offset, format_value(value, self.args)))
             self.stream.flush()
         elif self.format == 'json':
-            obj = {'timestamp': iso_time(res.timestamp), 'command': self.args.command, 'address': res.address,
-                   'values': [json_value(v, self.args) for v in values]}
+            obj = self.json_read(res)
             self.write(json.dumps(obj) + '\n')
         else:
-            lines = self.header(self.args.command, self.read_detail(res.address, len(values)), res.duration)
+            lines = self.header(self.args.command, self.result_detail(res), res.duration)
             lines.append('')
             is_bits = self.args.command in ('read-coils', 'read-inputs')
             lines += self.bit_table(res) if is_bits else self.register_table(res)
@@ -603,6 +677,21 @@ def do_write(client: ModbusClient, args: argparse.Namespace, out: Output) -> boo
     return ok
 
 
+def do_write_read(client: ModbusClient, args: argparse.Namespace, out: Output) -> bool:
+    """Function 0x17: the server writes, then reads, in one request."""
+    read_address = args.address if args.read is None else args.read
+    number = len(args.values) if args.number is None else args.number
+    timestamp = time.time()
+    start = time.monotonic()
+    values = client.write_read_multiple_registers(args.address, [to_unsigned(v) for v in args.values],
+                                                  read_address, number)
+    duration = time.monotonic() - start
+    if values is None:
+        return False
+    out.read(ReadResult(read_address, values, timestamp, duration))
+    return True
+
+
 def do_device_id(client: ModbusClient, args: argparse.Namespace, out: Output) -> bool:
     start = time.monotonic()
     response = client.read_device_identification(read_code=args.code, object_id=args.object_id)
@@ -638,14 +727,39 @@ def run_command(client: ModbusClient, args: argparse.Namespace, out: Output | No
             if not ok:
                 out.read_error(error_txt(client))
             time.sleep(args.interval)
+    if args.command == 'write-read':
+        return do_write_read(client, args, out)
     if args.command.startswith('write-'):
         return do_write(client, args, out)
     return do_device_id(client, args, out)
 
 
+def check_write_read_args(args: argparse.Namespace) -> None:
+    """write-read: check the ranges before any request, with a clear message (exit status 2)."""
+    if args.command != 'write-read':
+        return
+    parser: argparse.ArgumentParser = args.command_parser
+    if not 1 <= len(args.values) <= 121:
+        parser.error(f'1 to 121 values can be written, {len(args.values)} given')
+    if args.number is not None and not 1 <= args.number <= 125:
+        parser.error(f'-n/--number must be between 1 and 125 (registers read), not {args.number}')
+    read_address = args.address if args.read is None else args.read
+    number = len(args.values) if args.number is None else args.number
+    for name, address, count in (('write', args.address, len(args.values)), ('read', read_address, number)):
+        if not 0 <= address <= 0xFFFF:
+            parser.error(f'{name} address {address} out of 0 to 65535')
+        if address + count > 0x10000:
+            parser.error(f'the {name} of {count} registers from @{address} ends after the last '
+                         f'address (65535)')
+    for value in args.values:
+        if not -0x8000 <= value <= 0xFFFF:
+            parser.error(f'value {value} out of 0 to 65535 (or -32768 to -1 for a signed value)')
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    check_write_read_args(args)
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.WARNING, format='%(message)s')
     try:
         with ModbusClient(host=args.host, port=args.port, unit_id=args.unit_id, timeout=args.timeout) as client:

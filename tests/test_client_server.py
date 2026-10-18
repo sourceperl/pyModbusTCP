@@ -82,18 +82,26 @@ class TestClientServer(unittest.TestCase):
             self.assertEqual(no_delay_status, expected_status)
             self.client.close()
 
-    def test_user_callback_exception(self) -> None:
-        """An exception raised by a user callback must not drop the session (and must not be masked)."""
+    def test_listener_exception(self) -> None:
+        """An exception raised by a change listener is logged: the write is committed, the client gets its response."""
         for value, exc in enumerate((RuntimeError('boom'), KeyError('key'), TypeError('type')), start=1):
-            self.server.data_bank.on_holding_registers_change = Mock(side_effect=exc)  # type: ignore[method-assign]
-            # use a new value at each loop: the change callback is only called when the value change
+            unsubscribe = self.server.store.subscribe(Mock(side_effect=exc))
+            # use a new value at each loop: the listener is only called when the value change
             with self.assertLogs('pyModbusTCP.server', level='ERROR'):
-                self.assertFalse(self.client.write_single_register(0, value))
-            self.assertEqual(self.client.last_error, MB_EXCEPT_ERR)
-            self.assertEqual(self.client.last_except, EXP_SLAVE_DEVICE_FAILURE)
-            self.assertTrue(self.client.is_open, 'session must stay open after a device failure')
-        # same session is still usable once the callback is fixed
-        del self.server.data_bank.on_holding_registers_change
+                self.assertTrue(self.client.write_single_register(0, value))
+            self.assertEqual(self.client.read_holding_registers(0), [value])
+            self.assertTrue(self.client.is_open)
+            unsubscribe()
+
+    def test_handler_exception(self) -> None:
+        """An exception raised by a function handler must not drop the session: SLAVE DEVICE FAILURE."""
+        self.server.functions[0x41] = Mock(side_effect=RuntimeError('boom'))
+        with self.assertLogs('pyModbusTCP.server', level='ERROR'):
+            self.assertIsNone(self.client.custom_request(b'\x41\x00'))
+        self.assertEqual(self.client.last_error, MB_EXCEPT_ERR)
+        self.assertEqual(self.client.last_except, EXP_SLAVE_DEVICE_FAILURE)
+        self.assertTrue(self.client.is_open, 'session must stay open after a device failure')
+        del self.server.functions[0x41]
         self.assertTrue(self.client.write_single_register(0, 10))
         self.assertEqual(self.client.read_holding_registers(0), [10])
 
@@ -105,14 +113,14 @@ class TestClientServer(unittest.TestCase):
 
     def test_late_reply_is_never_taken_for_the_next_one(self) -> None:
         """A reply left on the socket (on_tx_rx raised after the send) is detected by the next request."""
-        self.server.data_bank.set_holding_registers(0, [1])
+        self.server.store.app.holding_registers.write(0, [1])
         # the user callback raises an exception just after the send: the reply of the server stays on the socket
         self.client.on_tx_rx = Mock(side_effect=[RuntimeError('boom'), None, None, None])  # type: ignore
         # worst case for a random transaction ID: the same value drawn twice
         with patch('pyModbusTCP.client.modbus_client.random.randint', return_value=42):
             with self.assertRaises(RuntimeError):
                 self.client.read_holding_registers(0)
-            self.server.data_bank.set_holding_registers(0, [2])
+            self.server.store.app.holding_registers.write(0, [2])
             # the next request receives the late reply (value 1): it must be rejected, not returned as the current one
             self.assertIsNone(self.client.read_holding_registers(0))
         self.assertEqual(self.client.last_error, MB_RECV_ERR)
@@ -187,19 +195,18 @@ class TestClientServer(unittest.TestCase):
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_READABLE_BITS]:
             # discrete inputs space: single read/write
             bit = bool(getrandbits(1))
-            self.server.data_bank.set_discrete_inputs(addr, [bit])
+            self.server.store.app.discrete_inputs.write(addr, [bit])
             self.assertEqual(self.client.read_discrete_inputs(addr), [bit])
             # discrete inputs space: multiple read/write at min size
             bits_l = [bool(getrandbits(1))]
-            self.server.data_bank.set_discrete_inputs(addr, bits_l)
+            self.server.store.app.discrete_inputs.write(addr, bits_l)
             self.assertEqual(self.client.read_discrete_inputs(addr, len(bits_l)), bits_l)
             # discrete inputs space: multiple read/write at max size
             bits_l = [bool(getrandbits(1)) for _ in range(MAX_READABLE_BITS)]
-            self.server.data_bank.set_discrete_inputs(addr, bits_l)
+            self.server.store.app.discrete_inputs.write(addr, bits_l)
             self.assertEqual(self.client.read_discrete_inputs(addr, len(bits_l)), bits_l)
             # discrete inputs space: multiple read/write at max size
             bits_l.append(bool(getrandbits(1)))
-            self.server.data_bank.set_discrete_inputs(addr, bits_l)
             self.assertRaises(ValueError, self.client.read_discrete_inputs, addr, len(bits_l))
         # discrete inputs space: read/write over limit
         self.assertRaises(ValueError, self.client.read_discrete_inputs, 0xffff, 2)
@@ -232,15 +239,14 @@ class TestClientServer(unittest.TestCase):
         for addr in [0x0000, 0x1234, 0x2345, 0x10000 - MAX_READABLE_REGS]:
             # input registers space: single read/write
             word = randint(0, 0xffff)
-            self.server.data_bank.set_input_registers(addr, [word])
+            self.server.store.app.input_registers.write(addr, [word])
             self.assertEqual(self.client.read_input_registers(addr), [word])
             # input registers space: multiple read/write at max size
             words_l = [randint(0, 0xffff) for _ in range(MAX_READABLE_REGS)]
-            self.server.data_bank.set_input_registers(addr, words_l)
+            self.server.store.app.input_registers.write(addr, words_l)
             self.assertEqual(self.client.read_input_registers(addr, len(words_l)), words_l)
             # input registers space: multiple read/write over sized
             words_l.append(randint(0, 0xffff))
-            self.server.data_bank.set_input_registers(addr, words_l)
             self.assertRaises(ValueError, self.client.read_input_registers, addr, len(words_l))
         # input registers space: read/write over limit
         self.assertRaises(ValueError, self.client.read_input_registers, 0xfff0, 17)
@@ -342,7 +348,7 @@ class TestClientServerAccessControl(unittest.TestCase):
     def test_read_only(self) -> None:
         """A read_only server serves the reads and answers ILLEGAL FUNCTION to every write."""
         server, client = self._start(read_only=True)
-        server.data_bank.set_holding_registers(0, [42])
+        server.store.app.holding_registers.write(0, [42])
         self.assertEqual(client.read_holding_registers(0), [42])
         writes: dict[str, Callable[[], object]] = {
             'write_single_coil': lambda: client.write_single_coil(0, True),
@@ -357,8 +363,8 @@ class TestClientServerAccessControl(unittest.TestCase):
                 self.assertEqual(client.last_except, EXP_ILLEGAL_FUNCTION)
                 self.assertTrue(client.is_open, 'session must stay open after a refused write')
         # nothing is written, and the same session is still usable
-        self.assertEqual(server.data_bank.get_holding_registers(0, 1), [42])
-        self.assertEqual(server.data_bank.get_coils(0, 2), [False, False])
+        self.assertEqual(server.store.app.holding_registers.read(0, 1), [42])
+        self.assertEqual(server.store.app.coils.read(0, 2), [False, False])
         self.assertEqual(client.read_holding_registers(0), [42])
         self.assertEqual(client.last_error, MB_NO_ERR)
 

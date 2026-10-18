@@ -16,7 +16,7 @@ import pytest
 
 from pyModbusTCP.client import ModbusClient
 from pyModbusTCP.constants import VERSION
-from pyModbusTCP.server import DeviceIdentification, ModbusServer
+from pyModbusTCP.server import DeviceIdentification, MemoryStore, ModbusServer, Space
 from pyModbusTCP.tools import _entry
 from pyModbusTCP.tools import client as cli_tool
 from pyModbusTCP.tools._common import is_permission_error
@@ -65,12 +65,55 @@ def test_client_read_write_registers(server: tuple[ModbusServer, int], capsys: p
     assert run_client(capsys, base + ['read-holding', '12', '--signed'])[1] == '12 -1\n'
 
 
+def test_client_write_read(server: tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
+    """write-read (function 0x17): write, then read the registers in one request."""
+    import json
+    srv, port = server
+    base = ['-H', '127.0.0.1', '-p', str(port)]
+    # default: read back the registers written
+    status, out, _ = run_client(capsys, base + ['write-read', '10', '1', '0x1234', '-1'])
+    assert status == 0
+    assert out.splitlines() == ['10 1', '11 4660', '12 65535']
+    assert srv.store.app.holding_registers.read(10, 3) == [1, 0x1234, 0xFFFF]
+    # another read range, signed values
+    assert run_client(capsys, base + ['write-read', '10', '5', '-r', '11', '-n', '3', '--signed'])[1].splitlines() == \
+        ['11 4660', '12 -1', '13 0']
+    # json: the values read, and the values written
+    obj = json.loads(run_client(capsys, base + ['write-read', '20', '0x41', '-f', 'json', '--hex'])[1])
+    assert obj['command'] == 'write-read' and obj['address'] == 20 and obj['values'] == ['0x0041']
+    assert obj['written'] == {'address': 20, 'values': ['0x0041']}
+    # table: the header gives both ranges, the "Written" column the values written
+    out = run_client(capsys, base + ['write-read', '20', '1', '2', '-n', '3', '-f', 'table'])[1]
+    assert '2 written @ 20..21' in out and '3 holding registers @ 20..22 read' in out
+    rows = {line.split()[1]: line.split() for line in out.splitlines() if line[2:].strip()[:1].isdigit()}
+    assert rows['20'][:5] == ['0', '20', '0x0014', '0x0001', '0x0001']
+    assert rows['22'][:4] == ['2', '22', '0x0016', '0x0000'], 'no written value at 22'
+    assert '!' not in out
+    # a value read that differs from the value written (changed by the server in the request): marked "!"
+    store = srv.store
+    assert isinstance(store, MemoryStore)
+    store.map(Space.HOLDING_REGISTERS, 30, 1, read=lambda address, count, ctx: [5],
+              write=lambda address, values, ctx: None)
+    out = run_client(capsys, base + ['write-read', '30', '1', '-f', 'table'])[1]
+    assert [line[0] for line in out.splitlines() if '0x001E' in line] == ['!']
+    assert '1 register read with another value than the one written' in out
+    # errors: modbus exception (status 1), invalid parameters (status 2, with the usage of write-read)
+    srv.read_only = True
+    status, _, err = run_client(capsys, base + ['write-read', '0', '1'])
+    assert status == 1 and 'exception 0x01' in err
+    for args, error in ((['0'] + ['1'] * 122, '1 to 121 values'), (['0', '1', '-n', '126'], 'between 1 and 125'),
+                        (['0', '70000'], 'value 70000 out of'), (['65535', '1', '2'], 'the write of 2 registers'),
+                        (['0', '1', '-r', '65535', '-n', '2'], 'the read of 2 registers')):
+        status, _, err = run_client(capsys, base + ['write-read'] + args)
+        assert status == 2 and error in err and 'usage: mbtcp-client write-read' in err, args
+
+
 def test_client_coils(server: tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
     srv, port = server
     base = ['-H', '127.0.0.1', '-p', str(port)]
     assert run_client(capsys, base + ['write-coil', '5', 'on'])[0] == 0
     assert run_client(capsys, base + ['write-coils', '6', '1', 'off', 'true'])[0] == 0
-    assert srv.data_bank.get_coils(5, 4) == [True, True, False, True]
+    assert srv.store.app.coils.read(5, 4) == [True, True, False, True]
     assert run_client(capsys, base + ['read-coils', '5', '-n', '4'])[1].split() == \
         ['5', '1', '6', '1', '7', '0', '8', '1']
 
@@ -102,7 +145,7 @@ def test_client_errors(server: tuple[ModbusServer, int], capsys: pytest.CaptureF
 def test_client_output_formats(server: tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
     import json
     srv, port = server
-    srv.data_bank.set_holding_registers(10, [1, 0xFFFE, 0x4142])
+    srv.store.app.holding_registers.write(10, [1, 0xFFFE, 0x4142])
     base = ['-H', '127.0.0.1', '-p', str(port)]
     # auto: plain when the output is not a terminal (scripts get a stable output)
     assert run_client(capsys, base + ['read-holding', '10', '-n', '3'])[1] == '10 1\n11 65534\n12 16706\n'
@@ -116,7 +159,7 @@ def test_client_output_formats(server: tuple[ModbusServer, int], capsys: pytest.
     obj = json.loads(run_client(capsys, base + ['read-holding', '10', '-n', '3', '-f', 'json', '--hex'])[1])
     assert obj['command'] == 'read-holding' and obj['address'] == 10
     assert obj['values'] == ['0x0001', '0xFFFE', '0x4142']
-    srv.data_bank.set_coils(0, [True, False])
+    srv.store.app.coils.write(0, [True, False])
     obj = json.loads(run_client(capsys, base + ['read-coils', '0', '-n', '2', '-f', 'json'])[1])
     assert obj['values'] == [True, False]
     obj = json.loads(run_client(capsys, base + ['device-id', '-f', 'json'])[1])
@@ -129,7 +172,7 @@ def test_client_output_formats(server: tuple[ModbusServer, int], capsys: pytest.
 
 def test_client_table(server: tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
     srv, port = server
-    srv.data_bank.set_holding_registers(10, [0x4142, 0xFFFF])
+    srv.store.app.holding_registers.write(10, [0x4142, 0xFFFF])
     base = ['-H', '127.0.0.1', '-p', str(port)]
     status, out, _ = run_client(capsys, base + ['read-holding', '10', '-n', '2', '-f', 'table'])
     assert status == 0
@@ -140,7 +183,7 @@ def test_client_table(server: tuple[ModbusServer, int], capsys: pytest.CaptureFi
     assert rows['10'] == ['0', '10', '0x000A', '0x4142', '16706', '16706', '0100', '0001', '0100', '0010', 'AB']
     assert rows['11'][:6] == ['1', '11', '0x000B', '0xFFFF', '65535', '-1']
     # bits: a grid of 10 per row
-    srv.data_bank.set_coils(100, [True] * 12)
+    srv.store.app.coils.write(100, [True] * 12)
     out = run_client(capsys, base + ['read-coils', '100', '-n', '12', '-f', 'table'])[1]
     assert '12 on, 0 off' in out
     assert [line.split()[:3] for line in out.splitlines() if ' 0x00' in line] == \
@@ -240,7 +283,7 @@ def test_tcp2rtu_filters(kwargs: dict, expected: dict) -> None:  # type: ignore[
     worker = tcp_to_rtu_gw.ModbusSerialWorker(port, timeout=0.3, **kwargs)
     thread = threading.Thread(target=worker.loop, daemon=True)
     thread.start()
-    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, ext_engine=worker.srv_engine_entry)
+    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, functions={}, fallback=worker.relay_request)
     _, tcp_port = srv.start()
     try:
         for key, exp_code in expected.items():
@@ -301,7 +344,7 @@ def test_tcp2rtu_fair_share(caplog: pytest.LogCaptureFixture) -> None:
     worker = tcp_to_rtu_gw.ModbusSerialWorker(SilentSerial(), timeout=0.3)  # type: ignore[arg-type]
     thread = threading.Thread(target=worker.loop, daemon=True)
     thread.start()
-    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, ext_engine=worker.srv_engine_entry)
+    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, functions={}, fallback=worker.relay_request)
     _, tcp_port = srv.start()
     stop = threading.Event()
     flood_excepts: list[int] = []
@@ -351,7 +394,7 @@ def test_tcp2rtu_refused_requests_log_throttle(caplog: pytest.LogCaptureFixture)
     pytest.importorskip('serial')
     from pyModbusTCP.tools import tcp_to_rtu_gw
     worker = tcp_to_rtu_gw.ModbusSerialWorker(SilentSerial(), timeout=0.3, read_only=True)  # type: ignore[arg-type]
-    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, ext_engine=worker.srv_engine_entry)
+    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, functions={}, fallback=worker.relay_request)
     _, tcp_port = srv.start()
     try:
         with caplog.at_level('INFO', logger='mbtcp-tcp2rtu'):
@@ -409,7 +452,7 @@ def test_tcp2rtu_invalid_function_codes(read_only: bool) -> None:
     worker = tcp_to_rtu_gw.ModbusSerialWorker(serial_port, timeout=0.1, read_only=read_only)  # type: ignore[arg-type]
     thread = threading.Thread(target=worker.loop, daemon=True)
     thread.start()
-    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, ext_engine=worker.srv_engine_entry)
+    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, functions={}, fallback=worker.relay_request)
     _, tcp_port = srv.start()
     try:
         for pdu in (b'\x00', b'\x81\x00\x00\x00\x01', b'\x83\x00\x00\x00\x01', b'\xff'):
@@ -452,7 +495,7 @@ def test_tcp2rtu_fair_share_between_several_flooding_hosts() -> None:
     worker = tcp_to_rtu_gw.ModbusSerialWorker(SilentSerial(), timeout=0.2)  # type: ignore[arg-type]
     thread = threading.Thread(target=worker.loop, daemon=True)
     thread.start()
-    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, ext_engine=worker.srv_engine_entry)
+    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, functions={}, fallback=worker.relay_request)
     _, tcp_port = srv.start()
     stop = threading.Event()
     request = struct.pack('>HHHBBHH', 1, 0, 6, 1, 0x03, 0, 1)
@@ -575,7 +618,8 @@ def test_gateway_rs485_settings() -> None:
     assert (setup.settings.rts_level_for_tx, setup.settings.rts_level_for_rx) == (False, True)
     assert setup.text().startswith('RTS low (driver) on tx, high (driver) on rx')
     # the command line wins over the driver, level by level
-    setup = _common.rs485_settings(parser.parse_args(['--rs485', '--rs485-rts-tx', 'high']), driver_levels=(False, True))
+    setup = _common.rs485_settings(parser.parse_args(['--rs485', '--rs485-rts-tx', 'high']),
+                                   driver_levels=(False, True))
     assert setup is not None
     assert (setup.settings.rts_level_for_tx, setup.settings.rts_level_for_rx) == (True, True)
     assert setup.text().startswith('RTS high on tx, high (driver) on rx')
@@ -691,7 +735,7 @@ def test_rtu2tcp_relay(server: tuple[ModbusServer, int]) -> None:
     serial = pytest.importorskip('serial')
     from pyModbusTCP.tools import rtu_to_tcp_gw
     srv, tcp_port = server
-    srv.data_bank.set_holding_registers(0, [0x1234])
+    srv.store.app.holding_registers.write(0, [0x1234])
     master_fd, slave_fd = os.openpty()
     port = serial.Serial(os.ttyname(slave_fd), baudrate=19200)
     tcp_cli = ModbusClient(host='127.0.0.1', port=tcp_port, timeout=2.0)
@@ -720,12 +764,12 @@ def test_rtu2tcp_relay(server: tuple[ModbusServer, int]) -> None:
         assert exchange(rtu_frame(30, bytes.fromhex('0300000001'))) == rtu_frame(30, bytes.fromhex('03021234'))
         # write 1 holding register
         assert exchange(rtu_frame(30, bytes.fromhex('0600010005'))) == rtu_frame(30, bytes.fromhex('0600010005'))
-        assert srv.data_bank.get_holding_registers(1) == [5]
+        assert srv.store.app.holding_registers.read(1) == [5]
         # frame for another slave: ignored
         assert exchange(rtu_frame(31, bytes.fromhex('0300000001')), expect_answer=False) == b''
         # broadcast: ignored without --allow-broadcast
         assert exchange(rtu_frame(0, bytes.fromhex('0600020007')), expect_answer=False) == b''
-        assert srv.data_bank.get_holding_registers(2) == [0]
+        assert srv.store.app.holding_registers.read(2) == [0]
     finally:
         worker.stop()
         thread.join(5.0)

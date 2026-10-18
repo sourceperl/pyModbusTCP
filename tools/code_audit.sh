@@ -219,7 +219,7 @@ audit() {
                     --count \
                     --statistics \
                     --max-complexity=10 \
-                    --max-line-length=127 \
+                    --max-line-length=120 \
                     --extend-exclude="$excluded_csv"
                 ;;
             mypy)

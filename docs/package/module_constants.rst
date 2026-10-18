@@ -56,8 +56,8 @@ Modbus exception codes
 ----------------------
 
 The codes a server sends back when it can't process a request: :attr:`ModbusClient.last_except
-<pyModbusTCP.client.ModbusClient.last_except>` on the client side, the ``exp_code`` of a
-:class:`DataHandler.Return <pyModbusTCP.server.DataHandler.Return>` on the server side. ``EXP_TXT`` and
+<pyModbusTCP.client.ModbusClient.last_except>` on the client side, the ``code`` of a
+:class:`~pyModbusTCP.server.ModbusException` on the server side. ``EXP_TXT`` and
 ``EXP_DETAILS`` map each code to a short and a long description.
 
 .. list-table::

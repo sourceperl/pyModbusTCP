@@ -4,27 +4,33 @@ from __future__ import annotations
 
 import socket
 import warnings
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from threading import RLock, Thread, current_thread
 from typing import TypeAlias
 
 from ..constants import (
     EXP_DATA_VALUE,
+    EXP_GATEWAY_PATH_UNAVAILABLE,
     EXP_ILLEGAL_FUNCTION,
     EXP_SLAVE_DEVICE_FAILURE,
     WRITE_FUNCTION_CODES,
 )
 from . import _transport, _validators, errors, frames, session
 from ._common import logger
-from ._functions import ServerFunctionsMixin
 from ._transport import CustomThreadingTCPServer
-from .data_bank import DataBank
-from .data_handler import DataHandler
 from .device_id import DeviceIdentification
-from .errors import DataFormatError, Error, NetworkError, PDUDecodeError
+from .errors import (
+    DataFormatError,
+    Error,
+    ModbusException,
+    NetworkError,
+    PDUDecodeError,
+)
+from .functions import FunctionHandler, Request
+from .store import DataStore, RequestContext
 
 
-class ModbusServer(ServerFunctionsMixin):
+class ModbusServer:
     """ Modbus TCP server """
 
     # interval (in s) at which the main server loop checks for a stop request: this is the max latency of stop()
@@ -36,7 +42,6 @@ class ModbusServer(ServerFunctionsMixin):
     DataFormatError: TypeAlias = errors.DataFormatError
     PDUDecodeError: TypeAlias = errors.PDUDecodeError
     ClientInfo: TypeAlias = session.ClientInfo
-    ServerInfo: TypeAlias = session.ServerInfo
     SessionData: TypeAlias = session.SessionData
     Frame: TypeAlias = frames.Frame
     MBAP: TypeAlias = frames.MBAP
@@ -48,8 +53,8 @@ class ModbusServer(ServerFunctionsMixin):
     _validate_allowed_hosts = staticmethod(_validators.validate_allowed_hosts)
 
     def __init__(self, host: str = 'localhost', port: int = 502, no_block: bool = False, ipv6: bool = False,
-                 data_bank: DataBank | None = None, data_hdl: DataHandler | None = None,
-                 ext_engine: Callable[[session.SessionData], None] | None = None,
+                 store: DataStore | Mapping[int, DataStore] | None = None,
+                 functions: Mapping[int, FunctionHandler] | None = None, fallback: FunctionHandler | None = None,
                  device_id: DeviceIdentification | None = None,
                  request_timeout: float | None = 30.0, idle_timeout: float | None = 300,
                  max_connections: int | None = 64, max_connections_per_host: int | None = 16,
@@ -69,12 +74,15 @@ class ModbusServer(ServerFunctionsMixin):
         :type no_block: bool
         :param ipv6: use ipv6 stack (default is False)
         :type ipv6: bool
-        :param data_bank: instance of custom data bank, if you don't want the default one (optional)
-        :type data_bank: DataBank
-        :param data_hdl: instance of custom data handler, if you don't want the default one (optional)
-        :type data_hdl: DataHandler
-        :param ext_engine: an external engine reference (ref to ext_engine(session_data)) (optional)
-        :type ext_engine: callable
+        :param store: the data store of the server (default: a new MemoryStore), or a mapping {unit id: store} to\
+            simulate several devices (a request for another unit id gets a "gateway path unavailable" exception)
+        :type store: DataStore or dict or None
+        :param functions: the function handlers, {function code: handler(request) -> response PDU} (default: a copy\
+            of the standard functions, see STANDARD_FUNCTIONS), also available as the functions attribute
+        :type functions: dict or None
+        :param fallback: the handler of the requests whose function code has no handler (default: None, an\
+            "illegal function" exception), like a gateway that relays every request
+        :type fallback: callable or None
         :param device_id: instance of DeviceIdentification class for read device identification request (optional)
         :type device_id: DeviceIdentification
         :param request_timeout: max time in seconds to receive a whole request (MBAP header and PDU) from its first\
@@ -87,11 +95,11 @@ class ModbusServer(ServerFunctionsMixin):
             None for no limit (default is 64)
         :type max_connections: int or None
         :param read_only: refuse every request that writes data (functions 0x05, 0x06, 0x0F, 0x10 and 0x17) with an\
-            "illegal function" exception, only the internal engine is concerned (default is False)
+            "illegal function" exception, whatever their handler (default is False)
         :type read_only: bool
         :param allowed_hosts: whitelist of the clients allowed to connect: IP addresses or networks in CIDR notation\
             (like ['192.168.1.10', '10.0.0.0/24', '::1']), other connections are closed at once, None to accept\
-            every client (default), hostnames are not supported (an empty whitelist is an error)
+            every client (default), an empty list for no client at all, hostnames are not supported
         :type allowed_hosts: iterable of str or None
         :param max_connections_per_host: max number of simultaneous connections from the same client host (an IPv4\
             address, or a /64 network for IPv6), the next ones are closed immediately: a single host can't take all\
@@ -103,9 +111,10 @@ class ModbusServer(ServerFunctionsMixin):
         host = _validators.validate_host(host)
         port = _validators.validate_port(port)
 
-        # validate complex objects (data storage and callbacks)
-        _validators.validate_data_bank_and_handler(data_bank, data_hdl)
-        _validators.validate_ext_engine(ext_engine)
+        # validate complex objects (data storage and function handlers)
+        stores = _validators.validate_store(store)
+        checked_functions = _validators.validate_functions(functions)
+        fallback = _validators.validate_fallback(fallback)
         device_id = _validators.validate_device_id(device_id)
 
         # validate numeric parameters with constraints
@@ -136,17 +145,16 @@ class ModbusServer(ServerFunctionsMixin):
         if allowed_networks is not None:
             self.allowed_hosts = [str(network) for network in allowed_networks]
 
-        # store callbacks and device info
-        self.ext_engine = ext_engine
+        # data stores: unit id -> store (the key None: the store of every unit id)
+        self._stores = stores
+        #: unit id -> data store, when the server has one store per unit id (else empty)
+        self.stores: dict[int, DataStore] = {unit_id: unit_store for unit_id, unit_store in stores.items()
+                                             if unit_id is not None}
+        #: function code -> handler, can be changed at any time (see function())
+        self.functions: dict[int, FunctionHandler] = checked_functions
+        #: handler of the other function codes (None: "illegal function" exception)
+        self.fallback = fallback
         self.device_id = device_id
-
-        # initialize data storage (prefer data_hdl's internal bank, then explicit data_bank, then create new)
-        if data_hdl:
-            self.data_bank = data_hdl.data_bank
-            self.data_hdl = data_hdl
-        else:
-            self.data_bank = data_bank or DataBank(virtual_mode=bool(ext_engine))
-            self.data_hdl = DataHandler(data_bank=self.data_bank)
 
         # initialize internal state for server operation
         # active server instance
@@ -157,8 +165,16 @@ class ModbusServer(ServerFunctionsMixin):
         # (reentrant: stop() may be called from a signal handler running in the thread that is inside start())
         self._start_stop_lock = RLock()
 
-        # map Modbus function codes to handler methods (fixed routing table, see ServerFunctionsMixin)
-        self._func_map = self._build_func_map()
+    @property
+    def store(self) -> DataStore:
+        """The data store of the server (application access: server.store.app).
+
+        :raises AttributeError: if the server has one store per unit id (see stores)
+        """
+        store = self._stores.get(None)
+        if store is None:
+            raise AttributeError('this server has one store per unit id: use server.stores[unit_id]')
+        return store
 
     @property
     def is_run(self) -> bool:
@@ -195,75 +211,99 @@ class ModbusServer(ServerFunctionsMixin):
         return tcp_server.shutdown_sessions()
 
     def __repr__(self) -> str:
-        r_str = ('ModbusServer(host=\'%s\', port=%d, no_block=%s, ipv6=%s, data_bank=%s, data_hdl=%s, ext_engine=%s, '
+        r_str = ('ModbusServer(host=\'%s\', port=%d, no_block=%s, ipv6=%s, store=%r, functions=%s, fallback=%r, '
                  'device_id=%s, request_timeout=%s, idle_timeout=%s, max_connections=%s, max_connections_per_host=%s, '
-                 'read_only=%s, allowed_hosts=%s, )')
-        r_str %= (self.host, self.port, self.no_block, self.ipv6, self.data_bank, self.data_hdl, self.ext_engine,
-                  self.device_id, self.request_timeout, self.idle_timeout, self.max_connections,
-                  self.max_connections_per_host, self.read_only, self.allowed_hosts)
+                 'read_only=%s, allowed_hosts=%s)')
+        r_str %= (self.host, self.port, self.no_block, self.ipv6, self._stores.get(None, self.stores),
+                  sorted(self.functions), self.fallback, self.device_id, self.request_timeout, self.idle_timeout,
+                  self.max_connections, self.max_connections_per_host, self.read_only, self.allowed_hosts)
         return r_str
 
+    def function(self, code: int) -> Callable[[FunctionHandler], FunctionHandler]:
+        """Decorator to add (or replace) the handler of a function code::
+
+            @server.function(0x41)
+            def my_function(req: Request) -> bytes:
+                return req.reply('B', 42)
+
+        A handler takes a Request and returns the response PDU (bytes, function code first). It raises a
+        ModbusException (like IllegalDataAddress) for an exception response. Delete server.functions[code] to remove
+        a function.
+        """
+        code = _validators.validate_function_code(code)
+
+        def register(handler: FunctionHandler) -> FunctionHandler:
+            if not callable(handler):
+                raise TypeError('a function handler must be callable')
+            self.functions[code] = handler
+            return handler
+
+        return register
+
     def _engine(self, session_data: session.SessionData) -> None:
-        """Main request processing engine.
+        """Process a request: route it to its function handler, set the response PDU.
 
         :type session_data: SessionData
         """
-        # call external engine or internal one (if ext_engine undefined)
-        if callable(self.ext_engine):
-            try:
-                self.ext_engine(session_data)
-            except Exception as e:
-                logger.exception('External engine raise an exception, close session')
-                raise Error(f'external engine raise an exception: {e!r}') from e
-        else:
-            self._internal_engine(session_data)
-
-    def _internal_engine(self, session_data: session.SessionData) -> None:
-        """Default internal processing engine: call default modbus func.
-
-        :type session_data: SessionData
-        """
-        # session alias
         client = session_data.client
-        recv_pdu = session_data.request.pdu
+        request = session_data.request
         send_pdu = session_data.response.pdu
-        func_code = recv_pdu.func_code
+        func_code = request.pdu.func_code
         # a request can't have the exception flag (bit 7) set, and an exception response must fit in a byte:
         # answer "illegal function" with the same code (code | 0x80), the TCP session stays synchronized
         if func_code > 0x7F:
             logger.debug('Request with an invalid function code 0x%02X from %s', func_code, client)
             send_pdu.build_except(func_code & 0x7F, EXP_ILLEGAL_FUNCTION)
             return
-        # read-only server: a function that writes data is not available
-        if self.read_only and func_code in WRITE_FUNCTION_CODES:
-            logger.debug('Write function 0x%02X refused (read-only mode) from %s', func_code, client)
-            send_pdu.build_except(func_code, EXP_ILLEGAL_FUNCTION)
+        unit_id = request.mbap.unit_id
+        routed = self._route(func_code, unit_id, client)
+        if isinstance(routed, int):
+            send_pdu.build_except(func_code, routed)
             return
-        # get the ad-hoc function, if none exists (or is disabled with None), send an "illegal function" exception
-        func = self._func_map.get(func_code)
-        if not callable(func):
-            send_pdu.build_except(func_code, EXP_ILLEGAL_FUNCTION)
-            return
-        # call ad-hoc func
+        handler, store = routed
+        ctx = RequestContext(client=client, unit_id=unit_id, function_code=func_code)
         try:
-            func(session_data)
+            response = handler(Request(pdu=request.pdu.raw, ctx=ctx, store=store, device_id=self.device_id))
+            if not isinstance(response, (bytes, bytearray)) or not response:
+                raise DataFormatError(f'the handler returned {type(response).__name__}, a non empty bytes expected')
+            send_pdu.raw = bytes(response)
+        except ModbusException as e:
+            logger.debug('Function 0x%02X from %s: exception 0x%02X (%s)', func_code, client, e.code, e)
+            send_pdu.build_except(func_code, e.code)
         except PDUDecodeError as e:
             # request PDU too short or malformed: the TCP stream is still in sync, answer with "illegal data value"
             logger.debug('Malformed request for function 0x%02X: %s from %s', func_code, e, client)
             send_pdu.build_except(func_code, EXP_DATA_VALUE)
         except DataFormatError as e:
-            # the response can't be encoded: a data handler returned an invalid value (like a register value out of
-            # the 0-65535 range or an exception code over 255), the request itself was fine and the TCP stream is
-            # still in sync: answer with "slave device failure" instead of closing the session
+            # the response can't be encoded (like a value out of its field), the request itself was fine and the TCP
+            # stream is still in sync: answer with "slave device failure" instead of closing the session
             logger.error('Unable to encode the response of function 0x%02X from %s: %s', func_code, client, e)
             send_pdu.build_except(func_code, EXP_SLAVE_DEVICE_FAILURE)
         except Error:
             # network error or other frame error: let the session handler close the connection
             raise
         except Exception:  # noqa: BLE001
-            # unexpected error (like an exception raised by a user callback): log it and keep the session alive
+            # unexpected error (like an exception raised by user code): log it and keep the session alive
             logger.exception('Unexpected error during processing of function 0x%02X from %s', func_code, client)
             send_pdu.build_except(func_code, EXP_SLAVE_DEVICE_FAILURE)
+
+    def _route(self, func_code: int, unit_id: int,
+               client: session.ClientInfo) -> tuple[FunctionHandler, DataStore] | int:
+        """Return the handler and the store of a request, or the exception code to answer."""
+        # read-only server: a function that writes data is not available
+        if self.read_only and func_code in WRITE_FUNCTION_CODES:
+            logger.debug('Write function 0x%02X refused (read-only mode) from %s', func_code, client)
+            return EXP_ILLEGAL_FUNCTION
+        # the store of the unit id
+        store = self._stores.get(unit_id, self._stores.get(None))
+        if store is None:
+            logger.debug('Request for the unknown unit id %d from %s', unit_id, client)
+            return EXP_GATEWAY_PATH_UNAVAILABLE
+        # the handler of the function code, or the fallback
+        handler = self.functions.get(func_code, self.fallback)
+        if handler is None:
+            return EXP_ILLEGAL_FUNCTION
+        return handler, store
 
     def start(self) -> tuple[str, int]:
         """Start the server.
@@ -307,6 +347,8 @@ class ModbusServer(ServerFunctionsMixin):
                     raise NetworkError(e) from e
                 raise
             logger.info('Listening on %s:%d', *tcp_server.server_address[:2])
+            if self._allowed_networks == ():
+                logger.warning('allowed_hosts is an empty list: every connection will be refused')
             self._tcp_server = tcp_server
 
             # start the request processing service

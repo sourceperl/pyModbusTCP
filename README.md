@@ -119,7 +119,7 @@ server = ModbusServer(host='localhost', port=5020, no_block=True)
 server.start()
 
 # update the data seen by the clients from the application
-server.data_bank.set_holding_registers(0, [1, 2, 3])
+server.store.app.holding_registers.write(0, [1, 2, 3])
 ```
 
 A server open to the network, with some access restrictions (see

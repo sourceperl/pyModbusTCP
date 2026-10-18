@@ -57,7 +57,7 @@ ACCESS CONTROL
 --------------
 Modbus has no authentication: any client that can reach the gateway can drive
 every slave of the serial line. The gateway handles each request itself (it is
-an "external engine" of ModbusServer), so it applies its own filters:
+the fallback handler of ModbusServer), so it applies its own filters:
 - By default the server only listens on localhost; use -H to listen on the
   address of the network interface that needs it (or 0.0.0.0 for all of them).
 - -A/--allow (repeatable) restricts the clients to some IP addresses or
@@ -171,7 +171,6 @@ except ModuleNotFoundError as _exc:
 from ..constants import (
     ENCAPSULATED_INTERFACE_TRANSPORT,
     EXP_GATEWAY_PATH_UNAVAILABLE,
-    EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND,
     EXP_ILLEGAL_FUNCTION,
     MEI_TYPE_READ_DEVICE_ID,
     READ_COILS,
@@ -179,7 +178,14 @@ from ..constants import (
     READ_HOLDING_REGISTERS,
     READ_INPUT_REGISTERS,
 )
-from ..server import ModbusServer
+from ..server import (
+    GatewayPathUnavailable,
+    GatewayTargetFailed,
+    MemoryStore,
+    ModbusException,
+    ModbusServer,
+    Request,
+)
 from ..server._common import LogThrottle, host_key
 from ..utils import crc16
 
@@ -526,37 +532,32 @@ class ModbusSerialWorker:
                 return EXP_ILLEGAL_FUNCTION
         return 0
 
-    def srv_engine_entry(self, session_data: ModbusServer.SessionData) -> None:
-        """Server engine entry point (pass request to serial worker queries queue).
+    def relay_request(self, req: Request) -> bytes:
+        """Fallback handler of the Modbus server: every request is relayed to the serial line.
 
-        :param session_data: server session data
-        :type session_data: ModbusServer.SessionData
+        :param req: the request of a client
+        :returns: the response PDU of the RTU slave
+        :raises ModbusException: a request refused by the gateway, or a slave that didn't answer
         """
         # gateway filters: refused requests never reach the serial line
-        unit_id = session_data.request.mbap.unit_id
-        req_pdu = session_data.request.pdu.raw
-        # a request function code can't have the exception flag (bit 7) set
-        func_code = req_pdu[0] & 0x7F
-        exp_status = self.is_allowed(unit_id, req_pdu)
+        unit_id = req.ctx.unit_id
+        client = req.ctx.client
+        exp_status = self.is_allowed(unit_id, req.pdu)
         if exp_status:
             self._refused_log.event('Request refused by the gateway filters: %d request(s) (last: unit %d, '
                                     'function 0x%02X, exception 0x%02X, from %s)',
-                                    unit_id, req_pdu[0], exp_status, session_data.client.address)
-            session_data.response.pdu.build_except(func_code=func_code, exp_status=exp_status)
-            return
+                                    unit_id, req.pdu[0], exp_status, client.address)
+            raise ModbusException(code=exp_status)
         # fair share of the serial line: a client host can't fill the queue
-        host = host_key((session_data.client.address, session_data.client.port))
+        host = host_key((client.address, client.port))
         if not self._acquire_host_slot(host):
             self._host_busy_log.event('Too many pending requests from a host: %d request(s) rejected '
                                       '(limit %d, last from %s)', MAX_PENDING_PER_HOST, host)
-            session_data.response.pdu.build_except(func_code=func_code, exp_status=EXP_GATEWAY_PATH_UNAVAILABLE)
-            return
+            raise GatewayPathUnavailable()
         try:
-            exp_status = self._relay(session_data, host)
+            return self._relay(req, host)
         finally:
             self._release_host_slot(host)
-        if exp_status:
-            session_data.response.pdu.build_except(func_code=func_code, exp_status=exp_status)
 
     def _acquire_host_slot(self, host: str) -> bool:
         """Count a new pending request of a client host, False if it already has MAX_PENDING_PER_HOST."""
@@ -575,38 +576,37 @@ class ModbusSerialWorker:
             else:
                 self._host_pending.pop(host, None)
 
-    def _relay(self, session_data: ModbusServer.SessionData, host: str = '') -> int:
-        """Relay the request to the serial line, set the response PDU.
+    def _relay(self, req: Request, host: str = '') -> bytes:
+        """Relay the request to the serial line.
 
         :param host: client host of the request (see host_key()), the serial line is shared in turn between hosts
-        :return: 0 if the response PDU is set, else the modbus exception code to return
+        :returns: the response PDU of the slave
+        :raises ModbusException: gateway overloaded or serial worker not responding (0x0A), no valid answer (0x0B)
         """
-        # init a serial exchange from session data
+        # init a serial exchange from the request
         rtu_query = RtuQuery(host)
-        rtu_query.request.build(raw_pdu=session_data.request.pdu.raw,
-                                slave_ad=session_data.request.mbap.unit_id)
+        rtu_query.request.build(raw_pdu=req.pdu, slave_ad=req.ctx.unit_id)
         try:
             # add a request in the serial worker queue, can raise queue.Full
             self.rtu_queries_q.put(rtu_query)
         except queue.Full:
             # overloaded gateway
             self._overloaded_log.event('Gateway overloaded: %d request(s) rejected (queue full, last from %s)',
-                                       session_data.client.address)
-            return EXP_GATEWAY_PATH_UNAVAILABLE
+                                       req.ctx.client.address)
+            raise GatewayPathUnavailable() from None
         # wait result (bounded: worst case every queued request times out)
         wait_max = (QUEUE_SIZE + 1) * (self.timeout + self.end_of_frame) + 1.0
         if not rtu_query.completed.wait(timeout=wait_max):
             # the worker must not use the serial line for a request that nobody waits for
             rtu_query.cancelled = True
             logger.error('Serial worker not responding (unit %d)', rtu_query.request.slave_address)
-            return EXP_GATEWAY_PATH_UNAVAILABLE
+            raise GatewayPathUnavailable()
         # check receive frame status
         if rtu_query.response.is_response_to(rtu_query.request):
-            session_data.response.pdu.raw = rtu_query.response.pdu
-            return 0
+            return rtu_query.response.pdu
         # slave failed to respond
         logger.debug('No valid answer from unit %d', rtu_query.request.slave_address)
-        return EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
+        raise GatewayTargetFailed()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -666,10 +666,11 @@ def main(argv: list[str] | None = None) -> int:
         logger.debug('Interframe delay %.4f s, end of frame delay %.4f s',
                      serial_worker.interframe_delay, serial_worker.end_of_frame)
 
-        # start modbus server with custom engine
+        # start modbus server: no local function, every request goes to the fallback that relays it
         logger.info('Start modbus server (%s, %d)', args.host, args.port)
-        # note: ModbusServer read_only has no effect with an external engine, the serial worker filters itself
-        srv = ModbusServer(host=args.host, port=args.port, no_block=True, ext_engine=serial_worker.srv_engine_entry,
+        # note: the serial worker applies the read-only mode itself (broadcast, MEI types...)
+        srv = ModbusServer(host=args.host, port=args.port, no_block=True, store=MemoryStore(size=0), functions={},
+                           fallback=serial_worker.relay_request,
                            allowed_hosts=args.allow, max_connections=args.max_connections,
                            max_connections_per_host=args.max_connections_per_host)
         if args.allow:

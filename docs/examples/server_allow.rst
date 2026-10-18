@@ -1,7 +1,7 @@
 Server: filter by IP address
 ============================
 
-A custom DataHandler that allows reads and writes only for some client addresses.
+Two levels of rules: allowed_hosts decides which clients can connect, an AccessControl wrapper on the data store which ones can write.
 
 .. literalinclude:: ../../examples/server_allow.py
    :caption: examples/server_allow.py

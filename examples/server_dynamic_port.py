@@ -34,7 +34,7 @@ try:
     while server.is_running:
         # Some demo data (UTC time at @0), to have something to read from a client
         t = time.gmtime()
-        server.data_bank.set_holding_registers(0, [t.tm_hour, t.tm_min, t.tm_sec])
+        server.store.app.holding_registers.write(0, [t.tm_hour, t.tm_min, t.tm_sec])
         server.wait(timeout=1.0)
 except ModbusServer.NetworkError as e:
     # port already in use, invalid address, permission denied...
