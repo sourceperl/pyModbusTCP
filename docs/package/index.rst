@@ -8,5 +8,6 @@ Everything a program needs is imported from these modules: the other modules of 
 
    class_ModbusClient
    class_ModbusServer
+   module_codec
    module_utils
    module_constants

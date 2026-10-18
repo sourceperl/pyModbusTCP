@@ -17,10 +17,32 @@ $ mbtcp-client -H 192.168.1.10 write-register 10 0x1234
 $ mbtcp-client -H 192.168.1.10 write-registers 10 1 2 3
 $ mbtcp-client -H 192.168.1.10 write-coil 5 on
 $ mbtcp-client -H 192.168.1.10 write-read 0 20 22 1 -n 4     # write @0..2, then read @0..3 in one request
+$ mbtcp-client -H 192.168.1.10 read-holding 0 -n 2 -T float32         # 2 float32 values: registers @0..3
+$ mbtcp-client -H 192.168.1.10 write-registers 0 3.14 -T float32 -b CDAB   # a float32, word swapped
 $ mbtcp-client -H 192.168.1.10 device-id
 
 Values accept the decimal, hexadecimal (0x...), octal (0o...) and binary (0b...) notations. Coil values accept
 1/0, on/off and true/false.
+
+VALUES ON SEVERAL REGISTERS (-T/--type, -b/--byte-order)
+--------------------------------------------------------
+read-holding, read-input-regs, write-registers and write-read read and write typed values: uint16, int16 (1
+register), uint32, int32, float32 (2 registers), uint64, int64, float64 (4 registers). -n then counts the values,
+not the registers.
+
+The Modbus specification only defines 16 bits registers (big endian): each device chooses how it stores a value
+on several registers. -b/--byte-order uses the notation of most Modbus software, A being the most significant byte:
+
+    ABCD  big endian (default): the first register holds the most significant word
+    CDAB  word swap: the first register holds the least significant word (common on PLCs)
+    BADC  byte swap: the bytes of each register are swapped
+    DCBA  little endian: word swap and byte swap
+
+For a 64 bits value, CDAB reverses the order of the 4 registers. The float32 3.14 (0x4048F5C3) is stored as
+4048 F5C3 in ABCD, F5C3 4048 in CDAB, 4840 C3F5 in BADC and C3F5 4840 in DCBA: try the orders on a known value.
+
+A negative value in exponent notation (-1e-3), -inf or -nan looks like an option: write the values after "--"
+($ mbtcp-client write-registers 0 -T float32 -- -1e-3 -inf).
 
 OUTPUT FORMATS (-f/--format)
 ----------------------------
@@ -28,7 +50,8 @@ table  for a human: a header (server, request, response time) and a table. Each 
        first address, then the address in decimal and hexadecimal. Registers are shown in hexadecimal, unsigned,
        signed, binary and ASCII; bits in a grid of 10 per row. With -i, the screen is refreshed in place and the
        values that changed since the previous read are highlighted.
-plain  one line per item, "address value" (--hex and --signed choose the notation of the registers).
+plain  one line per item, "address value" (--hex and --signed choose the notation of the registers). With
+       -T, the address is the one of the first register of the value, --hex gives the bits of the value.
 csv    "timestamp,address,value" lines, with a header line.
 json   one JSON object per read (JSON Lines with -i).
 auto   (default) table when the output is a terminal, plain otherwise (a pipe, a file): scripts get a stable output.
@@ -46,6 +69,7 @@ import csv
 import datetime
 import json
 import logging
+import math
 import os
 import shutil
 import sys
@@ -55,6 +79,7 @@ from dataclasses import dataclass
 from typing import TextIO
 
 from ..client import ModbusClient
+from ..codec import ByteOrder, Codec, DataType
 from ._common import add_version_arg, positive_float, tcp_port
 
 logger = logging.getLogger('mbtcp-client')
@@ -128,20 +153,32 @@ def build_parser() -> argparse.ArgumentParser:
                              '(default: auto, table on a terminal, plain otherwise)')
     output.add_argument('--no-color', action='store_true', help='no colors in the table (also set by NO_COLOR)')
 
+    # options of the commands on registers: values on several registers
+    typed = argparse.ArgumentParser(add_help=False)
+    typed.add_argument('-T', '--type', choices=[t.value for t in DataType], default=None,
+                       help='type of the values: uint16 (default), int16, uint32, int32, float32 (2 registers), '
+                            'uint64, int64, float64 (4 registers)')
+    typed.add_argument('-b', '--byte-order', choices=[o.value for o in ByteOrder], default=None,
+                       help='order of the bytes of a value on the registers, A is the most significant byte: '
+                            'ABCD big endian (default), CDAB word swap, BADC byte swap, DCBA little endian')
+
     # read requests
     reads = (('read-coils', 'read coils (function 0x01)', 2000),
              ('read-inputs', 'read discrete inputs (function 0x02)', 2000),
              ('read-holding', 'read holding registers (function 0x03)', 125),
              ('read-input-regs', 'read input registers (function 0x04)', 125))
     for name, help_txt, max_nb in reads:
-        p = sub.add_parser(name, help=help_txt, description=help_txt, parents=[output])
+        registers = 'coils' not in name and 'inputs' not in name
+        p = sub.add_parser(name, help=help_txt, description=help_txt, parents=[output] + ([typed] if registers else []))
         p.add_argument('address', type=int_value, help='first address (0 to 65535)')
-        p.add_argument('-n', '--number', type=int_value, default=1, help=f'number of items (1 to {max_nb})')
-        if 'coils' not in name and 'inputs' not in name:
+        p.add_argument('-n', '--number', type=int_value, default=1,
+                       help=f'number of items (1 to {max_nb})' + (', or of values with -T' if registers else ''))
+        if registers:
             p.add_argument('--hex', action='store_true',
                            help='values in hexadecimal (plain, csv and json formats: the table shows them all)')
             p.add_argument('--signed', action='store_true',
                            help='values as signed 16 bits integers (plain, csv and json formats)')
+            p.set_defaults(command_parser=p)
         p.add_argument('-i', '--interval', type=positive_float, default=None,
                        help='repeat the read every INTERVAL s, until Ctrl-C')
 
@@ -159,14 +196,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('address', type=int_value, help='register address (0 to 65535)')
     p.add_argument('value', type=int_value, help='value (0 to 65535, or -32768 to -1 for a signed value)')
     txt = 'write multiple holding registers (function 0x10)'
-    p = sub.add_parser('write-registers', help=txt, description=txt)
+    p = sub.add_parser('write-registers', help=txt, description=txt, parents=[typed])
     p.add_argument('address', type=int_value, help='first register address (0 to 65535)')
-    p.add_argument('values', type=int_value, nargs='+',
-                   help='values (0 to 65535, or -32768 to -1 for a signed value, 1 to 123 values)')
+    p.add_argument('values', nargs='+',
+                   help='values (0 to 65535, or -32768 to -1 for a signed value, 1 to 123 registers), '
+                        'of the type of -T')
+    p.set_defaults(command_parser=p)
 
     # write then read in one request
     txt = 'write then read holding registers in one request (function 0x17)'
-    p = sub.add_parser('write-read', help=txt, parents=[output], formatter_class=argparse.RawDescriptionHelpFormatter,
+    p = sub.add_parser('write-read', help=txt, parents=[output, typed],
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
                        description=txt + '\n\nThe server writes the values, then reads the registers, in this order '
                                          'and in one request: the\nregisters read include the values just written (and '
                                          'what the server did with them).',
@@ -174,20 +214,23 @@ def build_parser() -> argparse.ArgumentParser:
                               '  write-read 0 20 22 1          write @0..2, read @0..2 back\n'
                               '  write-read 0 20 22 1 -n 4     write @0..2, read @0..3\n'
                               '  write-read 10 7 -r 100 -n 2   write @10, read @100..101\n'
+                              '  write-read 0 1.5 -T float32   write the float32 1.5 @0..1, read it back\n'
                               '\nIn the table, the "Written" column gives the value written at each address, and '
                               '"!" marks\na register whose value read differs from the value written.')
     p.add_argument('address', type=int_value, help='first register address of the write (0 to 65535)')
-    p.add_argument('values', type=int_value, nargs='+',
-                   help='values to write (0 to 65535, or -32768 to -1 for a signed value, 1 to 121 values)')
+    p.add_argument('values', nargs='+',
+                   help='values to write (0 to 65535, or -32768 to -1 for a signed value, 1 to 121 registers), '
+                        'of the type of -T')
     p.add_argument('-r', '--read', type=int_value, default=None, metavar='ADDRESS',
                    help='first register address of the read (default: the address of the write)')
     p.add_argument('-n', '--number', type=int_value, default=None,
-                   help='number of registers to read, 1 to 125 (default: the number of values written)')
+                   help='number of registers (or of values with -T) to read, 1 to 125 registers '
+                        '(default: the number of values written)')
     p.add_argument('--hex', action='store_true',
                    help='values in hexadecimal (plain, csv and json formats: the table shows them all)')
     p.add_argument('--signed', action='store_true',
                    help='values as signed 16 bits integers (plain, csv and json formats)')
-    # its own parser, for the errors of check_write_read_args() (with the usage of the command)
+    # its own parser, for the errors of check_args() (with the usage of the command)
     p.set_defaults(command_parser=p)
 
     # device identification
@@ -213,10 +256,19 @@ def to_signed(value: int) -> int:
     return value - 0x10000 if value >= 0x8000 else value
 
 
+def codec_of(args: argparse.Namespace) -> Codec | None:
+    """The codec of the values with -T/-b (set by check_args()), None for the 16 bits registers."""
+    codec: Codec | None = getattr(args, 'codec', None)
+    return codec
+
+
 def format_value(value: object, args: argparse.Namespace) -> str:
     """A value in the notation of the plain and csv formats."""
     if isinstance(value, bool):
         return '1' if value else '0'
+    codec = codec_of(args)
+    if codec is not None and isinstance(value, (int, float)):
+        return codec.hex(value) if getattr(args, 'hex', False) else codec.text(value)
     if isinstance(value, int):
         if getattr(args, 'hex', False):
             return f'0x{value:04X}'
@@ -229,6 +281,15 @@ def json_value(value: object, args: argparse.Namespace) -> object:
     """A value for the json format: a bool for a bit, an int (or a "0x..." string with --hex) for a register."""
     if isinstance(value, bool):
         return value
+    codec = codec_of(args)
+    if codec is not None and isinstance(value, (int, float)):
+        if getattr(args, 'hex', False):
+            return codec.hex(value)
+        if not isinstance(value, float):
+            return value
+        # the shortest float of the text (0.1, not 0.10000000149 for a float32); JSON has no NaN or infinity: a
+        # string, like "nan" or "inf"
+        return float(codec.text(value)) if math.isfinite(value) else str(value)
     if isinstance(value, int):
         if getattr(args, 'hex', False):
             return f'0x{value:04X}'
@@ -337,6 +398,13 @@ class ReadResult:
     values: Sequence[object]
     timestamp: float
     duration: float
+    # with -T: the registers read, and the number of registers of a value
+    registers: Sequence[int] = ()
+    step: int = 1
+
+    def item_registers(self, index: int) -> tuple[int, ...]:
+        """The registers of the value at index (empty without -T)."""
+        return tuple(self.registers[index * self.step:(index + 1) * self.step])
 
 
 class Output:
@@ -344,6 +412,7 @@ class Output:
 
     def __init__(self, args: argparse.Namespace, stream: TextIO | None = None) -> None:
         self.args = args
+        self.codec = codec_of(args)
         self.stream = sys.stdout if stream is None else stream
         ansi = enable_ansi(self.stream)
         fmt = getattr(args, 'format', 'auto')
@@ -356,10 +425,12 @@ class Output:
         unicode = can_encode(self.stream, '─·')
         self.rule_char = '─' if unicode else '-'
         self.sep = ' · ' if unicode else ' | '
+        # the values of the previous read (the registers of each value with -T: a NaN read twice is not a change)
         self.previous: list[object] | None = None
         # offset of an item -> time of its last change (time.monotonic()), for the highlights of the table
         self.changed_at: dict[int, float] = {}
         self.last_good: float | None = None
+        self.last_result: ReadResult | None = None
         self.reads = 0
         self.errors = 0
         self.csv_header = False
@@ -392,11 +463,13 @@ class Output:
         return lines
 
     def read_detail(self, address: int, number: int) -> str:
+        """The items read: "4 holding registers @ 0..3", or with -T "2 float32 CDAB @ 0..3" (the registers)."""
         kind = _READ_KINDS[self.args.command]
         plural = 's' if number > 1 else ''
-        last = address + number - 1
-        span = f'{address}' if number == 1 else f'{address}..{last}'
-        return f'{number} {kind}{plural} @ {span}'
+        if self.codec is not None:
+            span = span_txt(address, number * self.codec.words)
+            return f'{number} {self.codec.data_type.value} {self.codec.byte_order.value} @ {span}'
+        return f'{number} {kind}{plural} @ {span_txt(address, number)}'
 
     def result_detail(self, res: ReadResult) -> str:
         """The detail of the header: the registers read (and written, for write-read)."""
@@ -404,17 +477,18 @@ class Output:
         if self.args.command != 'write-read':
             return detail
         n_written = len(self.args.values)
-        last = self.args.address + n_written - 1
-        span = f'{self.args.address}' if n_written == 1 else f'{self.args.address}..{last}'
-        return f'{n_written} written @ {span}{self.sep}{detail} read'
+        return f'{n_written} written @ {span_txt(self.args.address, len(self.args.registers))}{self.sep}{detail} read'
 
     def json_read(self, res: ReadResult) -> dict[str, object]:
         """The json object of a read (with the values written, for write-read)."""
         obj: dict[str, object] = {'timestamp': iso_time(res.timestamp), 'command': self.args.command,
-                                  'address': res.address, 'values': [json_value(v, self.args) for v in res.values]}
+                                  'address': res.address}
+        if self.codec is not None:
+            obj.update(type=self.codec.data_type.value, byte_order=self.codec.byte_order.value)
+        obj['values'] = [json_value(v, self.args) for v in res.values]
         if self.args.command == 'write-read':
-            obj['written'] = {'address': self.args.address,
-                              'values': [json_value(to_unsigned(v), self.args) for v in self.args.values]}
+            written = self.args.values if self.codec is not None else [to_unsigned(v) for v in self.args.values]
+            obj['written'] = {'address': self.args.address, 'values': [json_value(v, self.args) for v in written]}
         return obj
 
     def rule(self, widths: Sequence[int]) -> str:
@@ -427,64 +501,84 @@ class Output:
         when = self.changed_at.get(offset)
         return when is not None and time.monotonic() - when < HIGHLIGHT_TIME
 
-    def written_values(self) -> dict[int, int]:
-        """write-read: address -> value written (empty for the other commands)."""
+    def written_values(self) -> dict[int, tuple[tuple[int, ...], str]]:
+        """write-read: address of a value -> (its registers, its text in the table); empty for the other commands."""
         if self.args.command != 'write-read':
             return {}
-        return {self.args.address + i: to_unsigned(v) for i, v in enumerate(self.args.values)}
+        if self.codec is None:
+            return {self.args.address + i: ((r,), f'0x{r:04X}') for i, r in enumerate(self.args.registers)}
+        words = self.codec.words
+        return {self.args.address + i * words: (tuple(self.args.registers[i * words:(i + 1) * words]),
+                                                self.codec.text(v)) for i, v in enumerate(self.args.values)}
+
+    def value_cells(self, res: ReadResult, index: int) -> tuple[str, ...]:
+        """The cells of a value in the table (after the address and written columns)."""
+        value = res.values[index]
+        if self.codec is not None and isinstance(value, (int, float)):
+            regs = ' '.join(f'{r:04X}' for r in res.item_registers(index))
+            return self.codec.text(value), self.codec.hex(value), regs
+        assert isinstance(value, int)
+        return f'0x{value:04X}', str(value), str(to_signed(value)), register_binary(value), register_ascii(value)
+
+    def mark(self, changed: bool, differs: bool) -> str:
+        """The mark of a row (also seen without colors): "*" a value changed since the previous read, "!" a value read
+        that differs from the value written."""
+        s = self.style
+        if changed:
+            return s.changed('*') if s.enabled else '*'
+        return s.bold('!') if differs else ' '
 
     def register_table(self, res: ReadResult) -> list[str]:
         s = self.style
         written = self.written_values()
         # write-read: a "Written" column after the address columns
         extra = 1 if written else 0
-        heads = ('Offset', 'Address', 'Addr hex') + (('Written',) if written else ()) + \
-            ('Hex', 'Unsigned', 'Signed', 'Binary', 'ASCII')
+        if self.codec is not None:
+            # the hex of the value is in the ABCD order, the registers as read (in the byte order of the device)
+            value_heads: tuple[str, ...] = ('Value', 'Hex', 'Registers')
+            n_left = 1
+        else:
+            value_heads = ('Hex', 'Unsigned', 'Signed', 'Binary', 'ASCII')
+            n_left = 2
+        heads = ('Offset', 'Address', 'Addr hex') + (('Written',) if written else ()) + value_heads
+        step = res.step
         rows: list[tuple[str, ...]] = []
-        values = [v for v in res.values if isinstance(v, int)]
-        for offset, value in enumerate(values):
-            address = res.address + offset
-            written_cell = (f'0x{written[address]:04X}' if address in written else '',) if written else ()
-            rows.append((str(offset), str(address), address_hex(address)) + written_cell
-                        + (f'0x{value:04X}', str(value), str(to_signed(value)), register_binary(value),
-                           register_ascii(value)))
+        for index in range(len(res.values)):
+            address = res.address + index * step
+            written_cell = (written[address][1] if address in written else '',) if written else ()
+            rows.append((str(index * step), str(address), address_hex(address)) + written_cell
+                        + self.value_cells(res, index))
         widths = [max(len(heads[i]), *(len(r[i]) for r in rows)) for i in range(len(heads))]
-        right = (True,) * (6 + extra) + (False, False)
+        right = (True,) * (len(heads) - n_left) + (False,) * n_left
 
         def cell(text: str, i: int) -> str:
             return text.rjust(widths[i]) if right[i] else text.ljust(widths[i])
 
-        lines = ['  ' + s.bold('  '.join(cell(h, i) for i, h in enumerate(heads))),
+        lines = ['  ' + s.bold('  '.join(cell(h, i) for i, h in enumerate(heads)).rstrip()),
                  '  ' + self.rule(widths)]
         differs = 0
-        for offset, row in enumerate(rows):
-            value = values[offset]
-            address = res.address + offset
-            changed = self.changed(offset)
+        for index, row in enumerate(rows):
+            address = res.address + index * step
+            registers = res.item_registers(index) or (res.values[index],)
+            changed = self.changed(index)
             # the last column without padding (no trailing spaces)
             cells = [cell(t, i) for i, t in enumerate(row[:-1])] + [row[-1]]
             # the offset, the address and the written columns are never highlighted, only the value
             text = '  '.join(cells[3 + extra:])
             if changed:
                 text = s.changed(text)
-            elif value == 0:
+            elif not any(registers):
                 text = s.dim(text)
             prefix = s.dim(cells[0]) + '  ' + cells[1] + '  ' + s.dim(cells[2]) + '  '
             if written:
                 prefix += s.cyan(cells[3]) + '  '
-            # "*": a value changed since the previous read, "!": a value read that differs from the value written
-            # (also seen without colors)
-            if changed:
-                mark = s.changed('*') if s.enabled else '*'
-            elif address in written and written[address] != value:
-                mark = s.bold('!')
-                differs += 1
-            else:
-                mark = ' '
-            lines.append(mark + ' ' + prefix + text)
+            differ = not changed and address in written and written[address][0] != registers
+            differs += differ
+            lines.append(self.mark(changed, differ) + ' ' + prefix + text)
         if differs:
+            what = 'value' if self.codec is not None else 'register'
             lines.append('')
-            lines.append('  ' + s.dim(f'! {differs} register{"s" if differs > 1 else ""} read with another value '
+            lines.append('  ' + s.dim(f'! {differs} {what}{"s" if differs > 1 else ""} read with another value '
                                       'than the one written (changed by the server in the same request)'))
         return lines
 
@@ -543,22 +637,24 @@ class Output:
     def read(self, res: ReadResult) -> None:
         self.reads += 1
         values = list(res.values)
+        # compare the registers of the values with -T (a NaN is never equal to itself)
+        keys: list[object] = [res.item_registers(i) for i in range(len(values))] if res.registers else values
         if self.previous is not None:
             now = time.monotonic()
-            for offset, value in enumerate(values):
-                if offset < len(self.previous) and self.previous[offset] != value:
-                    self.changed_at[offset] = now
+            for index, key in enumerate(keys):
+                if index < len(self.previous) and self.previous[index] != key:
+                    self.changed_at[index] = now
         if self.format == 'plain':
-            for offset, value in enumerate(values):
-                self.write(f'{res.address + offset} {format_value(value, self.args)}\n')
+            for index, value in enumerate(values):
+                self.write(f'{res.address + index * res.step} {format_value(value, self.args)}\n')
         elif self.format == 'csv':
             writer = csv.writer(self.stream, lineterminator='\n')
             if not self.csv_header:
                 writer.writerow(('timestamp', 'address', 'value'))
                 self.csv_header = True
             stamp = iso_time(res.timestamp)
-            for offset, value in enumerate(values):
-                writer.writerow((stamp, res.address + offset, format_value(value, self.args)))
+            for index, value in enumerate(values):
+                writer.writerow((stamp, res.address + index * res.step, format_value(value, self.args)))
             self.stream.flush()
         elif self.format == 'json':
             obj = self.json_read(res)
@@ -569,8 +665,9 @@ class Output:
             is_bits = self.args.command in ('read-coils', 'read-inputs')
             lines += self.bit_table(res) if is_bits else self.register_table(res)
             self.render_screen(lines)
-        self.previous = values
+        self.previous = keys
         self.last_good = res.timestamp
+        self.last_result = res
 
     def read_error(self, msg: str) -> None:
         """A failed read repeated with -i: the loop goes on."""
@@ -581,11 +678,11 @@ class Output:
         s = self.style
         lines = self.header(self.args.command, self.read_detail(self.args.address, self.args.number), None)
         lines += ['', '  ' + s.red('error: ') + msg]
-        if self.last_good is not None:
-            when = datetime.datetime.fromtimestamp(self.last_good).strftime('%H:%M:%S')
+        if self.last_result is not None:
+            when = datetime.datetime.fromtimestamp(self.last_result.timestamp).strftime('%H:%M:%S')
             lines.append('  ' + s.dim(f'last good read at {when}, the values below are not updated'))
             lines.append('')
-            res = ReadResult(self.args.address, self.previous or [], self.last_good, 0.0)
+            res = self.last_result
             saved, self.changed_at = self.changed_at, {}  # nothing to highlight in stale values
             is_bits = self.args.command in ('read-coils', 'read-inputs')
             lines += [s.dim(line) for line in (self.bit_table(res) if is_bits else self.register_table(res))]
@@ -599,8 +696,7 @@ class Output:
         s = self.style
         kind = 'coil' if 'coil' in self.args.command else 'register'
         plural = 's' if count > 1 else ''
-        address = self.args.address
-        span = f'{address}' if count == 1 else f'{address}..{address + count - 1}'
+        span = span_txt(self.args.address, count)
         parts = [s.green(s.bold('OK')) + ' ' + s.bold(self.args.command), self.server_txt(),
                  f'unit {self.args.unit_id}', f'{count} {kind}{plural} written @ {span}', f'{duration * 1000:.1f} ms']
         self.write(s.dim(self.sep).join(parts) + '\n')
@@ -637,6 +733,11 @@ class Output:
             self.render_screen(lines)
 
 
+def span_txt(address: int, count: int) -> str:
+    """A range of addresses: "10", or "10..13"."""
+    return f'{address}' if count == 1 else f'{address}..{address + count - 1}'
+
+
 def iso_time(timestamp: float) -> str:
     """A local time with the UTC offset and the milliseconds: "2026-10-17T13:20:05.123+02:00"."""
     return datetime.datetime.fromtimestamp(timestamp).astimezone().isoformat(timespec='milliseconds')
@@ -651,14 +752,25 @@ def do_read(client: ModbusClient, args: argparse.Namespace, out: Output) -> bool
         'read-holding': client.read_holding_registers,
         'read-input-regs': client.read_input_registers,
     }
+    codec = codec_of(args)
+    step = 1 if codec is None else codec.words
     timestamp = time.time()
     start = time.monotonic()
-    values = read_funcs[args.command](args.address, args.number)
+    values = read_funcs[args.command](args.address, args.number * step)
     duration = time.monotonic() - start
     if values is None:
         return False
-    out.read(ReadResult(args.address, values, timestamp, duration))
+    out.read(typed_result(codec, args.address, values, timestamp, duration))
     return True
+
+
+def typed_result(codec: Codec | None, address: int, values: Sequence[object], timestamp: float,
+                 duration: float) -> ReadResult:
+    """The result of a read: the registers read, or the values of their type with -T."""
+    if codec is None:
+        return ReadResult(address, values, timestamp, duration)
+    registers = [v for v in values if isinstance(v, int)]
+    return ReadResult(address, codec.decode(registers), timestamp, duration, registers, codec.words)
 
 
 def do_write(client: ModbusClient, args: argparse.Namespace, out: Output) -> bool:
@@ -670,8 +782,7 @@ def do_write(client: ModbusClient, args: argparse.Namespace, out: Output) -> boo
     elif args.command == 'write-register':
         ok, count = client.write_single_register(args.address, to_unsigned(args.value)), 1
     else:
-        ok = client.write_multiple_registers(args.address, [to_unsigned(v) for v in args.values])
-        count = len(args.values)
+        ok, count = client.write_multiple_registers(args.address, args.registers), len(args.registers)
     if ok:
         out.written(count, time.monotonic() - start)
     return ok
@@ -679,17 +790,24 @@ def do_write(client: ModbusClient, args: argparse.Namespace, out: Output) -> boo
 
 def do_write_read(client: ModbusClient, args: argparse.Namespace, out: Output) -> bool:
     """Function 0x17: the server writes, then reads, in one request."""
-    read_address = args.address if args.read is None else args.read
-    number = len(args.values) if args.number is None else args.number
+    codec = codec_of(args)
+    read_address, read_count = write_read_span(args)
     timestamp = time.time()
     start = time.monotonic()
-    values = client.write_read_multiple_registers(args.address, [to_unsigned(v) for v in args.values],
-                                                  read_address, number)
+    values = client.write_read_multiple_registers(args.address, args.registers, read_address, read_count)
     duration = time.monotonic() - start
     if values is None:
         return False
-    out.read(ReadResult(read_address, values, timestamp, duration))
+    out.read(typed_result(codec, read_address, values, timestamp, duration))
     return True
+
+
+def write_read_span(args: argparse.Namespace) -> tuple[int, int]:
+    """write-read: the first address and the number of registers of the read."""
+    codec = codec_of(args)
+    step = 1 if codec is None else codec.words
+    number = len(args.values) if args.number is None else args.number
+    return (args.address if args.read is None else args.read), number * step
 
 
 def do_device_id(client: ModbusClient, args: argparse.Namespace, out: Output) -> bool:
@@ -734,32 +852,65 @@ def run_command(client: ModbusClient, args: argparse.Namespace, out: Output | No
     return do_device_id(client, args, out)
 
 
-def check_write_read_args(args: argparse.Namespace) -> None:
-    """write-read: check the ranges before any request, with a clear message (exit status 2)."""
-    if args.command != 'write-read':
+def check_args(args: argparse.Namespace) -> None:
+    """The commands on registers: check the options and the values before any request, with a clear message (exit
+    status 2 and the usage of the command), set args.codec (with -T/-b) and args.registers (the registers to write).
+    """
+    parser: argparse.ArgumentParser | None = getattr(args, 'command_parser', None)
+    if parser is None:
         return
-    parser: argparse.ArgumentParser = args.command_parser
-    if not 1 <= len(args.values) <= 121:
-        parser.error(f'1 to 121 values can be written, {len(args.values)} given')
-    if args.number is not None and not 1 <= args.number <= 125:
-        parser.error(f'-n/--number must be between 1 and 125 (registers read), not {args.number}')
-    read_address = args.address if args.read is None else args.read
-    number = len(args.values) if args.number is None else args.number
-    for name, address, count in (('write', args.address, len(args.values)), ('read', read_address, number)):
+    args.codec = None
+    if args.type is not None or args.byte_order is not None:
+        if getattr(args, 'signed', False):
+            parser.error('--signed cannot be used with -T/-b: use -T int16')
+        args.codec = Codec(DataType(args.type or 'uint16'), ByteOrder(args.byte_order or 'ABCD'))
+    codec: Codec | None = args.codec
+    step = 1 if codec is None else codec.words
+    if args.command.startswith('read-') and codec is not None and not 1 <= args.number * step <= 125:
+        parser.error(f'-n/--number must be between 1 and {125 // step} '
+                     f'({codec.data_type.value} values of {step} registers)')
+    if args.command in ('write-registers', 'write-read'):
+        args.registers = parse_values(args, parser, codec)
+    if args.command == 'write-read':
+        check_write_read(args, parser, step)
+
+
+def parse_values(args: argparse.Namespace, parser: argparse.ArgumentParser, codec: Codec | None) -> list[int]:
+    """The registers of the values to write (and args.values as numbers)."""
+    try:
+        if codec is not None:
+            args.values = [codec.parse(text) for text in args.values]
+            return codec.encode(args.values)
+        args.values = [int_value(text) for text in args.values]
+    except (ValueError, argparse.ArgumentTypeError) as e:
+        parser.error(f'value {e}')
+    for value in args.values:
+        if not -0x8000 <= value <= 0xFFFF:
+            parser.error(f'value {value} out of 0 to 65535 (or -32768 to -1 for a signed value)')
+    return [to_unsigned(v) for v in args.values]
+
+
+def check_write_read(args: argparse.Namespace, parser: argparse.ArgumentParser, step: int) -> None:
+    """write-read: the ranges of the write and of the read."""
+    unit = 'registers' if step == 1 else f'registers ({len(args.values)} values)'
+    if not 1 <= len(args.registers) <= 121:
+        parser.error(f'1 to 121 registers can be written, {len(args.registers)} {unit} given')
+    if args.number is not None and not 1 <= args.number * step <= 125:
+        parser.error(f'-n/--number must be between 1 and {125 // step} ({125 // step * step} registers read), '
+                     f'not {args.number}')
+    read_address, read_count = write_read_span(args)
+    for name, address, count in (('write', args.address, len(args.registers)), ('read', read_address, read_count)):
         if not 0 <= address <= 0xFFFF:
             parser.error(f'{name} address {address} out of 0 to 65535')
         if address + count > 0x10000:
             parser.error(f'the {name} of {count} registers from @{address} ends after the last '
                          f'address (65535)')
-    for value in args.values:
-        if not -0x8000 <= value <= 0xFFFF:
-            parser.error(f'value {value} out of 0 to 65535 (or -32768 to -1 for a signed value)')
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    check_write_read_args(args)
+    check_args(args)
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.WARNING, format='%(message)s')
     try:
         with ModbusClient(host=args.host, port=args.port, unit_id=args.unit_id, timeout=args.timeout) as client:

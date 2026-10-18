@@ -1,7 +1,7 @@
 Client: add float support
 =========================
 
-A ModbusClient subclass to read and write 32 bits IEEE floats with the utils functions.
+Write and read float32 values with a Codec (a local server is started for the demo).
 
 .. literalinclude:: ../../examples/client_float.py
    :caption: examples/client_float.py

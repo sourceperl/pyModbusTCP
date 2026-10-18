@@ -94,12 +94,19 @@ Each space has 65536 addresses by default. The sizes and the startup values are 
 Typed values
 ~~~~~~~~~~~~
 
-The registers have a typed access for the values on 2 or 4 registers (the first register holds the most significant
-word, ``big_endian=False`` for the other order):
+The registers have a typed access for the values on several registers, with a :ref:`Codec <utils-codec>` (any type
+and byte order), or with shortcuts for the common types (the first register holds the most significant word,
+``big_endian=False`` for the other order):
 
 .. code-block:: python
 
+    from pyModbusTCP.codec import ByteOrder, Codec, DataType
+
+    VOLTS = Codec(DataType.FLOAT32, ByteOrder.CDAB)
     regs = server.store.app.input_registers
+    regs.write_values(20, [230.4, 231.0, 229.8], VOLTS)    # registers 20 to 25, atomic
+    volts = regs.read_values(20, VOLTS, 3)
+
     regs.write_float32(0, 230.4)          # IEEE 754 single precision, registers 0 and 1
     regs.write_int32(2, -1500)            # 2's complement, registers 2 and 3
     regs.write_uint32(4, 123456, big_endian=False)

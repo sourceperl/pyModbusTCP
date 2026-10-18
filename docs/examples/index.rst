@@ -25,7 +25,7 @@ Client
    * - :doc:`client_write_coils`
      - Write the coils 0 to 3 one by one, read them back, then do it again with the opposite value.
    * - :doc:`client_float`
-     - A ModbusClient subclass to read and write 32 bits IEEE floats with the utils functions.
+     - Write and read float32 values with a Codec.
    * - :doc:`client_thread`
      - Poll registers in a thread, share the values with the main thread through a lock.
    * - :doc:`client_debug`

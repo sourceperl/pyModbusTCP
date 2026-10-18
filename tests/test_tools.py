@@ -101,11 +101,56 @@ def test_client_write_read(server: tuple[ModbusServer, int], capsys: pytest.Capt
     srv.read_only = True
     status, _, err = run_client(capsys, base + ['write-read', '0', '1'])
     assert status == 1 and 'exception 0x01' in err
-    for args, error in ((['0'] + ['1'] * 122, '1 to 121 values'), (['0', '1', '-n', '126'], 'between 1 and 125'),
+    for args, error in ((['0'] + ['1'] * 122, '1 to 121 registers'), (['0', '1', '-n', '126'], 'between 1 and 125'),
                         (['0', '70000'], 'value 70000 out of'), (['65535', '1', '2'], 'the write of 2 registers'),
                         (['0', '1', '-r', '65535', '-n', '2'], 'the read of 2 registers')):
         status, _, err = run_client(capsys, base + ['write-read'] + args)
         assert status == 2 and error in err and 'usage: mbtcp-client write-read' in err, args
+
+
+def test_client_typed_values(server: tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
+    """-T/--type and -b/--byte-order: values on several registers."""
+    import json
+    srv, port = server
+    base = ['-H', '127.0.0.1', '-p', str(port)]
+    regs = srv.store.app.holding_registers
+    assert run_client(capsys, base + ['write-registers', '10', '3.14', '-2.5', '-T', 'float32', '-b', 'CDAB'])[0] == 0
+    assert regs.read(10, 4) == [0xF5C3, 0x4048, 0x0000, 0xC020]
+    # -n counts the values; plain: the address of the first register of each value
+    cmd = ['read-holding', '10', '-n', '2', '-T', 'float32', '-b', 'CDAB']
+    assert run_client(capsys, base + cmd)[1] == '10 3.14\n12 -2.5\n'
+    assert run_client(capsys, base + cmd + ['--hex'])[1] == '10 0x4048F5C3\n12 0xC0200000\n'
+    lines = run_client(capsys, base + cmd + ['-f', 'csv'])[1].splitlines()
+    assert [line.split(',')[1:] for line in lines[1:]] == [['10', '3.14'], ['12', '-2.5']]
+    obj = json.loads(run_client(capsys, base + cmd + ['-f', 'json'])[1])
+    assert (obj['type'], obj['byte_order'], obj['values']) == ('float32', 'CDAB', [3.14, -2.5])
+    # table: the value, its bits (ABCD) and the registers as read
+    out = run_client(capsys, base + cmd + ['-f', 'table'])[1]
+    assert '2 float32 CDAB @ 10..13' in out
+    assert ['0', '10', '0x000A', '3.14', '0x4048F5C3', 'F5C3', '4048'] in [line.split() for line in out.splitlines()]
+    # -b alone: uint16, byte swapped
+    assert run_client(capsys, base + ['read-holding', '11', '-b', 'BADC', '--hex'])[1] == '11 0x4840\n'
+    # 64 bits, a negative value after "--" (it looks like an option)
+    assert run_client(capsys, base + ['write-registers', '20', '-T', 'float64', '--', '-1e-3'])[0] == 0
+    assert run_client(capsys, base + ['read-input-regs', '20', '-T', 'float64'])[0] == 0  # input registers: empty
+    assert run_client(capsys, base + ['read-holding', '20', '-T', 'float64'])[1] == '20 -0.001\n'
+    # write-read: the values written and read back, NaN in json
+    obj = json.loads(run_client(capsys, base + ['write-read', '30', 'nan', '1', '-T', 'float32', '-n', '3',
+                                                '-f', 'json'])[1])
+    assert obj['address'] == 30 and obj['values'] == ['nan', 1.0, 0.0]
+    assert obj['written'] == {'address': 30, 'values': ['nan', 1.0]}
+    out = run_client(capsys, base + ['write-read', '30', '7', '-T', 'int32', '-b', 'DCBA', '-f', 'table'])[1]
+    assert '1 written @ 30..31' in out and '1 int32 DCBA @ 30..31 read' in out
+    assert regs.read(30, 2) == [0x0700, 0x0000]  # 00 00 00 07 in the DCBA order
+    # invalid parameters: exit status 2, with the usage of the command
+    for args, error in ((['read-holding', '0', '-n', '63', '-T', 'float32'], 'between 1 and 62'),
+                        (['read-holding', '0', '-T', 'int32', '--signed'], '--signed cannot be used'),
+                        (['write-registers', '0', '1.5', '-T', 'int32'], "'1.5' is not an integer"),
+                        (['write-registers', '0', '1e39', '-T', 'float32'], 'out of the float32 range'),
+                        (['write-read', '0'] + ['1'] * 31 + ['-T', 'float64'], '124 registers (31 values)'),
+                        (['write-read', '0', '1', '-T', 'float64', '-n', '32'], 'between 1 and 31')):
+        status, _, err = run_client(capsys, base + args)
+        assert status == 2 and error in err and f'usage: mbtcp-client {args[0]}' in err, args
 
 
 def test_client_coils(server: tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:

@@ -24,15 +24,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, NamedTuple
 
-from ..utils import (
-    _to_bool_list,
-    _to_int_list,
-    decode_ieee,
-    encode_ieee,
-    get_2comp,
-    long_list_to_word,
-    word_list_to_long,
-)
+from ..codec import ByteOrder, Codec, DataType, Number
+from ..utils import _to_bool_list, _to_int_list
 from ._common import logger
 from .errors import IllegalDataAddress, SlaveDeviceFailure
 from .session import ClientInfo
@@ -469,52 +462,64 @@ class SpaceAccess:
 
 
 class RegistersAccess(SpaceAccess):
-    """The access of the application to a space of registers, with typed values on 2 or 4 registers.
+    """The access of the application to a space of registers, with typed values on 1, 2 or 4 registers.
 
-    big_endian=True (default): the first register holds the most significant word.
+    read_values() and write_values() take a :class:`~pyModbusTCP.codec.Codec` (any type and byte order). The
+    shortcuts read_uint32(), write_float32()... take big_endian: True (default) for the ``ABCD`` order (the first
+    register holds the most significant word), False for ``CDAB``.
     """
 
-    def _read_long(self, address: int, words: int, big_endian: bool) -> int:
-        return word_list_to_long(self.read(address, words), big_endian=big_endian, long_long=words == 4)[0]
+    def read_values(self, address: int, codec: Codec, count: int = 1) -> list[Number]:
+        """Read count values of the type of codec (count * codec.words registers from address).
 
-    def _write_long(self, address: int, value: int, words: int, big_endian: bool) -> None:
-        self.write(address, long_list_to_word([value], big_endian=big_endian, long_long=words == 4))
+        :raises IllegalDataAddress: if a register is out of the space
+        """
+        return codec.decode(self.read(address, count * codec.words))
+
+    def write_values(self, address: int, values: Sequence[Number], codec: Codec) -> None:
+        """Write values of the type of codec from address (atomic: all the registers or nothing).
+
+        :raises TypeError, ValueError: for a value that is not a value of the type (nothing is written)
+        :raises IllegalDataAddress: if a register is out of the space
+        """
+        self.write(address, codec.encode(values))
 
     def read_uint32(self, address: int, big_endian: bool = True) -> int:
         """Read an unsigned 32 bits int on 2 registers."""
-        return self._read_long(address, 2, big_endian)
+        return int(self.read_values(address, _codec(DataType.UINT32, big_endian))[0])
 
     def write_uint32(self, address: int, value: int, big_endian: bool = True) -> None:
-        """Write an unsigned 32 bits int on 2 registers."""
-        if not 0 <= value <= 0xFFFFFFFF:
-            raise ValueError('value must be between 0 and 2**32 - 1')
-        self._write_long(address, value, 2, big_endian)
+        """Write an unsigned 32 bits int on 2 registers (ValueError out of 0 to 2**32 - 1)."""
+        self.write_values(address, [value], _codec(DataType.UINT32, big_endian))
 
     def read_int32(self, address: int, big_endian: bool = True) -> int:
         """Read a signed 32 bits int (2's complement) on 2 registers."""
-        return get_2comp(self._read_long(address, 2, big_endian), 32)
+        return int(self.read_values(address, _codec(DataType.INT32, big_endian))[0])
 
     def write_int32(self, address: int, value: int, big_endian: bool = True) -> None:
-        """Write a signed 32 bits int (2's complement) on 2 registers."""
-        if not -0x80000000 <= value <= 0x7FFFFFFF:
-            raise ValueError('value must be between -2**31 and 2**31 - 1')
-        self._write_long(address, value & 0xFFFFFFFF, 2, big_endian)
+        """Write a signed 32 bits int (2's complement) on 2 registers (ValueError out of -2**31 to 2**31 - 1)."""
+        self.write_values(address, [value], _codec(DataType.INT32, big_endian))
 
     def read_float32(self, address: int, big_endian: bool = True) -> float:
         """Read an IEEE 754 single precision float on 2 registers."""
-        return decode_ieee(self._read_long(address, 2, big_endian))
+        return float(self.read_values(address, _codec(DataType.FLOAT32, big_endian))[0])
 
     def write_float32(self, address: int, value: float, big_endian: bool = True) -> None:
         """Write an IEEE 754 single precision float on 2 registers."""
-        self._write_long(address, encode_ieee(value), 2, big_endian)
+        self.write_values(address, [value], _codec(DataType.FLOAT32, big_endian))
 
     def read_float64(self, address: int, big_endian: bool = True) -> float:
         """Read an IEEE 754 double precision float on 4 registers."""
-        return decode_ieee(self._read_long(address, 4, big_endian), double=True)
+        return float(self.read_values(address, _codec(DataType.FLOAT64, big_endian))[0])
 
     def write_float64(self, address: int, value: float, big_endian: bool = True) -> None:
         """Write an IEEE 754 double precision float on 4 registers."""
-        self._write_long(address, encode_ieee(value, double=True), 4, big_endian)
+        self.write_values(address, [value], _codec(DataType.FLOAT64, big_endian))
+
+
+def _codec(data_type: DataType, big_endian: bool) -> Codec:
+    """The codec of the shortcuts of RegistersAccess: ABCD (big_endian) or CDAB."""
+    return Codec(data_type, ByteOrder.ABCD if big_endian else ByteOrder.CDAB)
 
 
 class AppAccess:

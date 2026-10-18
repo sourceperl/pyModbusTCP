@@ -51,6 +51,9 @@ Package overview
    * - :mod:`pyModbusTCP.server`
      - :class:`~pyModbusTCP.server.ModbusServer`: the Modbus/TCP server, with its data store
        (:class:`~pyModbusTCP.server.MemoryStore`), the access rules and the function handlers to customize it.
+   * - :mod:`pyModbusTCP.codec`
+     - :class:`~pyModbusTCP.codec.Codec`: values on several registers (32/64 bits integers, IEEE floats) in any
+       byte order.
    * - :mod:`pyModbusTCP.utils`
      - Functions for Modbus data conversion: 32/64 bits values, IEEE floats, two's complement, bits.
    * - :mod:`pyModbusTCP.constants`

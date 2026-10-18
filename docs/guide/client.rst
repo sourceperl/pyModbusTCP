@@ -148,7 +148,19 @@ The addresses are the protocol addresses, from 0 to 65535. A device documentatio
     c.write_single_register(0, 1234)
     c.write_multiple_registers(0, [44, 55, 66])
 
-A register holds an unsigned 16 bits value: use :doc:`utils` for signed values, 32 bits values and floats.
+A register holds an unsigned 16 bits value: use a :ref:`Codec <utils-codec>` for signed values, 32/64 bits values
+and floats:
+
+.. code-block:: python
+
+    from pyModbusTCP.codec import ByteOrder, Codec, DataType
+
+    # a float on 2 registers, the least significant word first
+    f32 = Codec(DataType.FLOAT32, ByteOrder.CDAB)
+    c.write_multiple_registers(0, f32.encode([21.5]))
+    regs = c.read_holding_registers(0, 2 * f32.words)
+    if regs:
+        value = f32.decode(regs)[0]
 
 .. _client-errors:
 

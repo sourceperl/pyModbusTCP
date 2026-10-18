@@ -1,44 +1,34 @@
 #!/usr/bin/env python3
 
-""" How-to add float support to ModbusClient. """
+"""
+Client with float values
+~~~~~~~~~~~~~~~~~~~~~~~~
 
+A float32 takes 2 registers: a Codec converts the floats to registers for a write, and the registers to floats
+after a read. The byte order depends on the device: here ABCD (big endian), the first register holds the most
+significant word (ByteOrder.CDAB if it holds the least significant word, common on PLCs).
+
+The script starts a server on localhost (on a free port) and runs the client against it.
+"""
 
 from pyModbusTCP.client import ModbusClient
-from pyModbusTCP.utils import (
-    decode_ieee,
-    encode_ieee,
-    long_list_to_word,
-    word_list_to_long,
-)
+from pyModbusTCP.codec import ByteOrder, Codec, DataType
+from pyModbusTCP.server import ModbusServer
 
+f32 = Codec(DataType.FLOAT32, ByteOrder.ABCD)
 
-class FloatModbusClient(ModbusClient):
-    """A ModbusClient class with float support."""
+server = ModbusServer(host='localhost', port=0, no_block=True)
+host, port = server.start()
 
-    def read_float(self, address: int, number: int = 1) -> list[float] | None:
-        """Read float(s) with read holding registers."""
-        reg_l = self.read_holding_registers(address, number * 2)
-        if reg_l:
-            return [decode_ieee(f) for f in word_list_to_long(reg_l)]
-        else:
-            return None
+with ModbusClient(host=host, port=port) as c:
+    # write 2 floats at address 0 (registers 0 to 3)
+    c.write_multiple_registers(0, f32.encode([21.5, -3.14]))
 
-    def write_float(self, address: int, floats_list: list[float]) -> bool:
-        """Write float(s) with write multiple registers."""
-        b32_l = [encode_ieee(f) for f in floats_list]
-        b16_l = long_list_to_word(b32_l)
-        return self.write_multiple_registers(address, b16_l)
+    # read them back
+    regs = c.read_holding_registers(0, 2 * f32.words)
+    if regs:
+        print('registers:', [f'0x{r:04X}' for r in regs])
+        # -3.14 is read as -3.140000104904175 (the nearest float32): text() gives its shortest text
+        print('floats:', [f32.text(v) for v in f32.decode(regs)])
 
-
-if __name__ == '__main__':
-    # init modbus client
-    c = FloatModbusClient(host='localhost', port=502, auto_open=True)
-
-    # write 10.0 at @0
-    c.write_float(0, [10.0])
-
-    # read @0 to 9
-    float_l = c.read_float(0, 10)
-    print(float_l)
-
-    c.close()
+server.stop()

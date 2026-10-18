@@ -2,15 +2,79 @@ Data conversion
 ===============
 
 A Modbus register holds an unsigned 16 bits value, from 0 to 65535. Devices store other types on one or several
-registers: signed integers, 32 or 64 bits values, IEEE floats, bit fields. The :mod:`pyModbusTCP.utils` module
-converts them.
+registers: signed integers, 32 or 64 bits values, IEEE floats, bit fields. A :class:`~pyModbusTCP.codec.Codec`
+converts the values of a type in any byte order; the :mod:`pyModbusTCP.utils` module has the older functions and
+the bit operations.
+
+.. _utils-codec:
+
+Values on several registers: Codec
+----------------------------------
+
+A :class:`~pyModbusTCP.codec.Codec` converts the values of a :class:`~pyModbusTCP.codec.DataType` to registers
+(for a write) and registers to values (after a read), in a :class:`~pyModbusTCP.codec.ByteOrder`:
+
+.. code-block:: python
+
+    from pyModbusTCP.codec import ByteOrder, Codec, DataType
+
+    f32 = Codec(DataType.FLOAT32)         # IEEE 754 single precision, big endian (ByteOrder.ABCD)
+    f32.encode([3.14, -2.5])              # [0x4048, 0xF5C3, 0xC020, 0x0000]
+    f32.decode([0x4048, 0xF5C3])          # [3.140000104904175]: the nearest float32 of 3.14
+    f32.text(3.140000104904175)           # '3.14': the shortest text of this float32
+
+    Codec(DataType.INT32).decode([0xFFFF, 0xFFFE])                     # [-2]
+    Codec(DataType.UINT64, ByteOrder.WORD_SWAP).encode([1])            # [1, 0, 0, 0]
+
+The data types are ``UINT16``, ``INT16`` (1 register), ``UINT32``, ``INT32``, ``FLOAT32`` (2 registers), ``UINT64``,
+``INT64`` and ``FLOAT64`` (4 registers); ``codec.words`` gives the number of registers of a value. The enums make a
+typo an error at once (and are listed by the completion of an IDE): ``Codec('float32')`` raises
+:class:`TypeError`. ``encode()`` raises :class:`TypeError` for a value of another type (a float for an integer
+type) and :class:`ValueError` out of the range of the type: a wrong value is never truncated.
+
+The Modbus specification doesn't say how a device stores a value on several registers: each device chooses. The
+byte orders are named in the notation of most Modbus software, ``A`` being the most significant byte of the value,
+and each one has an alias:
+
+==================  ======================  ==========================  ========================
+ByteOrder           Alias                   Meaning                     FLOAT32 3.14
+==================  ======================  ==========================  ========================
+``ABCD`` (default)  ``BIG_ENDIAN``          big endian                  ``0x4048, 0xF5C3``
+``CDAB``            ``WORD_SWAP``           word swap (common on PLCs)  ``0xF5C3, 0x4048``
+``BADC``            ``BYTE_SWAP``           byte swap                   ``0x4840, 0xC3F5``
+``DCBA``            ``LITTLE_ENDIAN``       word swap and byte swap     ``0xC3F5, 0x4840``
+==================  ======================  ==========================  ========================
+
+For a 64 bits value, ``CDAB`` reverses the order of the 4 registers. To find the order of a device, read a known
+value with each order (``mbtcp-client read-holding 0 -T float32 -b CDAB``, see :doc:`tools`).
+
+Read and write floats with a client:
+
+.. code-block:: python
+
+    f32 = Codec(DataType.FLOAT32, ByteOrder.CDAB)
+
+    # write 2 floats at address 0 (registers 0 to 3)
+    c.write_multiple_registers(0, f32.encode([21.5, 22.0]))
+
+    # read them back
+    regs = c.read_holding_registers(0, 2 * f32.words)
+    if regs:
+        print(f32.decode(regs))           # [21.5, 22.0]
+
+A codec is immutable: create one per data type and byte order of a device, and reuse it. The data store of the
+server reads and writes typed values with it: ``store.app.holding_registers.write_values(0, [21.5], f32)`` (see
+:doc:`server`). See also the :doc:`../examples/client_float` example.
+
+The utils functions
+-------------------
 
 .. code-block:: python
 
     from pyModbusTCP import utils
 
 Signed integers (two's complement)
-----------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -24,7 +88,7 @@ Signed integers (two's complement)
 To write a negative value, mask it to 16 bits: ``c.write_single_register(0, -1 & 0xFFFF)``.
 
 32 and 64 bits integers
------------------------
+~~~~~~~~~~~~~~~~~~~~~~~
 
 A 32 bits value uses 2 registers. :func:`~pyModbusTCP.utils.word_list_to_long` merges each pair of registers,
 :func:`~pyModbusTCP.utils.long_list_to_word` splits the values for a write:
@@ -44,7 +108,7 @@ A 32 bits value uses 2 registers. :func:`~pyModbusTCP.utils.word_list_to_long` m
 
 Both functions handle 64 bits values (4 registers each) with ``long_long=True``.
 
-The word order is not set by the Modbus specification: check the documentation of the device, or try both.
+``big_endian=False`` is the ``CDAB`` order of a codec: these functions have no byte swap (``BADC``, ``DCBA``).
 
 For a signed 32 bits value, combine with the two's complement:
 
@@ -54,7 +118,7 @@ For a signed 32 bits value, combine with the two's complement:
     print(utils.get_2comp(utils.word_list_to_long([0xFFFF, 0xFFFE])[0], 32))
 
 IEEE floats
------------
+~~~~~~~~~~~
 
 A single precision float (32 bits) uses 2 registers, a double precision one (64 bits) uses 4 registers:
 
@@ -80,10 +144,8 @@ Read and write a float with a client:
     # write 21.5 at address 0
     c.write_multiple_registers(0, utils.long_list_to_word([utils.encode_ieee(21.5)]))
 
-The :doc:`../examples/client_float` example adds these conversions to a ``ModbusClient`` subclass.
-
 Bits of a register
-------------------
+~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 

@@ -65,6 +65,22 @@ Revision history for pyModbusTCP
              "Written" column gives the value written at each address, and "!" marks a register read with another
              value (changed by the server in the same request). The ranges are checked before the request, with a
              clear message.
+    - new module pyModbusTCP.codec: Codec(data_type, byte_order) converts values to registers and back (encode(),
+      decode()). The enum DataType gives the types (UINT16, INT16, UINT32, INT32, FLOAT32, UINT64, INT64,
+      FLOAT64), the enum ByteOrder the byte orders: ABCD (alias BIG_ENDIAN), CDAB (WORD_SWAP), BADC (BYTE_SWAP),
+      DCBA (LITTLE_ENDIAN). A value out of the range of its type raises ValueError (never truncated). The utils
+      functions are kept.
+    - server: RegistersAccess.read_values(address, codec, count) and write_values(address, values, codec) read
+              and write typed values in the store (store.app.holding_registers...). The shortcuts read_float32(),
+              write_int32()... use a Codec.
+    - examples: client_float.py uses a Codec (no more ModbusClient subclass), and runs against a local server.
+    - tools: mbtcp-client reads and writes values on several registers: -T/--type (uint16, int16, uint32, int32,
+             float32, uint64, int64, float64) and -b/--byte-order (ABCD big endian, CDAB word swap, BADC byte swap,
+             DCBA little endian, the notation of most Modbus software: there is no standard) on read-holding,
+             read-input-regs, write-registers and write-read. -n then counts the values. The table shows each
+             value with its bits in hexadecimal and its registers as read; plain and csv give the address of the
+             first register of each value, json the type and the byte order. Without these options, nothing
+             changes.
     - tools: mbtcp-client stops quietly (status 1, no traceback) when its output is closed (like "| head").
 
 0.4.0a2 2026-10-17 (alpha: the command line tools, their options and output, may still change before 0.4.0)

@@ -48,6 +48,9 @@ mbtcp-client -p 5020 read-holding 0 -n 4
 mbtcp-client -p 5020 write-registers 0 100 200 0x1234
 mbtcp-client -p 5020 write-read 0 20 22 1 -n 4      # write then read in one request (function 0x17)
 mbtcp-client -p 5020 write-coil 10 on
+# float32 values on 2 registers, word swapped (CDAB): -T/--type and -b/--byte-order
+mbtcp-client -p 5020 write-registers 20 3.14 -2.5 -T float32 -b CDAB
+mbtcp-client -p 5020 read-holding 20 -n 2 -T float32 -b CDAB
 
 # TCP clients of the 192.168.1.0/24 network can read (only) the RTU slaves of /dev/ttyUSB0
 mbtcp-tcp2rtu -H 0.0.0.0 -A 192.168.1.0/24 --read-only -b 19200 --parity E /dev/ttyUSB0

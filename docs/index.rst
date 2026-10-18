@@ -8,7 +8,8 @@ Python 3.10 to 3.14, on Linux, macOS and Windows.
 
 - :doc:`ModbusClient <guide/client>`: read and write the data of a Modbus/TCP server (PLC, gateway, smart meter...).
 - :doc:`ModbusServer <guide/server>`: expose the data of an application to Modbus/TCP clients (SCADA, HMI...).
-- :doc:`utils <guide/utils>`: convert Modbus registers to and from 32/64 bits integers, IEEE floats, signed values...
+- :doc:`Codec and utils <guide/utils>`: convert Modbus registers to and from 32/64 bits integers, IEEE floats, signed
+  values, in any byte order.
 - :doc:`Command line tools <guide/tools>`: a server, a client and two Modbus TCP/RTU gateways, ready to use.
 
 .. code-block:: python

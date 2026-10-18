@@ -67,6 +67,10 @@ Examples
     mbtcp-client -p 5020 write-read 0 20 22 1 -n 4
     mbtcp-client -p 5020 write-coil 10 on
 
+    # float32 values on 2 registers, the first register holds the least significant word (CDAB)
+    mbtcp-client -p 5020 write-registers 20 3.14 -2.5 -T float32 -b CDAB
+    mbtcp-client -p 5020 read-holding 20 -n 2 -T float32 -b CDAB
+
     # read a device every second, show the frames
     mbtcp-client -H 192.168.1.10 -d read-input-regs 0 -n 2 -i 1
 
@@ -149,6 +153,46 @@ marked ``*``) for a few seconds. ``--no-color`` (or the ``NO_COLOR`` environment
 
     # registers 0 to 9, every 5 s, in a CSV file
     mbtcp-client -H 192.168.1.10 read-holding 0 -n 10 -i 5 -f csv > log.csv
+
+Values on several registers
+---------------------------
+
+The Modbus specification only defines 16 bits registers, sent big endian. A 32 or 64 bits value is stored on 2 or 4
+consecutive registers, in an order that each device chooses: there is no standard, see the documentation of the
+device. ``read-holding``, ``read-input-regs``, ``write-registers`` and ``write-read`` accept:
+
+- ``-T/--type``: ``uint16`` (default), ``int16`` (1 register), ``uint32``, ``int32``, ``float32`` (2 registers),
+  ``uint64``, ``int64``, ``float64`` (4 registers, IEEE 754 for the floats);
+- ``-b/--byte-order``: the order of the bytes on the registers, in the notation of most Modbus software, ``A``
+  being the most significant byte of the value.
+
+==========  ===============================  ===================
+Order       Name                             float32 3.14
+==========  ===============================  ===================
+``ABCD``    big endian (default)             ``4048 F5C3``
+``CDAB``    word swap (common on PLCs)       ``F5C3 4048``
+``BADC``    byte swap                        ``4840 C3F5``
+``DCBA``    little endian                    ``C3F5 4840``
+==========  ===============================  ===================
+
+For a 64 bits value, ``CDAB`` reverses the order of the 4 registers (``GH EF CD AB``). With ``-T``, ``-n`` counts
+values (``-n 2 -T float32`` reads 4 registers) and the table shows each value with its bits in hexadecimal (in the
+``ABCD`` order) and its registers as read: to find the order of a device, read a known value with each order.
+
+.. code-block:: none
+
+    $ mbtcp-client -p 5020 read-holding 20 -n 2 -T float32 -b CDAB
+    read-holding · localhost:5020 · unit 1 · 2 float32 CDAB @ 20..23 · 1.9 ms
+
+      Offset  Address  Addr hex  Value         Hex  Registers
+      ──────  ───────  ────────  ─────  ──────────  ─────────
+           0       20    0x0014   3.14  0x4048F5C3  F5C3 4048
+           2       22    0x0016   -2.5  0xC0200000  0000 C020
+
+The ``plain`` and ``csv`` formats give the address of the first register of each value, ``--hex`` the bits of the
+value; the ``json`` format adds the type and the byte order (NaN and infinities are the strings ``"nan"``,
+``"inf"`` and ``"-inf"``). A negative value in exponent notation (``-1e-3``), ``-inf`` or ``-nan`` looks like an
+option: write the values after ``--`` (``write-registers 0 -T float32 -- -1e-3``).
 
 All the tools print their version (the one of pyModbusTCP) with ``-v/--version``.
 
