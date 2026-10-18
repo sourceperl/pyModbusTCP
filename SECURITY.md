@@ -62,6 +62,7 @@ a firewall.
 | `max_connections_per_host` | `16` | Max number of simultaneous connections of a client host (an IPv4 address, or a /64 network for IPv6): a single host can't take every connection of `max_connections`. The next ones are closed at once (logged, one message per 10 s at most). Clients behind a NAT share the same address. |
 | `idle_timeout` | `300` s | A connection without any request for this time is closed. |
 | `request_timeout` | `30` s | A request that has started must be fully received in this time (protection against a client that sends a partial frame and then stays silent). |
+| `MemoryStore.notify_queue_size` | `10000` | Max number of change events waiting for the threaded listeners (`subscribe(..., threaded=True)`): clients that write faster than a slow listener can't make the memory grow without limit. The events over it are dropped (logged, one message per 10 s at most). |
 
 Each of these limits can be disabled with `None`: only do this on a trusted network.
 

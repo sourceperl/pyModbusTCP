@@ -26,7 +26,7 @@ from typing import Any, NamedTuple
 
 from ..codec import ByteOrder, Codec, DataType, Number
 from ..utils import _to_bool_list, _to_int_list
-from ._common import logger
+from ._common import LogThrottle, logger
 from .errors import IllegalDataAddress, SlaveDeviceFailure
 from .session import ClientInfo
 
@@ -139,7 +139,8 @@ class DataStore(ABC):
         :param listener: a function called with the ChangeEvent (its exceptions are logged)
         :param app_writes: also notify the writes of the application (by default, only the client requests)
         :param threaded: call the listener from a thread of the store instead of the thread that committed the
-            transaction (the session thread of the client: its response waits for the listener)
+            transaction (the session thread of the client: its response waits for the listener); the events wait
+            in a bounded queue, an event that doesn't fit is dropped (and logged)
         :returns: a function to call to unsubscribe
         """
 
@@ -257,6 +258,10 @@ class MemoryStore(DataStore):
     of addresses can be computed at each access instead (see map()), even beyond the size of its space.
     """
 
+    #: max number of change events waiting for the threaded listeners: a slow listener can't make the memory grow
+    #: without limit (with clients that write faster than it), the events that don't fit are dropped and logged
+    notify_queue_size: int = 10_000
+
     def __init__(self, size: int = 0x10000, *, coils: int | None = None, discrete_inputs: int | None = None,
                  holding_registers: int | None = None, input_registers: int | None = None,
                  default_bit: bool = False, default_word: int = 0) -> None:
@@ -286,6 +291,8 @@ class MemoryStore(DataStore):
         self._listeners: list[_ListenerEntry] = []
         self._listeners_lock = threading.Lock()
         self._notify_queue: queue.Queue[tuple[Listener, ChangeEvent]] | None = None
+        # dropped events: the first one is logged at once, then one message per 10 s at most
+        self._dropped_log = LogThrottle(logger)
 
     def __repr__(self) -> str:
         sizes = ', '.join(f'{space.value}={len(data)}' for space, data in self._data.items())
@@ -385,7 +392,7 @@ class MemoryStore(DataStore):
         with self._listeners_lock:
             self._listeners.append(entry)
             if threaded and self._notify_queue is None:
-                self._notify_queue = queue.Queue()
+                self._notify_queue = queue.Queue(maxsize=self.notify_queue_size)
                 threading.Thread(target=self._notify_loop, args=(self._notify_queue,), daemon=True,
                                  name='MemoryStore notifications').start()
 
@@ -409,7 +416,12 @@ class MemoryStore(DataStore):
             if not event.by_client and not entry.app_writes:
                 continue
             if entry.threaded and self._notify_queue is not None:
-                self._notify_queue.put((entry.listener, event))
+                try:
+                    self._notify_queue.put_nowait((entry.listener, event))
+                except queue.Full:
+                    # never block the client: the listener is too slow, this event is lost
+                    self._dropped_log.event('Threaded listener too slow: %d change event(s) dropped (queue of %d '
+                                            'events full)', self.notify_queue_size)
             else:
                 _call_listener(entry.listener, event)
 

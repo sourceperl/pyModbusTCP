@@ -158,7 +158,9 @@ some values, after the transaction is committed, with a :class:`~pyModbusTCP.ser
   its value from before the request (5, then 7, then 5 again), there is no change.
 - ``subscribe(..., app_writes=True)`` also notifies the writes of the application (``event.ctx`` is then ``None``).
 - By default, the listener runs in the thread of the client session: the response waits for it, keep it short. With
-  ``subscribe(..., threaded=True)``, it runs in a thread of the store, in order, and never delays the clients.
+  ``subscribe(..., threaded=True)``, it runs in a thread of the store, in order, and never delays the clients. The
+  events wait in a bounded queue (``MemoryStore.notify_queue_size``, 10000 events): if the listener can't keep up,
+  the events that don't fit are dropped, with a warning in the log (at most one per 10 s, with the count).
 - The listener runs without the lock: it can use the store (like writing an acknowledge). The value it writes is not in
   the response of the request that triggered it.
 - An exception raised by a listener is logged: the request is committed anyway, the client gets its response.

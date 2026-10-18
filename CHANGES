@@ -42,6 +42,8 @@ Revision history for pyModbusTCP
     - server: read_only also refuses 0x15 (write file record) and 0x16 (mask write register), and a fallback
       handler only gets the read functions (0x01 to 0x04, 0x2B/0x0E): 0x08 or a private function could write.
     - server: a handler that returns a PDU over 253 bytes gets a "slave device failure" (no oversized frame).
+    - server: the change events of the threaded listeners wait in a bounded queue (MemoryStore.notify_queue_size,
+      10000): a slow listener can't make the memory grow without limit, the events over it are dropped and logged.
 
     Build: pyproject.toml with hatchling, Python 3.10 to 3.14.
 

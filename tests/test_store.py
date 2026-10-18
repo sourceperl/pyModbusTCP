@@ -518,3 +518,35 @@ class TestFunctionRegistry(ServerTestCase):
                             ({'functions': [1]}, TypeError), ({'fallback': 'x'}, TypeError)):
             with self.subTest(kwargs=kwargs), self.assertRaises(exc):
                 ModbusServer(**kwargs)
+
+
+class TestNotifyQueueBound(unittest.TestCase):
+    def test_slow_threaded_listener(self) -> None:
+        """The events over notify_queue_size are dropped and logged, the writes are never blocked."""
+        store = MemoryStore(16)
+        store.notify_queue_size = 3
+        started, release = threading.Event(), threading.Event()
+        seen: list[int] = []
+
+        def slow(event: ChangeEvent) -> None:
+            started.set()
+            release.wait(5.0)
+            seen.append(event.changes[0].new)
+
+        store.subscribe(slow, app_writes=True, threaded=True)
+        store.app.holding_registers.write(0, [1])
+        self.assertTrue(started.wait(5.0))
+        with self.assertLogs('pyModbusTCP.server', level='WARNING') as logs:
+            for value in range(2, 11):
+                store.app.holding_registers.write(0, [value])
+        # 1 event in the listener, 3 in the queue, the 6 others dropped (one log message)
+        self.assertEqual(len(logs.output), 1)
+        self.assertIn('change event(s) dropped (queue of 3 events full)', logs.output[0])
+        release.set()
+        store.join_notifications()
+        self.assertEqual(len(seen), 4)
+        self.assertEqual(seen[0], 1)
+        # the store is still usable, the next events are delivered
+        store.app.holding_registers.write(0, [42])
+        store.join_notifications()
+        self.assertEqual(seen[-1], 42)
