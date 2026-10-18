@@ -871,6 +871,10 @@ def test_argparse_types() -> None:
     for bad in ('0', '248', '-1', 'x'):
         with pytest.raises(argparse.ArgumentTypeError):
             _common.slave_address(bad)
+    assert [_common.ip_or_network(v) for v in ('10.0.0.5', '10.0.0.0/24', '::1')] == ['10.0.0.5', '10.0.0.0/24', '::1']
+    for bad in ('10.0.0.5/24', 'host.local', '10.0.0.0/33'):
+        with pytest.raises(argparse.ArgumentTypeError):
+            _common.ip_or_network(bad)
 
 
 @pytest.mark.skipif(os.name == 'nt', reason='SIGTERM is not a catchable signal on Windows')

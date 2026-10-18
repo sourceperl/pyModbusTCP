@@ -15,6 +15,7 @@ from unittest import mock
 
 from pyModbusTCP.client import ModbusClient
 from pyModbusTCP.server import (
+    AccessControl,
     ChangeEvent,
     DeviceIdentification,
     MemoryStore,
@@ -1050,8 +1051,14 @@ class TestAllowedHostsOption(unittest.TestCase):
         self.assertEqual(server.allowed_hosts,
                          ['192.168.1.10/32', '10.0.0.0/24', '::1/128', 'fd00::/8', '127.0.0.1/32'])
         self.assertIn("allowed_hosts=['192.168.1.10/32'", repr(server))
-        # host bits of a network are ignored
-        self.assertEqual(ModbusServer(allowed_hosts=['192.168.1.5/24']).allowed_hosts, ['192.168.1.0/24'])
+        # a network with host bits set is refused (often a typo for one address: it would allow the whole network)
+        with self.assertRaisesRegex(ValueError, "host bits set: use '192.168.1.0/24' for the network, or "
+                                                "'192.168.1.5' for the address only"):
+            ModbusServer(allowed_hosts=['192.168.1.5/24'])
+        with self.assertRaisesRegex(ValueError, 'write_hosts item .*host bits'):
+            AccessControl(MemoryStore(), write_hosts=['10.0.0.1/8'])
+        self.assertEqual(ModbusServer(allowed_hosts=['192.168.1.5/32', ' 10.0.0.0/8 ']).allowed_hosts,
+                         ['192.168.1.5/32', '10.0.0.0/8'])
 
     def test_empty_list_allows_no_host(self) -> None:
         """The convention of every allow list: None for every host, an empty list for no host at all."""

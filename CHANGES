@@ -16,6 +16,8 @@ Revision history for pyModbusTCP
       numpy booleans are no longer accepted as coil values.
     - client: the function code of a reply must match the request (MB_RECV_ERR otherwise).
     - examples: client_serial_gw.py and server_serial_gw.py are removed (replaced by the gateways of the tools).
+    - server/tools: an allow list entry with host bits set (like "192.168.1.5/24", often a typo for one address)
+      is refused (ValueError, or exit status 2 for -A/--allow): write "192.168.1.0/24" or "192.168.1.5".
 
     New features:
 

@@ -2,7 +2,6 @@
 
 import argparse
 import errno
-import ipaddress
 import logging
 import math
 import signal
@@ -15,6 +14,7 @@ from types import FrameType
 from typing import TYPE_CHECKING
 
 from ..constants import VERSION
+from ..server._validators import parse_network
 
 if TYPE_CHECKING:
     # pyserial is optional: only imported by the serial gateways
@@ -49,11 +49,11 @@ def add_version_arg(parser: argparse.ArgumentParser) -> None:
 
 
 def ip_or_network(value: str) -> str:
-    """argparse type: check that value is an IP address or a network (like 10.0.0.0/24)."""
+    """argparse type: check that value is an IP address or a network (like 10.0.0.0/24, not 10.0.0.5/24)."""
     try:
-        ipaddress.ip_network(value.strip(), strict=False)
-    except ValueError:
-        raise argparse.ArgumentTypeError(f'{value!r} is not an IP address or a network') from None
+        parse_network(value)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e)) from None
     return value
 
 

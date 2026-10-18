@@ -117,6 +117,27 @@ def validate_read_only(read_only: bool) -> bool:
     return read_only
 
 
+def parse_network(text: str) -> _IPNetwork:
+    """An IP address or a network in CIDR notation, like "192.168.1.10" or "192.168.1.0/24".
+
+    A network with host bits set, like "192.168.1.5/24", is refused: it is often a typo for one address, and it
+    would allow the whole network.
+
+    :raises ValueError: with a message for the user
+    """
+    try:
+        return ipaddress.ip_network(text.strip())
+    except ValueError:
+        pass
+    try:
+        network = ipaddress.ip_network(text.strip(), strict=False)
+    except ValueError:
+        raise ValueError(f'{text!r} is not an IP address or a network (hostnames are not supported)') from None
+    address = text.strip().split('/')[0]
+    raise ValueError(f'{text!r} has host bits set: use {str(network)!r} for the network, or {address!r} for the '
+                     'address only')
+
+
 def validate_allowed_hosts(allowed_hosts: Iterable[str] | None,
                            name: str = 'allowed_hosts') -> tuple[_IPNetwork, ...] | None:
     """Check an allow list and return it as networks.
@@ -138,9 +159,7 @@ def validate_allowed_hosts(allowed_hosts: Iterable[str] | None,
         if not isinstance(host, str):
             raise TypeError(f'{name} items must be str, got {type(host).__name__}')
         try:
-            # strict=False: "192.168.1.5/24" is accepted as the network 192.168.1.0/24
-            networks.append(ipaddress.ip_network(host.strip(), strict=False))
-        except ValueError:
-            raise ValueError(f'{name} item {host!r} is not an IP address or a network (hostnames are not '
-                             'supported)') from None
+            networks.append(parse_network(host))
+        except ValueError as e:
+            raise ValueError(f'{name} item {e}') from None
     return tuple(networks)
