@@ -477,8 +477,9 @@ class RegistersAccess(SpaceAccess):
     """The access of the application to a space of registers, with typed values on 1, 2 or 4 registers.
 
     read_values() and write_values() take a :class:`~pyModbusTCP.codec.Codec` (any type and byte order). The
-    shortcuts read_uint32(), write_float32()... take a :class:`~pyModbusTCP.codec.ByteOrder` (default ``ABCD``: the
-    first register holds the most significant word).
+    shortcuts have one method per type: read_int16() and write_int16() on 1 register, read_uint32(),
+    write_float64()... on 2 or 4 registers, with a :class:`~pyModbusTCP.codec.ByteOrder` (default ``ABCD``: the first
+    register holds the most significant word). An uint16 is a register: read() and write().
     """
 
     def read_values(self, address: int, codec: Codec, count: int = 1) -> list[Number]:
@@ -495,6 +496,14 @@ class RegistersAccess(SpaceAccess):
         :raises IllegalDataAddress: if a register is out of the space
         """
         self.write(address, codec.encode(values))
+
+    def read_int16(self, address: int) -> int:
+        """Read a signed 16 bits int (2's complement) on 1 register."""
+        return int(self.read_values(address, _INT16)[0])
+
+    def write_int16(self, address: int, value: int) -> None:
+        """Write a signed 16 bits int (2's complement) on 1 register (ValueError out of -32768 to 32767)."""
+        self.write_values(address, [value], _INT16)
 
     def read_uint32(self, address: int, byte_order: ByteOrder = ByteOrder.ABCD) -> int:
         """Read an unsigned 32 bits int on 2 registers."""
@@ -520,6 +529,22 @@ class RegistersAccess(SpaceAccess):
         """Write an IEEE 754 single precision float on 2 registers."""
         self.write_values(address, [value], Codec(DataType.FLOAT32, byte_order))
 
+    def read_uint64(self, address: int, byte_order: ByteOrder = ByteOrder.ABCD) -> int:
+        """Read an unsigned 64 bits int on 4 registers."""
+        return int(self.read_values(address, Codec(DataType.UINT64, byte_order))[0])
+
+    def write_uint64(self, address: int, value: int, byte_order: ByteOrder = ByteOrder.ABCD) -> None:
+        """Write an unsigned 64 bits int on 4 registers (ValueError out of 0 to 2**64 - 1)."""
+        self.write_values(address, [value], Codec(DataType.UINT64, byte_order))
+
+    def read_int64(self, address: int, byte_order: ByteOrder = ByteOrder.ABCD) -> int:
+        """Read a signed 64 bits int (2's complement) on 4 registers."""
+        return int(self.read_values(address, Codec(DataType.INT64, byte_order))[0])
+
+    def write_int64(self, address: int, value: int, byte_order: ByteOrder = ByteOrder.ABCD) -> None:
+        """Write a signed 64 bits int (2's complement) on 4 registers (ValueError out of -2**63 to 2**63 - 1)."""
+        self.write_values(address, [value], Codec(DataType.INT64, byte_order))
+
     def read_float64(self, address: int, byte_order: ByteOrder = ByteOrder.ABCD) -> float:
         """Read an IEEE 754 double precision float on 4 registers."""
         return float(self.read_values(address, Codec(DataType.FLOAT64, byte_order))[0])
@@ -527,6 +552,10 @@ class RegistersAccess(SpaceAccess):
     def write_float64(self, address: int, value: float, byte_order: ByteOrder = ByteOrder.ABCD) -> None:
         """Write an IEEE 754 double precision float on 4 registers."""
         self.write_values(address, [value], Codec(DataType.FLOAT64, byte_order))
+
+
+# a 16 bits value is on 1 register: no word order (a byte swapped register: read_values() with a Codec)
+_INT16 = Codec(DataType.INT16)
 
 
 class AppAccess:

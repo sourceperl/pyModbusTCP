@@ -304,6 +304,29 @@ class TestTypedAccess(unittest.TestCase):
         self.assertEqual(regs.read_uint32(12, ByteOrder.DCBA), 0x33441122)
         with self.assertRaises(TypeError):
             regs.read_uint32(12, False)  # type: ignore[arg-type]
+
+    def test_16_and_64_bits(self) -> None:
+        regs = MemoryStore(16).app.holding_registers
+        # int16: one register, no byte order
+        regs.write_int16(0, -5)
+        self.assertEqual(regs.read(0), [0xFFFB])
+        self.assertEqual(regs.read_int16(0), -5)
+        for value in (32768, -32769):
+            with self.assertRaises(ValueError):
+                regs.write_int16(0, value)
+        # 64 bits: 4 registers, in a byte order
+        regs.write_uint64(4, 0x0102030405060708)
+        self.assertEqual(regs.read(4, 4), [0x0102, 0x0304, 0x0506, 0x0708])
+        self.assertEqual(regs.read_uint64(4), 0x0102030405060708)
+        regs.write_int64(8, -2, ByteOrder.CDAB)
+        self.assertEqual(regs.read(8, 4), [0xFFFE, 0xFFFF, 0xFFFF, 0xFFFF])
+        self.assertEqual(regs.read_int64(8, ByteOrder.CDAB), -2)
+        self.assertEqual(regs.read_uint64(8, ByteOrder.CDAB), 2 ** 64 - 2)
+        for method, value in ((regs.write_uint64, -1), (regs.write_int64, 2 ** 63)):
+            with self.assertRaises(ValueError):
+                method(0, value)
+        with self.assertRaises(IllegalDataAddress):
+            regs.read_uint64(13)
         regs.write_int32(4, -2)
         self.assertEqual(regs.read(4, 2), [0xFFFF, 0xFFFE])
         self.assertEqual(regs.read_int32(4), -2)
