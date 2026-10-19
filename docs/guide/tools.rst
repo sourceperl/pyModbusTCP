@@ -84,22 +84,29 @@ Broadcast through mbtcp-tcp2rtu
 -------------------------------
 
 The unit id 0 is the broadcast address of the serial line: every slave executes the request, none of them answers.
-With ``--allow-broadcast``, the gateway writes a broadcast request on the bus and answers the TCP client at once with
+With ``--allow-broadcast``, the gateway queues a broadcast request for the bus and answers the TCP client at once with
 the normal response of the function (the echo of the request for 0x05, 0x06, 0x15 and 0x16, the address and the
 quantity for 0x0F and 0x10): a client never waits for a timeout. The bus then stays silent for
 ``--broadcast-delay`` seconds (default 0.1), so that the slaves execute the request before the next frame.
 
 A broadcast of another function (a read) is refused with exception 0x01, and a broadcast is never relayed with
-``--read-only``. The response only means "written on the bus": no slave confirms a broadcast.
+``--read-only``. The response only means "queued for the bus": no slave confirms a broadcast.
 
-A broadcast is never queued behind another one: while a broadcast waits for the bus, is written, or during the silent
-delay after it, the next one gets exception 0x06 (slave device busy) at once. A client that sends broadcasts too fast
-never builds a backlog of old writes, applied long after it stopped (a pyModbusTCP client spaces its broadcasts by
-``broadcast_interval``, 0.15 s by default).
+The response comes as soon as the broadcast is in the queue of the bus, in turn with the other requests of its client
+host (a request after a broadcast is never written before it). A few broadcasts can wait for the bus:
+
+- ``--broadcast-buffer N`` (default 4, up to 8): with N broadcasts waiting, the next one gets exception 0x06 (slave
+  device busy) at once.
+- ``--broadcast-max-age S`` (default 10 s, up to 60): a broadcast that waited longer for the bus (slaves that time
+  out, a serial port lost) is dropped, never written, and logged.
+
+A client that sends broadcasts too fast never builds a long backlog: an old write is never applied long after it
+stopped (a pyModbusTCP client spaces its broadcasts by ``broadcast_interval``, 0.15 s by default). A broadcast lost on
+the gateway (dropped, or a serial port lost) is never reported to the client: it already got its response.
 
 .. code-block:: bash
 
-    mbtcp-tcp2rtu --allow-broadcast --broadcast-delay 0.2 -b 19200 /dev/ttyUSB0
+    mbtcp-tcp2rtu --allow-broadcast --broadcast-delay 0.2 --broadcast-buffer 8 -b 19200 /dev/ttyUSB0
 
 RS-485 mode of the gateways
 ---------------------------

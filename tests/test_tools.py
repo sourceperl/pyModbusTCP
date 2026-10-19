@@ -1,6 +1,7 @@
 """Tests of the command line tools (pyModbusTCP.tools)."""
 
 import argparse
+import contextlib
 import logging
 import os
 import queue
@@ -11,7 +12,8 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
+from typing import Any
 
 import pytest
 
@@ -380,60 +382,97 @@ class TimedSerial(SilentSerial):
         return len(data)
 
 
-def test_tcp2rtu_broadcast() -> None:
-    """A broadcast write gets its normal response at once, the bus stays silent for broadcast_delay after it."""
-    pytest.importorskip('serial')
+@contextlib.contextmanager
+def broadcast_gateway(port: Any, **kwargs: Any) -> Generator[int, None, None]:
+    """A gateway (worker thread and TCP server) on port that relays broadcasts, yields its TCP port."""
     from pyModbusTCP.tools import tcp_to_rtu_gw
-    port = TimedSerial()
-    worker = tcp_to_rtu_gw.ModbusSerialWorker(port, timeout=1.0, allow_broadcast=True,  # type: ignore[arg-type]
-                                              broadcast_delay=0.3)
+    worker = tcp_to_rtu_gw.ModbusSerialWorker(port, timeout=1.0, allow_broadcast=True, **kwargs)
     thread = threading.Thread(target=worker.loop, daemon=True)
     thread.start()
     srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, functions={}, fallback=worker.relay_request)
     _, tcp_port = srv.start()
     try:
+        yield tcp_port
+    finally:
+        worker.stop()
+        srv.stop()
+        thread.join(5.0)
+
+
+def test_tcp2rtu_broadcast() -> None:
+    """A broadcast write gets its normal response at once, the bus stays silent for broadcast_delay after it."""
+    pytest.importorskip('serial')
+    port = TimedSerial()
+    with broadcast_gateway(port, broadcast_delay=0.3) as tcp_port:
         c = ModbusClient(host='127.0.0.1', port=tcp_port, unit_id=0, timeout=3.0)
         # the normal response of each function, at once (no slave answers a broadcast)
         for pdu, response in (('06000a002a', '06000a002a'), ('0f000000030105', '0f00000003'),
                               ('10000000020400010002', '1000000002'), ('16000a00ff0000', '16000a00ff0000')):
             start = time.monotonic()
             assert c.custom_request(bytes.fromhex(pdu)) == bytes.fromhex(response), pdu
-            assert time.monotonic() - start < 0.9, 'answered before the timeout of the serial line'
-            # the next broadcast after the silence of the bus
-            time.sleep(0.35)
-        assert c.write_single_coil(1, True)
-        # a broadcast while the bus is silent after the previous one: refused at once (busy), never queued
-        start = time.monotonic()
-        assert c.write_single_coil(2, True) is False and c.last_except == 0x06
-        assert time.monotonic() - start < 0.2
-        time.sleep(0.35)
+            assert time.monotonic() - start < 0.2, 'answered at once, before the write on the bus'
+        time.sleep(1.2)
         # the frames are on the bus, with the broadcast address, the next one after broadcast_delay
         frames = [frame for _, frame in port.writes]
-        assert [frame[0] for frame in frames] == [0] * 5
+        assert [frame[0] for frame in frames] == [0] * 4
         assert frames[0] == rtu_frame(0, bytes.fromhex('06000a002a'))
         gaps = [b[0] - a[0] for a, b in zip(port.writes, port.writes[1:])]
         assert min(gaps) >= 0.3
         # a broadcast of a read (no answer: no meaning), or a malformed write: refused, never on the bus
         assert c.read_holding_registers(0, 1) is None and c.last_except == 0x01
         assert c.custom_request(bytes.fromhex('06000a')) is None and c.last_except == 0x03
-        assert len(port.writes) == 5
+        assert len(port.writes) == 4
+        # a burst: the buffer takes a few broadcasts (4, and the one the worker holds), then the next ones are
+        # refused at once (busy)
+        results = []
+        for i in range(8):
+            start = time.monotonic()
+            results.append(c.write_single_register(i, i))
+            assert time.monotonic() - start < 0.2
+        accepted = results.count(True)
+        assert results == [True] * accepted + [False] * (8 - accepted) and 4 <= accepted <= 5
+        assert c.last_except == 0x06
+        # the accepted ones are all written, in order
+        time.sleep(0.3 * accepted + 0.3)
+        assert [frame[3] for _, frame in port.writes[4:]] == list(range(accepted))
         c.close()
-        # a flood of broadcasts: the bus gets at most one per broadcast_delay, nothing waits after the flood
+
+
+def test_tcp2rtu_broadcast_max_age() -> None:
+    """A broadcast that waited more than broadcast_max_age for the bus is dropped, never written."""
+    pytest.importorskip('serial')
+    port = TimedSerial()
+    with broadcast_gateway(port, broadcast_delay=0.4, broadcast_max_age=0.6) as tcp_port:
+        with ModbusClient(host='127.0.0.1', port=tcp_port, unit_id=0, timeout=3.0) as c:
+            # all accepted, the bus takes one per 0.4 s: the third one would wait 0.8 s
+            assert all(c.write_single_register(i, i) for i in range(4))
+            time.sleep(1.5)
+        assert [frame[3] for _, frame in port.writes] == [0, 1]
+
+
+def test_tcp2rtu_broadcast_flood() -> None:
+    """A flood of broadcasts: the bus gets at most one per broadcast_delay, only the buffer waits after it."""
+    pytest.importorskip('serial')
+    port = TimedSerial()
+    with broadcast_gateway(port, broadcast_delay=0.3) as tcp_port:
         flooder = ModbusClient(host='127.0.0.1', port=tcp_port, unit_id=0, timeout=3.0)
-        before = len(port.writes)
         end = time.monotonic() + 1.0
-        accepted = 0
+        accepted = refused = 0
         while time.monotonic() < end:
-            accepted += flooder.write_multiple_registers(20480, [55])
+            if flooder.write_multiple_registers(20480, [55]):
+                accepted += 1
+            else:
+                assert flooder.last_except == 0x06
+                refused += 1
             time.sleep(0.01)
         flooder.close()
-        assert 1 <= accepted <= 5 and len(port.writes) - before == accepted
-        time.sleep(0.5)
-        assert len(port.writes) - before == accepted, 'no backlog of old broadcasts'
-    finally:
-        worker.stop()
-        srv.stop()
-        thread.join(5.0)
+        stop = time.monotonic()
+        assert refused > 0 and accepted <= 1 + 1.0 / 0.3 + 4 + 1
+        # the backlog is the buffer at most (4, and the one the worker holds): written in 5 * broadcast_delay,
+        # nothing after
+        time.sleep(5 * 0.3 + 0.4)
+        assert len(port.writes) == accepted
+        assert max(t for t, _ in port.writes) - stop < 5 * 0.3 + 0.1
 
 
 def test_tcp2rtu_broadcast_delay_checks() -> None:
@@ -446,6 +485,15 @@ def test_tcp2rtu_broadcast_delay_checks() -> None:
     for text in ('-1', '11', 'nan', 'x'):
         with pytest.raises(argparse.ArgumentTypeError):
             tcp_to_rtu_gw.broadcast_delay(text)
+    for kwargs in ({'broadcast_buffer': 0}, {'broadcast_buffer': 9}, {'broadcast_buffer': 2.0},
+                   {'broadcast_max_age': 0}, {'broadcast_max_age': 61}, {'broadcast_max_age': float('nan')}):
+        with pytest.raises(ValueError):
+            tcp_to_rtu_gw.ModbusSerialWorker(SilentSerial(), **kwargs)  # type: ignore[arg-type]
+    assert tcp_to_rtu_gw.broadcast_buffer('8') == 8 and tcp_to_rtu_gw.broadcast_max_age('0.5') == 0.5
+    for func, text in ((tcp_to_rtu_gw.broadcast_buffer, '0'), (tcp_to_rtu_gw.broadcast_buffer, '1.5'),
+                       (tcp_to_rtu_gw.broadcast_max_age, '0'), (tcp_to_rtu_gw.broadcast_max_age, 'nan')):
+        with pytest.raises(argparse.ArgumentTypeError):
+            func(text)
 
 
 def connect_from(source_ip: str, port: int) -> socket.socket:

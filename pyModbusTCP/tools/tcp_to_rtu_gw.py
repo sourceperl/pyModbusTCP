@@ -34,17 +34,19 @@ HOW A REQUEST IS PROCESSED
 BROADCAST (unit id 0, with --allow-broadcast)
 ---------------------------------------------
 A broadcast is a write to every slave of the bus, and no slave answers it. The
-gateway writes the frame on the bus, then answers the TCP client at once with
+gateway queues the frame for the bus and answers the TCP client at once with
 the normal response of the function (like a slave would: the echo of the
 request for 0x05, 0x06, 0x15 and 0x16, the address and quantity for 0x0F and
-0x10). The client never waits for a timeout. The bus then stays silent for
---broadcast-delay (default 0.1 s): the slaves execute the request before the
-next frame. Only these write functions can be broadcast (exception 0x01 for
-the others: a read has no meaning without an answer).
-A broadcast is never queued behind another one: while a broadcast waits for
-the bus, is written, or during the silent delay after it, the next one gets
-exception 0x06 "Slave Device Busy" at once (a flood of broadcasts never builds
-a backlog of old writes).
+0x10). The client never waits for a timeout. After the write, the bus stays
+silent for --broadcast-delay (default 0.1 s): the slaves execute the request
+before the next frame. Only these write functions can be broadcast (exception
+0x01 for the others: a read has no meaning without an answer).
+A few broadcasts can wait for the bus (--broadcast-buffer, default 4), each
+one in turn with the other requests of its client host. A broadcast that
+waited more than --broadcast-max-age (default 10 s) is dropped, never written:
+a slow or lost bus never applies old writes long after they were sent. With
+the buffer full, the next broadcast gets exception 0x06 "Slave Device Busy" at
+once (a flood of broadcasts never builds a long backlog).
 
 ERRORS SEEN BY THE TCP CLIENT
 -----------------------------
@@ -58,8 +60,8 @@ ERRORS SEEN BY THE TCP CLIENT
 - More than 16 requests waiting, more than 2 requests waiting from the same
   client host, or serial worker unavailable: Modbus exception 0x0A "Gateway
   Path Unavailable".
-- A broadcast while the bus is busy with another one: Modbus exception 0x06
-  "Slave Device Busy".
+- A broadcast while --broadcast-buffer broadcasts already wait for the bus:
+  Modbus exception 0x06 "Slave Device Busy".
 
 SERIAL PORT FAILURE
 -------------------
@@ -107,8 +109,9 @@ count), so a request flood can't flood the log.
 
 LIMITATIONS
 -----------
-- The response to a broadcast only means "written on the bus": no slave
-  confirms it (a pyModbusTCP client can also send it with broadcast=True, that
+- The response to a broadcast only means "queued for the bus": no slave
+  confirms it, and a broadcast dropped by the gateway (too old) is not
+  reported (a pyModbusTCP client can also send it with broadcast=True, that
   doesn't wait for this response).
 - Throughput is limited by the serial line: requests are served one at a time.
 
@@ -256,6 +259,12 @@ BROADCAST_FUNCTIONS: dict[int, int | None] = {
 # default silent delay of the bus after a broadcast (s): the slaves execute it before the next frame
 DEFAULT_BROADCAST_DELAY = 0.1
 MAX_BROADCAST_DELAY = 10.0
+# broadcasts that can wait for the bus (at most half of the queue: the other requests keep their place)
+DEFAULT_BROADCAST_BUFFER = 4
+MAX_BROADCAST_BUFFER = QUEUE_SIZE // 2
+# a broadcast that waited longer for the bus is dropped (s): an old write is never applied long after its send
+DEFAULT_BROADCAST_MAX_AGE = 10.0
+MAX_BROADCAST_MAX_AGE = 60.0
 
 
 def hexdump(data: bytes) -> str:
@@ -342,8 +351,8 @@ class RtuQuery:
         self.cancelled = False
         self.request = ModbusRTUFrame()
         self.response = ModbusRTUFrame()
-        # a broadcast request: set by the worker once it is written on the bus (there is no response frame)
-        self.sent = False
+        # time the request was queued (a broadcast that waited too long for the bus is dropped)
+        self.queued_at = time.monotonic()
 
     @property
     def is_broadcast(self) -> bool:
@@ -408,7 +417,9 @@ class ModbusSerialWorker:
 
     def __init__(self, port: Serial, timeout: float = 1.0, end_of_frame: float | None = None,
                  allow_broadcast: bool = False, read_only: bool = False,
-                 broadcast_delay: float = DEFAULT_BROADCAST_DELAY) -> None:
+                 broadcast_delay: float = DEFAULT_BROADCAST_DELAY,
+                 broadcast_buffer: int = DEFAULT_BROADCAST_BUFFER,
+                 broadcast_max_age: float = DEFAULT_BROADCAST_MAX_AGE) -> None:
         # public
         self.serial_port = port
         self.timeout = timeout
@@ -420,6 +431,15 @@ class ModbusSerialWorker:
                 or not 0 <= broadcast_delay <= MAX_BROADCAST_DELAY:
             raise ValueError(f'broadcast delay must be between 0 and {MAX_BROADCAST_DELAY:g} s')
         self.broadcast_delay = float(broadcast_delay)
+        # broadcasts that can wait for the bus, and the max time they wait
+        if isinstance(broadcast_buffer, bool) or not isinstance(broadcast_buffer, int) \
+                or not 1 <= broadcast_buffer <= MAX_BROADCAST_BUFFER:
+            raise ValueError(f'broadcast buffer must be between 1 and {MAX_BROADCAST_BUFFER}')
+        self.broadcast_buffer = broadcast_buffer
+        if isinstance(broadcast_max_age, bool) or not isinstance(broadcast_max_age, (int, float)) \
+                or not 0 < broadcast_max_age <= MAX_BROADCAST_MAX_AGE:
+            raise ValueError(f'broadcast max age must be more than 0 and at most {MAX_BROADCAST_MAX_AGE:g} s')
+        self.broadcast_max_age = float(broadcast_max_age)
         # silent interval between two frames on the bus
         self.interframe_delay = t35(port.baudrate, port.bytesize, port.parity, port.stopbits)
         # end of frame delay: auto-computed from baudrate if not set
@@ -437,10 +457,10 @@ class ModbusSerialWorker:
         self._host_busy_log = LogThrottle(logger)
         self._overloaded_log = LogThrottle(logger)
         self._broadcast_busy_log = LogThrottle(logger, level=logging.INFO)
-        # broadcasts: one at a time (waiting for the bus or written), and none while the bus is silent after one
+        self._broadcast_dropped_log = LogThrottle(logger)
+        # broadcasts in the queue (waiting for the bus), at most broadcast_buffer
         self._broadcast_lock = Lock()
-        self._broadcast_pending = False
-        self._broadcast_quiet_until = 0.0
+        self._broadcasts_waiting = 0
         # worker stop flag
         self._stop = Event()
         self._last_bus_activity = 0.0
@@ -479,6 +499,12 @@ class ModbusSerialWorker:
         """Ask the worker loop to exit."""
         self._stop.set()
 
+    def _wait_bus_idle(self) -> None:
+        """Wait for the end of the silent interval of the bus (between frames, or after a broadcast)."""
+        idle = self._last_bus_activity + self.interframe_delay - time.monotonic()
+        if idle > 0:
+            time.sleep(idle)
+
     def _transaction(self, request: bytes) -> bytes:
         """Send a request frame on the serial line and return the raw answer.
 
@@ -487,9 +513,7 @@ class ModbusSerialWorker:
         """
         port = self.serial_port
         # respect the silent interval between frames
-        idle = self._last_bus_activity + self.interframe_delay - time.monotonic()
-        if idle > 0:
-            time.sleep(idle)
+        self._wait_bus_idle()
         # send to serial
         port.reset_input_buffer()
         port.write(request)
@@ -499,8 +523,6 @@ class ModbusSerialWorker:
             # no slave answers a broadcast: no wait for an answer, the bus stays silent for broadcast_delay (the
             # interframe delay is added before the next frame)
             self._last_bus_activity = time.monotonic() + self.broadcast_delay
-            with self._broadcast_lock:
-                self._broadcast_quiet_until = self._last_bus_activity
             logger.debug('RTU broadcast, bus silent for %.3f s', self.broadcast_delay)
             return b''
         # wait for the first byte of data until timeout delay
@@ -535,10 +557,12 @@ class ModbusSerialWorker:
                 # nobody waits for its answer anymore: don't hold the serial line for it
                 rtu_query.completed.set()
                 continue
+            if rtu_query.is_broadcast and not self._broadcast_on_time(rtu_query):
+                rtu_query.completed.set()
+                continue
             try:
                 if self._ensure_port_open():
                     rtu_query.response.raw = self._transaction(rtu_query.request.raw)
-                    rtu_query.sent = True
                 else:
                     # port lost and not yet back: fail fast, the client gets a modbus exception
                     rtu_query.response.raw = b''
@@ -558,6 +582,19 @@ class ModbusSerialWorker:
                 rtu_query.completed.set()
         # on exit, release anyone still waiting
         self._drain_queue()
+
+    def _broadcast_on_time(self, rtu_query: RtuQuery) -> bool:
+        """A broadcast taken from the queue: True if it can still be written, False if it waited too long."""
+        with self._broadcast_lock:
+            self._broadcasts_waiting -= 1
+        # the age on the bus, after its silent interval (it can be long after a previous broadcast)
+        self._wait_bus_idle()
+        age = time.monotonic() - rtu_query.queued_at
+        if age <= self.broadcast_max_age:
+            return True
+        self._broadcast_dropped_log.event('Broadcast dropped, too old for the bus: %d request(s) (last waited '
+                                          '%.1f s, max %g s)', age, self.broadcast_max_age)
+        return False
 
     def _drain_queue(self) -> None:
         while True:
@@ -648,7 +685,7 @@ class ModbusSerialWorker:
         :param host: client host of the request (see host_key()), the serial line is shared in turn between hosts
         :returns: the response PDU of the slave
         :raises ModbusException: gateway overloaded or serial worker not responding (0x0A), no valid answer (0x0B),
-            broadcast while the bus is busy with another one (0x06)
+            broadcast while the broadcast buffer is full (0x06)
         """
         if req.ctx.unit_id == BROADCAST_ADDRESS:
             return self._relay_broadcast(req, host)
@@ -661,11 +698,12 @@ class ModbusSerialWorker:
         raise GatewayTargetFailed()
 
     def _relay_broadcast(self, req: Request, host: str) -> bytes:
-        """Relay a broadcast request: written on the bus, answered at once with the normal response of its function.
+        """Relay a broadcast request: queued for the bus, answered at once with the normal response of its function.
 
-        A broadcast is never queued behind another one: while a broadcast waits for the bus, is written, or while the
-        bus is silent after it (broadcast_delay), the next one gets exception 0x06 (slave device busy) at once. So a
-        client that sends broadcasts faster than the bus can take them never builds a backlog of old writes.
+        No slave answers a broadcast, so the client gets the response as soon as the request is in the queue. A few
+        broadcasts can wait for the bus (broadcast_buffer): beyond, the next one gets exception 0x06 (slave device busy)
+        at once. A broadcast that waited more than broadcast_max_age is dropped by the worker (see loop()): a client
+        that sends broadcasts faster than the bus can take them never builds a backlog of old writes.
         """
         # the normal response of the function: the start of the request (checked before the bus)
         size = BROADCAST_FUNCTIONS[req.pdu[0]]
@@ -673,26 +711,24 @@ class ModbusSerialWorker:
             raise IllegalDataValue()
         response = req.pdu if size is None else req.pdu[:size]
         with self._broadcast_lock:
-            if self._broadcast_pending or time.monotonic() < self._broadcast_quiet_until:
-                self._broadcast_busy_log.event('Broadcast refused, the bus is busy with a previous one: %d '
-                                               'request(s) (last from %s)', req.ctx.client.address)
+            if self._broadcasts_waiting >= self.broadcast_buffer:
+                self._broadcast_busy_log.event('Broadcast refused, the broadcast buffer is full: %d request(s) '
+                                               '(%d waiting, last from %s)', self.broadcast_buffer,
+                                               req.ctx.client.address)
                 raise SlaveDeviceBusy()
-            self._broadcast_pending = True
+            self._broadcasts_waiting += 1
         try:
-            rtu_query = self._run_query(req, host)
-        finally:
+            self._queue(req, host)
+        except BaseException:
             with self._broadcast_lock:
-                self._broadcast_pending = False
-        # written on the bus (no slave answers), or not (serial port lost)
-        if rtu_query.sent:
-            return response
-        logger.debug('Broadcast not sent (serial port unavailable)')
-        raise GatewayTargetFailed()
+                self._broadcasts_waiting -= 1
+            raise
+        return response
 
-    def _run_query(self, req: Request, host: str) -> RtuQuery:
-        """Queue the request for the serial line and wait for the end of its exchange.
+    def _queue(self, req: Request, host: str) -> RtuQuery:
+        """Put the request in the queue of the serial line.
 
-        :raises ModbusException: gateway overloaded or serial worker not responding (0x0A)
+        :raises ModbusException: gateway overloaded (0x0A)
         """
         # init a serial exchange from the request
         rtu_query = RtuQuery(host)
@@ -705,6 +741,14 @@ class ModbusSerialWorker:
             self._overloaded_log.event('Gateway overloaded: %d request(s) rejected (queue full, last from %s)',
                                        req.ctx.client.address)
             raise GatewayPathUnavailable() from None
+        return rtu_query
+
+    def _run_query(self, req: Request, host: str) -> RtuQuery:
+        """Queue the request for the serial line and wait for the end of its exchange.
+
+        :raises ModbusException: gateway overloaded or serial worker not responding (0x0A)
+        """
+        rtu_query = self._queue(req, host)
         # wait result (bounded: worst case every queued request times out)
         wait_max = (QUEUE_SIZE + 1) * (self.timeout + self.end_of_frame) + 1.0
         if not rtu_query.completed.wait(timeout=wait_max):
@@ -724,6 +768,28 @@ def broadcast_delay(value: str) -> float:
     if not 0 <= delay <= MAX_BROADCAST_DELAY:
         raise argparse.ArgumentTypeError(f'{value!r} out of 0 to {MAX_BROADCAST_DELAY:g} s')
     return delay
+
+
+def broadcast_buffer(value: str) -> int:
+    """argparse type: the broadcasts that can wait for the bus (1 to MAX_BROADCAST_BUFFER)."""
+    try:
+        size = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f'{value!r} is not an integer') from None
+    if not 1 <= size <= MAX_BROADCAST_BUFFER:
+        raise argparse.ArgumentTypeError(f'{value!r} out of 1 to {MAX_BROADCAST_BUFFER}')
+    return size
+
+
+def broadcast_max_age(value: str) -> float:
+    """argparse type: the max time a broadcast waits for the bus (0 excluded to MAX_BROADCAST_MAX_AGE s)."""
+    try:
+        age = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f'{value!r} is not a number') from None
+    if not 0 < age <= MAX_BROADCAST_MAX_AGE:
+        raise argparse.ArgumentTypeError(f'{value!r} out of 0 (excluded) to {MAX_BROADCAST_MAX_AGE:g} s')
+    return age
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -748,6 +814,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--broadcast-delay', type=broadcast_delay, default=DEFAULT_BROADCAST_DELAY, metavar='S',
                         help='silent delay of the bus after a broadcast, 0 to '
                              f'{MAX_BROADCAST_DELAY:g} s (default: {DEFAULT_BROADCAST_DELAY:g})')
+    parser.add_argument('--broadcast-buffer', type=broadcast_buffer, default=DEFAULT_BROADCAST_BUFFER, metavar='N',
+                        help='broadcasts that can wait for the bus, 1 to '
+                             f'{MAX_BROADCAST_BUFFER} (default: {DEFAULT_BROADCAST_BUFFER})')
+    parser.add_argument('--broadcast-max-age', type=broadcast_max_age, default=DEFAULT_BROADCAST_MAX_AGE,
+                        metavar='S', help='a broadcast that waited longer for the bus is dropped, up to '
+                                          f'{MAX_BROADCAST_MAX_AGE:g} s (default: {DEFAULT_BROADCAST_MAX_AGE:g})')
     parser.add_argument('-b', '--baudrate', type=positive_int, default=9600, help='serial rate (default: 9600)')
     parser.add_argument('--bytesize', type=int, choices=(7, 8), default=8, help='data bits (default: 8)')
     parser.add_argument('--parity', choices=('N', 'E', 'O'), default='N', help='parity (default: N)')
@@ -784,7 +856,9 @@ def main(argv: list[str] | None = None) -> int:
         # init serial worker
         serial_worker = ModbusSerialWorker(serial_port, args.timeout, args.eof,
                                            allow_broadcast=args.allow_broadcast, read_only=args.read_only,
-                                           broadcast_delay=args.broadcast_delay)
+                                           broadcast_delay=args.broadcast_delay,
+                                           broadcast_buffer=args.broadcast_buffer,
+                                           broadcast_max_age=args.broadcast_max_age)
         logger.debug('Interframe delay %.4f s, end of frame delay %.4f s',
                      serial_worker.interframe_delay, serial_worker.end_of_frame)
 

@@ -35,9 +35,9 @@ Revision history for pyModbusTCP
       (broadcast of a TCP to RTU gateway) without waiting for a reply; a late reply of the gateway is ignored.
     - tools: mbtcp-tcp2rtu --allow-broadcast answers a broadcast at once with the normal response of its function
       (it was exception 0x0B after the timeout), then keeps the bus silent for --broadcast-delay (default 0.1 s);
-      only the write functions can be broadcast (0x05, 0x06, 0x0F, 0x10, 0x15, 0x16). A broadcast while the bus is
-      busy with another one (waiting, written, or in the silent delay) gets exception 0x06 at once: a flood of
-      broadcasts never builds a backlog of old writes.
+      only the write functions can be broadcast (0x05, 0x06, 0x0F, 0x10, 0x15, 0x16). A few broadcasts can wait for
+      the bus (--broadcast-buffer, default 4), the next ones get exception 0x06 at once; one that waited more than
+      --broadcast-max-age (default 10 s) is dropped: a flood never builds a backlog of old writes.
     - client: broadcast_interval (default 0.15 s) spaces two broadcast requests: a loop can't flood a gateway.
     - tools: command line tools (python -m pyModbusTCP.tools, or the mbtcp-* commands of pyModbusTCP-cli with
       "pip install pyModbusTCP[cli]"): mbtcp-server, mbtcp-client (table output, csv/json, write-read, typed

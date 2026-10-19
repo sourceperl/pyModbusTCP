@@ -187,7 +187,7 @@ a reply:
   read has no meaning without a reply.
 - Some gateways answer a broadcast anyway (an echo, or an exception after their timeout): this late reply is ignored
   by the next request, the connection stays open. Any other unexpected frame still closes it. A late reply is
-  recognized for the last 64 broadcasts, up to ``max(timeout, 10)`` seconds after their send: beyond, it closes the
+  recognized for the last 128 broadcasts, up to ``max(timeout, 10)`` seconds after their send: beyond, it closes the
   connection (the next request opens it again).
 - The slaves need some time to execute a broadcast before the next request on the bus (their turnaround delay, often
   around 100 ms). Two broadcasts are spaced by at least :attr:`~.ModbusClient.broadcast_interval` seconds (0.15 by
