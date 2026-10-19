@@ -501,7 +501,9 @@ class ModbusSerialWorker:
 
     def _wait_bus_idle(self) -> None:
         """Wait for the end of the silent interval of the bus (between frames, or after a broadcast)."""
-        idle = self._last_bus_activity + self.interframe_delay - time.monotonic()
+        # perf_counter(): the interframe delay is a few ms, monotonic() has a 15.6 ms step on Windows before
+        # Python 3.13
+        idle = self._last_bus_activity + self.interframe_delay - time.perf_counter()
         if idle > 0:
             time.sleep(idle)
 
@@ -522,7 +524,7 @@ class ModbusSerialWorker:
         if request[0] == BROADCAST_ADDRESS:
             # no slave answers a broadcast: no wait for an answer, the bus stays silent for broadcast_delay (the
             # interframe delay is added before the next frame)
-            self._last_bus_activity = time.monotonic() + self.broadcast_delay
+            self._last_bus_activity = time.perf_counter() + self.broadcast_delay
             logger.debug('RTU broadcast, bus silent for %.3f s', self.broadcast_delay)
             return b''
         # wait for the first byte of data until timeout delay
@@ -538,7 +540,7 @@ class ModbusSerialWorker:
                 if not rx_chunk:
                     break
                 rx_raw += rx_chunk
-        self._last_bus_activity = time.monotonic()
+        self._last_bus_activity = time.perf_counter()
         if rx_raw:
             logger.debug('RTU Rx %s', hexdump(rx_raw))
         else:

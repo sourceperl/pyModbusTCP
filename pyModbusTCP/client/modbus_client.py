@@ -75,7 +75,7 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         self._auto_close = _to_bool(auto_close, 'auto_close')
         self._no_delay = _to_bool(no_delay, 'no_delay')
         self._broadcast_interval = _validators.validate_broadcast_interval(broadcast_interval)
-        # time of the last broadcast request (time.monotonic()), for broadcast_interval
+        # time of the last broadcast request (time.perf_counter()), for broadcast_interval
         self._last_broadcast = -math.inf
         # internal variables
         self._deadline = 0.0  # end of the current request (time.monotonic() value), see _send() and _recv()

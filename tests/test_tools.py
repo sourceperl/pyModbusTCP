@@ -371,14 +371,18 @@ class SilentSerial:
 
 
 class TimedSerial(SilentSerial):
-    """A serial port where no slave answers, that records the frames written and their time."""
+    """A serial port where no slave answers, that records the frames written and their time.
+
+    The time is time.perf_counter() (precise on every OS: time.monotonic() has a 15.6 ms step on Windows before
+    Python 3.13).
+    """
 
     def __init__(self) -> None:
         super().__init__()
         self.writes: list[tuple[float, bytes]] = []
 
     def write(self, data: bytes) -> int:
-        self.writes.append((time.monotonic(), bytes(data)))
+        self.writes.append((time.perf_counter(), bytes(data)))
         return len(data)
 
 
@@ -466,7 +470,7 @@ def test_tcp2rtu_broadcast_flood() -> None:
                 refused += 1
             time.sleep(0.01)
         flooder.close()
-        stop = time.monotonic()
+        stop = time.perf_counter()
         assert refused > 0 and accepted <= 1 + 1.0 / 0.3 + 4 + 1
         # the backlog is the buffer at most (4, and the one the worker holds): written in 5 * broadcast_delay,
         # nothing after

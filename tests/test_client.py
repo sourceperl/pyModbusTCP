@@ -603,15 +603,16 @@ class TestBroadcast(unittest.TestCase):
         self.assertEqual(list(c._broadcast_ids)[-1], c._transaction_id)
 
     def test_broadcast_interval(self) -> None:
-        """Two broadcasts are at least broadcast_interval apart (default 0.1 s), the other requests never wait."""
+        """Two broadcasts are at least broadcast_interval apart (default 0.15 s), the other requests never wait."""
         gw = self.gateway(echo_unicast)
         c = ModbusClient(host='127.0.0.1', port=gw.port, timeout=2.0, broadcast_interval=0.2)
         self.addCleanup(c.close)
         self.assertTrue(c.open())
-        start = time.monotonic()
+        # perf_counter(): precise on every OS (monotonic() has a 15.6 ms step on Windows before Python 3.13)
+        start = time.perf_counter()
         for _ in range(4):
             self.assertTrue(c.write_single_register(0, 1, broadcast=True))
-        self.assertGreaterEqual(time.monotonic() - start, 0.6, '3 intervals between 4 broadcasts')
+        self.assertGreaterEqual(time.perf_counter() - start, 0.6, '3 intervals between 4 broadcasts')
         start = time.monotonic()
         self.assertTrue(c.write_single_register(0, 1))
         self.assertLess(time.monotonic() - start, 0.15, 'a normal request doesn\'t wait')

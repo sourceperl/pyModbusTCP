@@ -183,7 +183,9 @@ class ClientTransportMixin:
         """
         # for auto_open mode, check TCP and open on need
         # never faster than broadcast_interval: a serial line can't take broadcasts faster than its slaves execute them
-        wait = self._last_broadcast + self._broadcast_interval - time.monotonic()
+        # (perf_counter(): monotonic too, but precise on every OS, monotonic() has a 15.6 ms step on Windows before
+        # Python 3.13, a gap could be that much shorter)
+        wait = self._last_broadcast + self._broadcast_interval - time.perf_counter()
         if wait > 0:
             time.sleep(wait)
         if self.auto_open and not self.is_open:
@@ -192,8 +194,8 @@ class ClientTransportMixin:
         self._send(tx_frame)
         # a gateway may reply anyway (an echo, an exception after its timeout): see _recv_pdu()
         self._broadcast_ids.pop(self._transaction_id, None)
-        self._last_broadcast = time.monotonic()
-        self._broadcast_ids[self._transaction_id] = self._last_broadcast
+        self._last_broadcast = time.perf_counter()
+        self._broadcast_ids[self._transaction_id] = time.monotonic()
         while len(self._broadcast_ids) > BROADCAST_IDS_MAX:
             del self._broadcast_ids[next(iter(self._broadcast_ids))]
         self._on_tx_rx(frame=tx_frame, is_tx=True)
