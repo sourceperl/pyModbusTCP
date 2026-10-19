@@ -29,6 +29,7 @@ Revision history for pyModbusTCP
       Guard), one store per unit id, read_only, allowed_hosts (None: every host, []: no host).
     - codec: Codec(DataType, ByteOrder) converts 16/32/64 bits integers and IEEE floats to registers and back, in
       the ABCD, CDAB, BADC or DCBA byte order, for the client and the server store (read_values/write_values).
+      ByteOrder64 gives the 8 orders of a 64 bits value (like CDABGHEF), for a Codec only (rare devices).
     - client: context manager, TCP_NODELAY (no_delay), timeout for the whole request.
     - tools: command line tools (python -m pyModbusTCP.tools, or the mbtcp-* commands of pyModbusTCP-cli with
       "pip install pyModbusTCP[cli]"): mbtcp-server, mbtcp-client (table output, csv/json, write-read, typed

@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from pyModbusTCP.codec import ByteOrder, Codec, DataType
+from pyModbusTCP.codec import ByteOrder, ByteOrder64, Codec, DataType
 from pyModbusTCP.server import IllegalDataAddress, MemoryStore
 
 F32 = DataType.FLOAT32
@@ -106,3 +106,31 @@ def test_store_values() -> None:
     assert regs.read(0, 2) == [0xF5C3, 0x4048]
     with pytest.raises(IllegalDataAddress):
         regs.read_values(14, Codec(DataType.FLOAT64))
+
+
+@pytest.mark.parametrize('order, registers', [
+    (ByteOrder64.ABCDEFGH, [0x0102, 0x0304, 0x0506, 0x0708]), (ByteOrder64.CDABGHEF, [0x0304, 0x0102, 0x0708, 0x0506]),
+    (ByteOrder64.EFGHABCD, [0x0506, 0x0708, 0x0102, 0x0304]), (ByteOrder64.GHEFCDAB, [0x0708, 0x0506, 0x0304, 0x0102]),
+    (ByteOrder64.BADCFEHG, [0x0201, 0x0403, 0x0605, 0x0807]), (ByteOrder64.DCBAHGFE, [0x0403, 0x0201, 0x0807, 0x0605]),
+    (ByteOrder64.FEHGBADC, [0x0605, 0x0807, 0x0201, 0x0403]), (ByteOrder64.HGFEDCBA, [0x0807, 0x0605, 0x0403, 0x0201]),
+])
+def test_byte_order64(order: ByteOrder64, registers: list[int]) -> None:
+    """The 8 orders of a 64 bits value (A=01 ... H=08), and back, for the 3 types of 64 bits."""
+    codec = Codec(DataType.UINT64, order)
+    assert codec.encode([0x0102030405060708]) == registers
+    assert codec.decode(registers) == [0x0102030405060708]
+    assert Codec(DataType.INT64, order).decode(Codec(DataType.INT64, order).encode([-2, 7])) == [-2, 7]
+    assert Codec(DataType.FLOAT64, order).decode(Codec(DataType.FLOAT64, order).encode([-2.5])) == [-2.5]
+
+
+def test_byte_order64_rules() -> None:
+    # the 4 orders of ByteOrder are 4 of the 8 orders of ByteOrder64
+    for short, long in ((ByteOrder.ABCD, ByteOrder64.ABCDEFGH), (ByteOrder.CDAB, ByteOrder64.GHEFCDAB),
+                        (ByteOrder.BADC, ByteOrder64.BADCFEHG), (ByteOrder.DCBA, ByteOrder64.HGFEDCBA)):
+        value = [0x0102030405060708]
+        assert Codec(DataType.UINT64, short).encode(value) == Codec(DataType.UINT64, long).encode(value)
+    # only for the 64 bits types
+    for data_type in (DataType.UINT16, DataType.INT32, DataType.FLOAT32):
+        with pytest.raises(ValueError, match='ByteOrder64 is for a 64 bits type'):
+            Codec(data_type, ByteOrder64.CDABGHEF)
+    assert Codec(DataType.FLOAT64, ByteOrder64.CDABGHEF).byte_order is ByteOrder64.CDABGHEF

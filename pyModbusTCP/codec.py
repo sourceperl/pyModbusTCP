@@ -15,6 +15,10 @@ where A is the most significant byte of the value:
 For a 64 bits value, ``CDAB`` reverses the order of the 4 registers. For a 16 bits value, only the byte swap
 (``BADC``, ``DCBA``) changes something.
 
+A few devices store a 64 bits value in another order, like two 32 bits values in word swap (``CDABGHEF``): for
+these rare cases, :class:`ByteOrder64` gives the 8 orders of the 8 bytes (A to H) on 4 registers, for a
+:class:`Codec` of a 64 bits type only.
+
 .. code-block:: python
 
     from pyModbusTCP.codec import ByteOrder, Codec, DataType
@@ -30,7 +34,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 
-__all__ = ['ByteOrder', 'Codec', 'DataType', 'Number']
+__all__ = ['ByteOrder', 'ByteOrder64', 'Codec', 'DataType', 'Number']
 
 #: A value of a data type: an int, or a float for ``FLOAT32`` and ``FLOAT64``.
 Number = int | float
@@ -99,6 +103,36 @@ class ByteOrder(Enum):
         return self in (ByteOrder.BADC, ByteOrder.DCBA)
 
 
+class ByteOrder64(Enum):
+    """The order of the 8 bytes of a 64 bits value on 4 registers, A being the most significant byte.
+
+    For the rare devices that ByteOrder doesn't cover (only with a :class:`Codec` of UINT64, INT64 or FLOAT64). The
+    value of a member is its notation: the bytes in the order of the registers, 2 per register.
+    """
+
+    ABCDEFGH = 'ABCDEFGH'
+    """Big endian (like ByteOrder.ABCD)."""
+    CDABGHEF = 'CDABGHEF'
+    """Word swap in each 32 bits half (two 32 bits values in CDAB)."""
+    EFGHABCD = 'EFGHABCD'
+    """The two 32 bits halves swapped, each half big endian."""
+    GHEFCDAB = 'GHEFCDAB'
+    """The 4 registers reversed (like ByteOrder.CDAB)."""
+    BADCFEHG = 'BADCFEHG'
+    """Byte swap in each register (like ByteOrder.BADC)."""
+    DCBAHGFE = 'DCBAHGFE'
+    """Each 32 bits half little endian, the halves in big endian order."""
+    FEHGBADC = 'FEHGBADC'
+    """The halves swapped, byte swap in each register."""
+    HGFEDCBA = 'HGFEDCBA'
+    """Little endian (like ByteOrder.DCBA)."""
+
+    @property
+    def _mask(self) -> int:
+        # each order moves the byte i of the value to the position i ^ mask (so it's its own inverse)
+        return ord(self.value[0]) - ord('A')
+
+
 # data type -> (struct format of a value, number of registers)
 _FORMATS = {
     DataType.UINT16: ('H', 1), DataType.INT16: ('h', 1),
@@ -114,18 +148,21 @@ class Codec:
     A codec is immutable: create one per data type and byte order of a device, and reuse it.
 
     :param data_type: the type of the values
-    :param byte_order: the order of the bytes on the registers
-    :raises TypeError: if data_type is not a DataType, or byte_order not a ByteOrder
+    :param byte_order: the order of the bytes on the registers, a ByteOrder64 for a rare order of a 64 bits type
+    :raises TypeError: if data_type is not a DataType, or byte_order not a ByteOrder (or ByteOrder64)
+    :raises ValueError: for a ByteOrder64 with a type of 1 or 2 registers
     """
 
     data_type: DataType = DataType.UINT16
-    byte_order: ByteOrder = ByteOrder.ABCD
+    byte_order: ByteOrder | ByteOrder64 = ByteOrder.ABCD
 
     def __post_init__(self) -> None:
         if not isinstance(self.data_type, DataType):
             raise TypeError(f'data_type must be a DataType (like DataType.FLOAT32), not {self.data_type!r}')
-        if not isinstance(self.byte_order, ByteOrder):
+        if not isinstance(self.byte_order, (ByteOrder, ByteOrder64)):
             raise TypeError(f'byte_order must be a ByteOrder (like ByteOrder.CDAB), not {self.byte_order!r}')
+        if isinstance(self.byte_order, ByteOrder64) and self.data_type.words != 4:
+            raise ValueError(f'a ByteOrder64 is for a 64 bits type, not {self.data_type.value}: use a ByteOrder')
 
     @property
     def words(self) -> int:
@@ -143,6 +180,11 @@ class Codec:
 
     def _reorder(self, registers: Sequence[int]) -> list[int]:
         """The registers of a value: device order <-> ABCD order (the operation is its own inverse)."""
+        if isinstance(self.byte_order, ByteOrder64):
+            raw = b''.join(r.to_bytes(2, 'big') for r in registers)
+            mask = self.byte_order._mask
+            raw = bytes(raw[i ^ mask] for i in range(8))
+            return [int.from_bytes(raw[i:i + 2], 'big') for i in range(0, 8, 2)]
         regs = list(reversed(registers)) if self.byte_order.word_swap else list(registers)
         if self.byte_order.byte_swap:
             regs = [((r & 0xFF) << 8) | (r >> 8) for r in regs]

@@ -48,6 +48,33 @@ ByteOrder           Alias                   Meaning                     FLOAT32 
 For a 64 bits value, ``CDAB`` reverses the order of the 4 registers. To find the order of a device, read a known
 value with each order (``mbtcp-client read-holding 0 -T float32 -b CDAB``, see :doc:`tools`).
 
+A few devices store a 64 bits value in another order, like two 32 bits values in word swap. For these rare cases, a
+codec of a 64 bits type also takes a :class:`~pyModbusTCP.codec.ByteOrder64`, the 8 orders of the 8 bytes (``A`` to
+``H``) on the 4 registers:
+
+==================  ========================  ===============================================
+ByteOrder64         Registers                 Like
+==================  ========================  ===============================================
+``ABCDEFGH``        ``AB CD EF GH``           ``ByteOrder.ABCD``
+``CDABGHEF``        ``CD AB GH EF``           two 32 bits values in ``CDAB``
+``EFGHABCD``        ``EF GH AB CD``           the 32 bits halves swapped
+``GHEFCDAB``        ``GH EF CD AB``           ``ByteOrder.CDAB``
+``BADCFEHG``        ``BA DC FE HG``           ``ByteOrder.BADC``
+``DCBAHGFE``        ``DC BA HG FE``           two 32 bits values in ``DCBA``
+``FEHGBADC``        ``FE HG BA DC``           the halves swapped, byte swap
+``HGFEDCBA``        ``HG FE DC BA``           ``ByteOrder.DCBA``
+==================  ========================  ===============================================
+
+.. code-block:: python
+
+    from pyModbusTCP.codec import ByteOrder64
+
+    energy = Codec(DataType.UINT64, ByteOrder64.CDABGHEF)
+    energy.encode([0x0102030405060708])           # [0x0304, 0x0102, 0x0708, 0x0506]
+
+A ``ByteOrder64`` is only for a ``Codec``: the shortcuts of the server store and ``mbtcp-client`` take a
+``ByteOrder`` (use ``read_values()`` and ``write_values()`` with the codec in the store).
+
 Read and write floats with a client:
 
 .. code-block:: python

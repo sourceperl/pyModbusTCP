@@ -8,5 +8,5 @@ Values on several registers: types and byte orders. See :ref:`utils-codec` for a
     from pyModbusTCP.codec import ByteOrder, Codec, DataType
 
 .. automodule:: pyModbusTCP.codec
-   :members: Codec, DataType, ByteOrder, Number
+   :members: Codec, DataType, ByteOrder, ByteOrder64, Number
    :member-order: bysource
