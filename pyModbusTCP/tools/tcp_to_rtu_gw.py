@@ -31,12 +31,24 @@ HOW A REQUEST IS PROCESSED
 4. The answer is checked (CRC, same slave address, same function code), the
    address and CRC are removed, and the PDU is sent back to the TCP client.
 
+BROADCAST (unit id 0, with --allow-broadcast)
+---------------------------------------------
+A broadcast is a write to every slave of the bus, and no slave answers it. The
+gateway writes the frame on the bus, then answers the TCP client at once with
+the normal response of the function (like a slave would: the echo of the
+request for 0x05, 0x06, 0x15 and 0x16, the address and quantity for 0x0F and
+0x10). The client never waits for a timeout. The bus then stays silent for
+--broadcast-delay (default 0.1 s): the slaves execute the request before the
+next frame. Only these write functions can be broadcast (exception 0x01 for
+the others: a read has no meaning without an answer).
+
 ERRORS SEEN BY THE TCP CLIENT
 -----------------------------
 - Request refused by the gateway filters (see ACCESS CONTROL): Modbus exception
-  0x01 "Illegal Function" (--read-only, or an invalid function code: 0 or 0x80
-  to 0xFF) or 0x0A "Gateway Path Unavailable" (unit id 0 without
-  --allow-broadcast, or reserved unit id 248 to 255).
+  0x01 "Illegal Function" (--read-only, an invalid function code: 0 or 0x80
+  to 0xFF, or a broadcast of a function that is not a write) or 0x0A "Gateway
+  Path Unavailable" (unit id 0 without --allow-broadcast, or reserved unit id
+  248 to 255).
 - No valid answer from the slave before the timeout (-t): Modbus exception
   0x0B "Gateway Target Device Failed To Respond".
 - More than 16 requests waiting, more than 2 requests waiting from the same
@@ -89,9 +101,9 @@ count), so a request flood can't flood the log.
 
 LIMITATIONS
 -----------
-- Slaves never answer a broadcast request (--allow-broadcast): the client
-  gets exception 0x0B once the timeout has expired (a pyModbusTCP client
-  sends it with broadcast=True: it doesn't wait, and ignores this reply).
+- The response to a broadcast only means "written on the bus": no slave
+  confirms it (a pyModbusTCP client can also send it with broadcast=True, that
+  doesn't wait for this response).
 - Throughput is limited by the serial line: requests are served one at a time.
 
 USAGE
@@ -173,15 +185,22 @@ from ..constants import (
     ENCAPSULATED_INTERFACE_TRANSPORT,
     EXP_GATEWAY_PATH_UNAVAILABLE,
     EXP_ILLEGAL_FUNCTION,
+    MASK_WRITE_REGISTER,
     MEI_TYPE_READ_DEVICE_ID,
     READ_COILS,
     READ_DISCRETE_INPUTS,
     READ_HOLDING_REGISTERS,
     READ_INPUT_REGISTERS,
+    WRITE_FILE_RECORD,
+    WRITE_MULTIPLE_COILS,
+    WRITE_MULTIPLE_REGISTERS,
+    WRITE_SINGLE_COIL,
+    WRITE_SINGLE_REGISTER,
 )
 from ..server import (
     GatewayPathUnavailable,
     GatewayTargetFailed,
+    IllegalDataValue,
     MemoryStore,
     ModbusException,
     ModbusServer,
@@ -221,6 +240,15 @@ READ_ONLY_FUNCTIONS = (READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS,
 # unit id 0 is the broadcast address of a serial line, 248 to 255 are reserved
 BROADCAST_ADDRESS = 0
 MAX_SLAVE_ADDRESS = 247
+# functions that can be broadcast (writes, no answer from the slaves) -> size of their normal response, the start of
+# the request (None: the whole request, an echo)
+BROADCAST_FUNCTIONS: dict[int, int | None] = {
+    WRITE_SINGLE_COIL: 5, WRITE_SINGLE_REGISTER: 5, WRITE_MULTIPLE_COILS: 5, WRITE_MULTIPLE_REGISTERS: 5,
+    WRITE_FILE_RECORD: None, MASK_WRITE_REGISTER: 7,
+}
+# default silent delay of the bus after a broadcast (s): the slaves execute it before the next frame
+DEFAULT_BROADCAST_DELAY = 0.1
+MAX_BROADCAST_DELAY = 10.0
 
 
 def hexdump(data: bytes) -> str:
@@ -307,6 +335,12 @@ class RtuQuery:
         self.cancelled = False
         self.request = ModbusRTUFrame()
         self.response = ModbusRTUFrame()
+        # a broadcast request: set by the worker once it is written on the bus (there is no response frame)
+        self.sent = False
+
+    @property
+    def is_broadcast(self) -> bool:
+        return self.request.slave_address == BROADCAST_ADDRESS
 
 
 class FairQueue:
@@ -366,13 +400,19 @@ class ModbusSerialWorker:
     """A serial worker to manage I/O with RTU devices."""
 
     def __init__(self, port: Serial, timeout: float = 1.0, end_of_frame: float | None = None,
-                 allow_broadcast: bool = False, read_only: bool = False) -> None:
+                 allow_broadcast: bool = False, read_only: bool = False,
+                 broadcast_delay: float = DEFAULT_BROADCAST_DELAY) -> None:
         # public
         self.serial_port = port
         self.timeout = timeout
         # request filters (see is_allowed())
         self.allow_broadcast = allow_broadcast
         self.read_only = read_only
+        # silent delay of the bus after a broadcast
+        if isinstance(broadcast_delay, bool) or not isinstance(broadcast_delay, (int, float)) \
+                or not 0 <= broadcast_delay <= MAX_BROADCAST_DELAY:
+            raise ValueError(f'broadcast delay must be between 0 and {MAX_BROADCAST_DELAY:g} s')
+        self.broadcast_delay = float(broadcast_delay)
         # silent interval between two frames on the bus
         self.interframe_delay = t35(port.baudrate, port.bytesize, port.parity, port.stopbits)
         # end of frame delay: auto-computed from baudrate if not set
@@ -443,6 +483,12 @@ class ModbusSerialWorker:
         port.write(request)
         port.flush()
         logger.debug('RTU Tx %s', hexdump(request))
+        if request[0] == BROADCAST_ADDRESS:
+            # no slave answers a broadcast: no wait for an answer, the bus stays silent for broadcast_delay (the
+            # interframe delay is added before the next frame)
+            self._last_bus_activity = time.monotonic() + self.broadcast_delay
+            logger.debug('RTU broadcast, bus silent for %.3f s', self.broadcast_delay)
+            return b''
         # wait for the first byte of data until timeout delay
         port.timeout = self.timeout
         rx_raw: bytes = port.read(1)
@@ -478,6 +524,7 @@ class ModbusSerialWorker:
             try:
                 if self._ensure_port_open():
                     rtu_query.response.raw = self._transaction(rtu_query.request.raw)
+                    rtu_query.sent = True
                 else:
                     # port lost and not yet back: fail fast, the client gets a modbus exception
                     rtu_query.response.raw = b''
@@ -519,9 +566,13 @@ class ModbusSerialWorker:
         func_code = pdu[0]
         if not 0x01 <= func_code <= 0x7F:
             return EXP_ILLEGAL_FUNCTION
-        # broadcast: a write to every slave of the bus (never allowed in read-only mode)
-        if unit_id == BROADCAST_ADDRESS and (self.read_only or not self.allow_broadcast):
-            return EXP_GATEWAY_PATH_UNAVAILABLE
+        # broadcast: a write to every slave of the bus (never allowed in read-only mode), only for the functions
+        # that write (no slave answers: a read has no meaning)
+        if unit_id == BROADCAST_ADDRESS:
+            if self.read_only or not self.allow_broadcast:
+                return EXP_GATEWAY_PATH_UNAVAILABLE
+            if func_code not in BROADCAST_FUNCTIONS:
+                return EXP_ILLEGAL_FUNCTION
         # reserved addresses on a serial line
         if unit_id > MAX_SLAVE_ADDRESS:
             return EXP_GATEWAY_PATH_UNAVAILABLE
@@ -584,6 +635,13 @@ class ModbusSerialWorker:
         :returns: the response PDU of the slave
         :raises ModbusException: gateway overloaded or serial worker not responding (0x0A), no valid answer (0x0B)
         """
+        # a broadcast gets the normal response of its function: the start of the request (checked before the bus)
+        broadcast_response = None
+        if req.ctx.unit_id == BROADCAST_ADDRESS:
+            size = BROADCAST_FUNCTIONS[req.pdu[0]]
+            if size is not None and len(req.pdu) < size:
+                raise IllegalDataValue()
+            broadcast_response = req.pdu if size is None else req.pdu[:size]
         # init a serial exchange from the request
         rtu_query = RtuQuery(host)
         rtu_query.request.build(raw_pdu=req.pdu, slave_ad=req.ctx.unit_id)
@@ -602,12 +660,29 @@ class ModbusSerialWorker:
             rtu_query.cancelled = True
             logger.error('Serial worker not responding (unit %d)', rtu_query.request.slave_address)
             raise GatewayPathUnavailable()
+        # broadcast: written on the bus (no slave answers), or not (serial port lost)
+        if broadcast_response is not None:
+            if rtu_query.sent:
+                return broadcast_response
+            logger.debug('Broadcast not sent (serial port unavailable)')
+            raise GatewayTargetFailed()
         # check receive frame status
         if rtu_query.response.is_response_to(rtu_query.request):
             return rtu_query.response.pdu
         # slave failed to respond
         logger.debug('No valid answer from unit %d', rtu_query.request.slave_address)
         raise GatewayTargetFailed()
+
+
+def broadcast_delay(value: str) -> float:
+    """argparse type: the silent delay of the bus after a broadcast (0 to MAX_BROADCAST_DELAY s)."""
+    try:
+        delay = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f'{value!r} is not a number') from None
+    if not 0 <= delay <= MAX_BROADCAST_DELAY:
+        raise argparse.ArgumentTypeError(f'{value!r} out of 0 to {MAX_BROADCAST_DELAY:g} s')
+    return delay
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -627,7 +702,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--max-connections-per-host', type=int, default=16,
                         help='max number of simultaneous connections of a client host (default: 16)')
     parser.add_argument('--allow-broadcast', action='store_true',
-                        help='relay broadcast requests (unit id 0) to every slave')
+                        help='relay broadcast requests (unit id 0, write functions only) to every slave, answered '
+                             'at once')
+    parser.add_argument('--broadcast-delay', type=broadcast_delay, default=DEFAULT_BROADCAST_DELAY, metavar='S',
+                        help='silent delay of the bus after a broadcast, 0 to '
+                             f'{MAX_BROADCAST_DELAY:g} s (default: {DEFAULT_BROADCAST_DELAY:g})')
     parser.add_argument('-b', '--baudrate', type=positive_int, default=9600, help='serial rate (default: 9600)')
     parser.add_argument('--bytesize', type=int, choices=(7, 8), default=8, help='data bits (default: 8)')
     parser.add_argument('--parity', choices=('N', 'E', 'O'), default='N', help='parity (default: N)')
@@ -663,7 +742,8 @@ def main(argv: list[str] | None = None) -> int:
 
         # init serial worker
         serial_worker = ModbusSerialWorker(serial_port, args.timeout, args.eof,
-                                           allow_broadcast=args.allow_broadcast, read_only=args.read_only)
+                                           allow_broadcast=args.allow_broadcast, read_only=args.read_only,
+                                           broadcast_delay=args.broadcast_delay)
         logger.debug('Interframe delay %.4f s, end of frame delay %.4f s',
                      serial_worker.interframe_delay, serial_worker.end_of_frame)
 

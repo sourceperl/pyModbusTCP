@@ -80,6 +80,22 @@ Examples
     # an RTU master on /dev/ttyUSB0 reads the Modbus/TCP server 192.168.1.10 (the gateway is the RTU slave 30)
     mbtcp-rtu2tcp -a 30 -H 192.168.1.10 /dev/ttyUSB0
 
+Broadcast through mbtcp-tcp2rtu
+-------------------------------
+
+The unit id 0 is the broadcast address of the serial line: every slave executes the request, none of them answers.
+With ``--allow-broadcast``, the gateway writes a broadcast request on the bus and answers the TCP client at once with
+the normal response of the function (the echo of the request for 0x05, 0x06, 0x15 and 0x16, the address and the
+quantity for 0x0F and 0x10): a client never waits for a timeout. The bus then stays silent for
+``--broadcast-delay`` seconds (default 0.1), so that the slaves execute the request before the next frame.
+
+A broadcast of another function (a read) is refused with exception 0x01, and a broadcast is never relayed with
+``--read-only``. The response only means "written on the bus": no slave confirms a broadcast.
+
+.. code-block:: bash
+
+    mbtcp-tcp2rtu --allow-broadcast --broadcast-delay 0.2 -b 19200 /dev/ttyUSB0
+
 RS-485 mode of the gateways
 ---------------------------
 
@@ -209,7 +225,8 @@ The server and the TCP to RTU gateway are designed to be safe by default:
 - they listen on ``localhost`` and on port 5020 by default: use ``-H`` with the address of the network interface
   that needs it (``0.0.0.0`` only if every network of the host is trusted);
 - ``-A/--allow`` restricts the clients to some IP addresses or networks, ``--read-only`` refuses every write;
-- the TCP to RTU gateway refuses broadcast requests (unit id 0) unless ``--allow-broadcast`` is set;
+- the TCP to RTU gateway refuses broadcast requests (unit id 0) unless ``--allow-broadcast`` is set (and then only
+  for the write functions);
 - ``--max-connections-per-host`` (default 16) keeps a single client host from taking every connection, and the
   TCP to RTU gateway shares the serial line between the client hosts: their requests are served in turn (round
   robin), with at most 2 pending requests per host;

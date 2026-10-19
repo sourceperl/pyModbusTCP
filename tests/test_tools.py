@@ -1,5 +1,6 @@
 """Tests of the command line tools (pyModbusTCP.tools)."""
 
+import argparse
 import logging
 import os
 import queue
@@ -365,6 +366,67 @@ class SilentSerial:
     def read(self, size: int = 1) -> bytes:
         time.sleep(self.timeout)
         return b''
+
+
+class TimedSerial(SilentSerial):
+    """A serial port where no slave answers, that records the frames written and their time."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.writes: list[tuple[float, bytes]] = []
+
+    def write(self, data: bytes) -> int:
+        self.writes.append((time.monotonic(), bytes(data)))
+        return len(data)
+
+
+def test_tcp2rtu_broadcast() -> None:
+    """A broadcast write gets its normal response at once, the bus stays silent for broadcast_delay after it."""
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import tcp_to_rtu_gw
+    port = TimedSerial()
+    worker = tcp_to_rtu_gw.ModbusSerialWorker(port, timeout=1.0, allow_broadcast=True,  # type: ignore[arg-type]
+                                              broadcast_delay=0.3)
+    thread = threading.Thread(target=worker.loop, daemon=True)
+    thread.start()
+    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, functions={}, fallback=worker.relay_request)
+    _, tcp_port = srv.start()
+    try:
+        c = ModbusClient(host='127.0.0.1', port=tcp_port, unit_id=0, timeout=3.0)
+        # the normal response of each function, at once (no slave answers a broadcast)
+        for pdu, response in (('06000a002a', '06000a002a'), ('0f000000030105', '0f00000003'),
+                              ('10000000020400010002', '1000000002'), ('16000a00ff0000', '16000a00ff0000')):
+            start = time.monotonic()
+            assert c.custom_request(bytes.fromhex(pdu)) == bytes.fromhex(response), pdu
+            assert time.monotonic() - start < 0.9, 'answered before the timeout of the serial line'
+        assert c.write_single_coil(1, True)
+        # the frames are on the bus, with the broadcast address, the next one after broadcast_delay
+        frames = [frame for _, frame in port.writes]
+        assert [frame[0] for frame in frames] == [0] * 5
+        assert frames[0] == rtu_frame(0, bytes.fromhex('06000a002a'))
+        gaps = [b[0] - a[0] for a, b in zip(port.writes, port.writes[1:])]
+        assert min(gaps) >= 0.3
+        # a broadcast of a read (no answer: no meaning), or a malformed write: refused, never on the bus
+        assert c.read_holding_registers(0, 1) is None and c.last_except == 0x01
+        assert c.custom_request(bytes.fromhex('06000a')) is None and c.last_except == 0x03
+        assert len(port.writes) == 5
+        c.close()
+    finally:
+        worker.stop()
+        srv.stop()
+        thread.join(5.0)
+
+
+def test_tcp2rtu_broadcast_delay_checks() -> None:
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import tcp_to_rtu_gw
+    for delay in (-0.1, 11, float('nan'), True):
+        with pytest.raises(ValueError):
+            tcp_to_rtu_gw.ModbusSerialWorker(SilentSerial(), broadcast_delay=delay)  # type: ignore[arg-type]
+    assert tcp_to_rtu_gw.broadcast_delay('0') == 0.0
+    for text in ('-1', '11', 'nan', 'x'):
+        with pytest.raises(argparse.ArgumentTypeError):
+            tcp_to_rtu_gw.broadcast_delay(text)
 
 
 def connect_from(source_ip: str, port: int) -> socket.socket:

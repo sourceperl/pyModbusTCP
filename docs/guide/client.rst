@@ -194,6 +194,9 @@ a reply:
 
 Without ``broadcast``, the unit id 0 is a usual address: many Modbus/TCP devices accept it as their own.
 
+``mbtcp-tcp2rtu --allow-broadcast`` answers a broadcast at once with the normal response of the function (see
+:doc:`tools`): a client without ``broadcast=True`` (or another Modbus/TCP software) doesn't wait either.
+
 Handle errors
 -------------
 
