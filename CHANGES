@@ -17,7 +17,8 @@ Revision history for pyModbusTCP
     - client: the function code of a reply must match the request (MB_RECV_ERR otherwise).
     - server: the typed shortcuts of the store (read_float32(), write_int32()...) take a byte_order (ByteOrder,
       default ABCD) instead of big_endian: big_endian=False is now ByteOrder.CDAB, BADC and DCBA are available.
-      New shortcuts read/write_int16() (1 register, no byte order), read/write_uint64() and read/write_int64().
+      New shortcuts read/write_uint16() and read/write_int16() (1 register, no byte order), read/write_uint64() and
+      read/write_int64(): one shortcut for each DataType.
     - examples: client_serial_gw.py and server_serial_gw.py are removed (replaced by the gateways of the tools).
     - server/tools: an allow list entry with host bits set (like "192.168.1.5/24", often a typo for one address)
       is refused (ValueError, or exit status 2 for -A/--allow): write "192.168.1.0/24" or "192.168.1.5".

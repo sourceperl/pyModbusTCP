@@ -477,9 +477,9 @@ class RegistersAccess(SpaceAccess):
     """The access of the application to a space of registers, with typed values on 1, 2 or 4 registers.
 
     read_values() and write_values() take a :class:`~pyModbusTCP.codec.Codec` (any type and byte order). The
-    shortcuts have one method per type: read_int16() and write_int16() on 1 register, read_uint32(),
+    shortcuts have one method per type: read_uint16(), write_int16()... on 1 register, read_uint32(),
     write_float64()... on 2 or 4 registers, with a :class:`~pyModbusTCP.codec.ByteOrder` (default ``ABCD``: the first
-    register holds the most significant word). An uint16 is a register: read() and write().
+    register holds the most significant word).
     """
 
     def read_values(self, address: int, codec: Codec, count: int = 1) -> list[Number]:
@@ -496,6 +496,14 @@ class RegistersAccess(SpaceAccess):
         :raises IllegalDataAddress: if a register is out of the space
         """
         self.write(address, codec.encode(values))
+
+    def read_uint16(self, address: int) -> int:
+        """Read an unsigned 16 bits int on 1 register (like read(address)[0])."""
+        return int(self.read_values(address, _UINT16)[0])
+
+    def write_uint16(self, address: int, value: int) -> None:
+        """Write an unsigned 16 bits int on 1 register (ValueError out of 0 to 65535)."""
+        self.write_values(address, [value], _UINT16)
 
     def read_int16(self, address: int) -> int:
         """Read a signed 16 bits int (2's complement) on 1 register."""
@@ -555,6 +563,7 @@ class RegistersAccess(SpaceAccess):
 
 
 # a 16 bits value is on 1 register: no word order (a byte swapped register: read_values() with a Codec)
+_UINT16 = Codec(DataType.UINT16)
 _INT16 = Codec(DataType.INT16)
 
 

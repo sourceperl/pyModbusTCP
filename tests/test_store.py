@@ -307,7 +307,15 @@ class TestTypedAccess(unittest.TestCase):
 
     def test_16_and_64_bits(self) -> None:
         regs = MemoryStore(16).app.holding_registers
-        # int16: one register, no byte order
+        # uint16 and int16: one register, no byte order
+        regs.write_uint16(1, 0xFFFB)
+        self.assertEqual(regs.read_uint16(1), 0xFFFB)
+        self.assertEqual(regs.read_int16(1), -5)
+        for value in (65536, -1):
+            with self.assertRaises(ValueError):
+                regs.write_uint16(1, value)
+        with self.assertRaises(TypeError):
+            regs.write_uint16(1, 1.5)  # type: ignore[arg-type]
         regs.write_int16(0, -5)
         self.assertEqual(regs.read(0), [0xFFFB])
         self.assertEqual(regs.read_int16(0), -5)

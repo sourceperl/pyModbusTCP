@@ -107,16 +107,17 @@ register holds the most significant word):
     regs.write_values(20, [230.4, 231.0, 229.8], VOLTS)    # registers 20 to 25, atomic
     volts = regs.read_values(20, VOLTS, 3)
 
-    regs.write_int16(30, -40)             # signed 16 bits, register 30 (an uint16 is a register: write())
+    regs.write_uint16(31, 500)            # unsigned 16 bits, register 31 (like write(31, [500]))
+    regs.write_int16(30, -40)             # signed 16 bits, register 30
     regs.write_float32(0, 230.4)          # IEEE 754 single precision, registers 0 and 1
     regs.write_int32(2, -1500)            # 2's complement, registers 2 and 3
     regs.write_uint32(4, 123456, ByteOrder.CDAB)     # the least significant word first
     regs.write_uint64(6, 12_345_678_901)  # 64 bits counter, registers 6 to 9
     total = regs.read_float64(10)         # double precision, registers 10 to 13
 
-There is a shortcut for each type of :class:`~pyModbusTCP.codec.DataType`, except ``UINT16`` (``read()`` and
-``write()``). ``read_int16()`` and ``write_int16()`` have no byte order: a 16 bits value is on 1 register (for a
-register with its bytes swapped, use ``read_values()`` with ``Codec(DataType.INT16, ByteOrder.BADC)``).
+There is a shortcut for each type of :class:`~pyModbusTCP.codec.DataType`. The 16 bits ones (``read_uint16()``,
+``write_int16()``...) have no byte order: a 16 bits value is on 1 register (for a register with its bytes swapped, use
+``read_values()`` with ``Codec(DataType.INT16, ByteOrder.BADC)``).
 
 Transactions
 ------------
