@@ -386,6 +386,15 @@ class TimedSerial(SilentSerial):
         return len(data)
 
 
+def wait_writes(port: TimedSerial, count: int, timeout: float = 10.0) -> None:
+    """Wait until count frames are written on port (no fixed delay: a loaded CI oversleeps), then a bit more for
+    any frame in excess."""
+    deadline = time.monotonic() + timeout
+    while len(port.writes) < count and time.monotonic() < deadline:
+        time.sleep(0.05)
+    time.sleep(0.5)
+
+
 @contextlib.contextmanager
 def broadcast_gateway(port: Any, **kwargs: Any) -> Generator[int, None, None]:
     """A gateway (worker thread and TCP server) on port that relays broadcasts, yields its TCP port."""
@@ -415,7 +424,7 @@ def test_tcp2rtu_broadcast() -> None:
             start = time.monotonic()
             assert c.custom_request(bytes.fromhex(pdu)) == bytes.fromhex(response), pdu
             assert time.monotonic() - start < 0.2, 'answered at once, before the write on the bus'
-        time.sleep(1.2)
+        wait_writes(port, 4)
         # the frames are on the bus, with the broadcast address, the next one after broadcast_delay
         frames = [frame for _, frame in port.writes]
         assert [frame[0] for frame in frames] == [0] * 4
@@ -426,18 +435,18 @@ def test_tcp2rtu_broadcast() -> None:
         assert c.read_holding_registers(0, 1) is None and c.last_except == 0x01
         assert c.custom_request(bytes.fromhex('06000a')) is None and c.last_except == 0x03
         assert len(port.writes) == 4
-        # a burst: the buffer takes a few broadcasts (4, and the one the worker holds), then the next ones are
-        # refused at once (busy)
+        # a burst on an idle bus: the buffer takes a few broadcasts (4, the one the worker holds during the silence of
+        # the bus, and the one it may have written already), then the next ones are refused at once (busy)
         results = []
         for i in range(8):
             start = time.monotonic()
             results.append(c.write_single_register(i, i))
             assert time.monotonic() - start < 0.2
         accepted = results.count(True)
-        assert results == [True] * accepted + [False] * (8 - accepted) and 4 <= accepted <= 5
+        assert results == [True] * accepted + [False] * (8 - accepted) and 4 <= accepted <= 6
         assert c.last_except == 0x06
         # the accepted ones are all written, in order
-        time.sleep(0.3 * accepted + 0.3)
+        wait_writes(port, 4 + accepted)
         assert [frame[3] for _, frame in port.writes[4:]] == list(range(accepted))
         c.close()
 
@@ -472,11 +481,11 @@ def test_tcp2rtu_broadcast_flood() -> None:
         flooder.close()
         stop = time.perf_counter()
         assert refused > 0 and accepted <= 1 + 1.0 / 0.3 + 4 + 1
-        # the backlog is the buffer at most (4, and the one the worker holds): written in 5 * broadcast_delay,
-        # nothing after
-        time.sleep(5 * 0.3 + 0.4)
+        # every accepted broadcast is written, the refused ones never are
+        wait_writes(port, accepted)
         assert len(port.writes) == accepted
-        assert max(t for t, _ in port.writes) - stop < 5 * 0.3 + 0.1
+        # the backlog after the flood is the buffer at most: 4, and the one the worker holds
+        assert sum(t > stop for t, _ in port.writes) <= 4 + 1
 
 
 def test_tcp2rtu_broadcast_delay_checks() -> None:
