@@ -42,9 +42,11 @@ from .errors import (
     IllegalDataValue,
     PDUDecodeError,
 )
-from .store import DataStore, RequestContext, Space
+from .store import DataStore, RequestContext, Space, Transaction
 
 if TYPE_CHECKING:
+    from contextlib import AbstractContextManager
+
     from .device_id import DeviceIdentification
 
 
@@ -87,7 +89,7 @@ class Request:
         except struct.error as e:
             raise DataFormatError(f'unable to build the response PDU (fmt: {fmt}, values: {args}): {e}') from None
 
-    def transaction(self) -> Any:
+    def transaction(self) -> AbstractContextManager[Transaction]:
         """A transaction of the store, with the context of this request."""
         return self.store.transaction(self.ctx)
 

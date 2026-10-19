@@ -10,7 +10,7 @@ full access. A refused access raises a ModbusException (the client gets the exce
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Generator, Iterable
 from contextlib import contextmanager
 from typing import Any, Literal
 
@@ -27,6 +27,8 @@ class _CheckedTransaction(Transaction):
     """A transaction that asks the wrapper before each access."""
 
     def __init__(self, wrapper: StoreWrapper, tx: Transaction, ctx: RequestContext) -> None:
+        # ctx (public, of Transaction) is "RequestContext | None"; _ctx keeps the type of a client request (never
+        # None here) for check(), without a narrowed override of ctx (a mutable attribute)
         self.ctx = ctx
         self._ctx = ctx
         self._wrapper = wrapper
@@ -66,7 +68,7 @@ class StoreWrapper(DataStore):
         """Check an access of a client request: raise a ModbusException to refuse it (default: allowed)."""
 
     @contextmanager
-    def transaction(self, ctx: RequestContext | None = None) -> Iterator[Transaction]:
+    def transaction(self, ctx: RequestContext | None = None) -> Generator[Transaction, None, None]:
         with self.store.transaction(ctx) as tx:
             yield tx if ctx is None else _CheckedTransaction(self, tx, ctx)
 

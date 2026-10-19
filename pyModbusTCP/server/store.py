@@ -18,8 +18,8 @@ from __future__ import annotations
 import queue
 import threading
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Generator, Iterable, Sequence
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, NamedTuple
@@ -126,7 +126,7 @@ class DataStore(ABC):
     """Where the server reads and writes the Modbus data: the base class of every store and store wrapper."""
 
     @abstractmethod
-    def transaction(self, ctx: RequestContext | None = None) -> Any:
+    def transaction(self, ctx: RequestContext | None = None) -> AbstractContextManager[Transaction]:
         """Return a context manager that runs an atomic transaction (it gives a Transaction object).
 
         :param ctx: the context of a client request, None for the application
@@ -305,7 +305,7 @@ class MemoryStore(DataStore):
     # transactions
 
     @contextmanager
-    def transaction(self, ctx: RequestContext | None = None) -> Iterator[Transaction]:
+    def transaction(self, ctx: RequestContext | None = None) -> Generator[Transaction, None, None]:
         current: _MemoryTransaction | None = getattr(self._local, 'tx', None)
         if current is not None:
             # nested in the same thread (like a mapped function that uses the store): part of the same transaction
@@ -544,7 +544,7 @@ class AppAccess:
         self.holding_registers = RegistersAccess(store, Space.HOLDING_REGISTERS)
         self.input_registers = RegistersAccess(store, Space.INPUT_REGISTERS)
 
-    def transaction(self) -> Any:
+    def transaction(self) -> AbstractContextManager[Transaction]:
         """An atomic transaction of the application, to change several values (of several spaces) at once."""
         return self.store.transaction(None)
 

@@ -7,7 +7,7 @@ import math
 import signal
 import sys
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from types import FrameType
@@ -255,7 +255,7 @@ def slave_address(value: str) -> int:
 
 
 @contextmanager
-def stop_on_sigterm(stop: Callable[[], None], log: logging.Logger) -> Iterator[None]:
+def stop_on_sigterm(stop: Callable[[], None], log: logging.Logger) -> Generator[None, None, None]:
     """In this block, SIGTERM (systemd, docker stop, kill...) calls stop(): a clean shutdown, like Ctrl-C.
 
     The previous handler is restored at the end. Only the main thread can set a signal handler: elsewhere (a tool run
