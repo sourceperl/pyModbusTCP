@@ -21,7 +21,7 @@ from ._common import logger
 from ._errors import ModbusExcept, NetworkError
 
 # broadcast requests whose late reply is ignored (see _recv_pdu()): the last ones sent, for a limited time
-BROADCAST_IDS_MAX = 64
+BROADCAST_IDS_MAX = 128
 BROADCAST_REPLY_DELAY = 10.0
 
 
@@ -45,6 +45,8 @@ class ClientTransportMixin:
     # transaction id -> time of the send (time.monotonic()) of the last broadcast requests, the oldest first: a late
     # reply to one of them is ignored (see _recv_pdu())
     _broadcast_ids: dict[int, float]
+    _broadcast_interval: float
+    _last_broadcast: float
 
     @property
     def is_open(self) -> bool:
@@ -180,13 +182,18 @@ class ClientTransportMixin:
         :type pdu: bytes
         """
         # for auto_open mode, check TCP and open on need
+        # never faster than broadcast_interval: a serial line can't take broadcasts faster than its slaves execute them
+        wait = self._last_broadcast + self._broadcast_interval - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
         if self.auto_open and not self.is_open:
             self._open()
         tx_frame = self._add_mbap(pdu, unit_id=0)
         self._send(tx_frame)
         # a gateway may reply anyway (an echo, an exception after its timeout): see _recv_pdu()
         self._broadcast_ids.pop(self._transaction_id, None)
-        self._broadcast_ids[self._transaction_id] = time.monotonic()
+        self._last_broadcast = time.monotonic()
+        self._broadcast_ids[self._transaction_id] = self._last_broadcast
         while len(self._broadcast_ids) > BROADCAST_IDS_MAX:
             del self._broadcast_ids[next(iter(self._broadcast_ids))]
         self._on_tx_rx(frame=tx_frame, is_tx=True)

@@ -570,7 +570,7 @@ class TestBroadcast(unittest.TestCase):
     def test_burst_of_broadcasts(self) -> None:
         """30 broadcasts answered late (more than the 16 of the first version): the next request still succeeds."""
         gw = self.gateway(lambda frame: frame)
-        c = ModbusClient(host='127.0.0.1', port=gw.port, unit_id=1, timeout=2.0)
+        c = ModbusClient(host='127.0.0.1', port=gw.port, unit_id=1, timeout=2.0, broadcast_interval=0)
         self.addCleanup(c.close)
         for value in range(30):
             self.assertTrue(c.write_single_register(10, value, broadcast=True))
@@ -595,12 +595,35 @@ class TestBroadcast(unittest.TestCase):
         self.assertEqual(c._broadcast_ids, {}, 'cleared by close()')
         # at most BROADCAST_IDS_MAX ids are kept, the oldest are dropped
         gw = self.gateway(echo_unicast)
-        c = ModbusClient(host='127.0.0.1', port=gw.port, timeout=2.0)
+        c = ModbusClient(host='127.0.0.1', port=gw.port, timeout=2.0, broadcast_interval=0)
         self.addCleanup(c.close)
         for _ in range(_transport.BROADCAST_IDS_MAX + 10):
             c.write_single_register(0, 1, broadcast=True)
         self.assertEqual(len(c._broadcast_ids), _transport.BROADCAST_IDS_MAX)
         self.assertEqual(list(c._broadcast_ids)[-1], c._transaction_id)
+
+    def test_broadcast_interval(self) -> None:
+        """Two broadcasts are at least broadcast_interval apart (default 0.1 s), the other requests never wait."""
+        gw = self.gateway(echo_unicast)
+        c = ModbusClient(host='127.0.0.1', port=gw.port, timeout=2.0, broadcast_interval=0.2)
+        self.addCleanup(c.close)
+        self.assertTrue(c.open())
+        start = time.monotonic()
+        for _ in range(4):
+            self.assertTrue(c.write_single_register(0, 1, broadcast=True))
+        self.assertGreaterEqual(time.monotonic() - start, 0.6, '3 intervals between 4 broadcasts')
+        start = time.monotonic()
+        self.assertTrue(c.write_single_register(0, 1))
+        self.assertLess(time.monotonic() - start, 0.15, 'a normal request doesn\'t wait')
+        # settings
+        self.assertEqual(ModbusClient().broadcast_interval, 0.15)
+        c.broadcast_interval = 0
+        self.assertIn('broadcast_interval=0', repr(c))
+        for value in (-0.1, 11, float('nan')):
+            with self.assertRaises(ValueError):
+                c.broadcast_interval = value
+        with self.assertRaises(TypeError):
+            ModbusClient(broadcast_interval='1')  # type: ignore[arg-type]
 
     def test_unexpected_reply_still_closes(self) -> None:
         """A frame with an unknown transaction id is never ignored: the connection is closed, as before."""

@@ -92,6 +92,11 @@ quantity for 0x0F and 0x10): a client never waits for a timeout. The bus then st
 A broadcast of another function (a read) is refused with exception 0x01, and a broadcast is never relayed with
 ``--read-only``. The response only means "written on the bus": no slave confirms a broadcast.
 
+A broadcast is never queued behind another one: while a broadcast waits for the bus, is written, or during the silent
+delay after it, the next one gets exception 0x06 (slave device busy) at once. A client that sends broadcasts too fast
+never builds a backlog of old writes, applied long after it stopped (a pyModbusTCP client spaces its broadcasts by
+``broadcast_interval``, 0.15 s by default).
+
 .. code-block:: bash
 
     mbtcp-tcp2rtu --allow-broadcast --broadcast-delay 0.2 -b 19200 /dev/ttyUSB0

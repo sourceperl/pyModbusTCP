@@ -83,6 +83,11 @@ filters are logged once, then once per 10 s at most, so a request flood can't fl
 A request with an invalid function code (0, or 0x80 to 0xFF: the exception flag of a reply) gets the exception 0x01
 (illegal function) and is never written on the serial line.
 
+Broadcast requests (unit id 0, only with `--allow-broadcast`) are never queued behind each other: while a broadcast
+waits for the line, is written, or while the line is silent after it (`--broadcast-delay`), the next one gets the
+exception 0x06 (slave device busy) at once. A client that sends broadcasts faster than the line can take them never
+builds a backlog of old writes, applied long after it stopped.
+
 With N client hosts that send requests at the same time, each one gets 1/N of the serial line: many hosts can
 still slow down the others. As for the server, `--allow` and the firewall are the real protections.
 

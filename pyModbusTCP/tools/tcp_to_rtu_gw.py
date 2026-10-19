@@ -41,6 +41,10 @@ request for 0x05, 0x06, 0x15 and 0x16, the address and quantity for 0x0F and
 --broadcast-delay (default 0.1 s): the slaves execute the request before the
 next frame. Only these write functions can be broadcast (exception 0x01 for
 the others: a read has no meaning without an answer).
+A broadcast is never queued behind another one: while a broadcast waits for
+the bus, is written, or during the silent delay after it, the next one gets
+exception 0x06 "Slave Device Busy" at once (a flood of broadcasts never builds
+a backlog of old writes).
 
 ERRORS SEEN BY THE TCP CLIENT
 -----------------------------
@@ -54,6 +58,8 @@ ERRORS SEEN BY THE TCP CLIENT
 - More than 16 requests waiting, more than 2 requests waiting from the same
   client host, or serial worker unavailable: Modbus exception 0x0A "Gateway
   Path Unavailable".
+- A broadcast while the bus is busy with another one: Modbus exception 0x06
+  "Slave Device Busy".
 
 SERIAL PORT FAILURE
 -------------------
@@ -205,6 +211,7 @@ from ..server import (
     ModbusException,
     ModbusServer,
     Request,
+    SlaveDeviceBusy,
 )
 from ..server._common import LogThrottle, host_key
 from ..utils import crc16
@@ -429,6 +436,11 @@ class ModbusSerialWorker:
         self._refused_log = LogThrottle(logger, level=logging.INFO)
         self._host_busy_log = LogThrottle(logger)
         self._overloaded_log = LogThrottle(logger)
+        self._broadcast_busy_log = LogThrottle(logger, level=logging.INFO)
+        # broadcasts: one at a time (waiting for the bus or written), and none while the bus is silent after one
+        self._broadcast_lock = Lock()
+        self._broadcast_pending = False
+        self._broadcast_quiet_until = 0.0
         # worker stop flag
         self._stop = Event()
         self._last_bus_activity = 0.0
@@ -487,6 +499,8 @@ class ModbusSerialWorker:
             # no slave answers a broadcast: no wait for an answer, the bus stays silent for broadcast_delay (the
             # interframe delay is added before the next frame)
             self._last_bus_activity = time.monotonic() + self.broadcast_delay
+            with self._broadcast_lock:
+                self._broadcast_quiet_until = self._last_bus_activity
             logger.debug('RTU broadcast, bus silent for %.3f s', self.broadcast_delay)
             return b''
         # wait for the first byte of data until timeout delay
@@ -633,15 +647,53 @@ class ModbusSerialWorker:
 
         :param host: client host of the request (see host_key()), the serial line is shared in turn between hosts
         :returns: the response PDU of the slave
-        :raises ModbusException: gateway overloaded or serial worker not responding (0x0A), no valid answer (0x0B)
+        :raises ModbusException: gateway overloaded or serial worker not responding (0x0A), no valid answer (0x0B),
+            broadcast while the bus is busy with another one (0x06)
         """
-        # a broadcast gets the normal response of its function: the start of the request (checked before the bus)
-        broadcast_response = None
         if req.ctx.unit_id == BROADCAST_ADDRESS:
-            size = BROADCAST_FUNCTIONS[req.pdu[0]]
-            if size is not None and len(req.pdu) < size:
-                raise IllegalDataValue()
-            broadcast_response = req.pdu if size is None else req.pdu[:size]
+            return self._relay_broadcast(req, host)
+        rtu_query = self._run_query(req, host)
+        # check receive frame status
+        if rtu_query.response.is_response_to(rtu_query.request):
+            return rtu_query.response.pdu
+        # slave failed to respond
+        logger.debug('No valid answer from unit %d', rtu_query.request.slave_address)
+        raise GatewayTargetFailed()
+
+    def _relay_broadcast(self, req: Request, host: str) -> bytes:
+        """Relay a broadcast request: written on the bus, answered at once with the normal response of its function.
+
+        A broadcast is never queued behind another one: while a broadcast waits for the bus, is written, or while the
+        bus is silent after it (broadcast_delay), the next one gets exception 0x06 (slave device busy) at once. So a
+        client that sends broadcasts faster than the bus can take them never builds a backlog of old writes.
+        """
+        # the normal response of the function: the start of the request (checked before the bus)
+        size = BROADCAST_FUNCTIONS[req.pdu[0]]
+        if size is not None and len(req.pdu) < size:
+            raise IllegalDataValue()
+        response = req.pdu if size is None else req.pdu[:size]
+        with self._broadcast_lock:
+            if self._broadcast_pending or time.monotonic() < self._broadcast_quiet_until:
+                self._broadcast_busy_log.event('Broadcast refused, the bus is busy with a previous one: %d '
+                                               'request(s) (last from %s)', req.ctx.client.address)
+                raise SlaveDeviceBusy()
+            self._broadcast_pending = True
+        try:
+            rtu_query = self._run_query(req, host)
+        finally:
+            with self._broadcast_lock:
+                self._broadcast_pending = False
+        # written on the bus (no slave answers), or not (serial port lost)
+        if rtu_query.sent:
+            return response
+        logger.debug('Broadcast not sent (serial port unavailable)')
+        raise GatewayTargetFailed()
+
+    def _run_query(self, req: Request, host: str) -> RtuQuery:
+        """Queue the request for the serial line and wait for the end of its exchange.
+
+        :raises ModbusException: gateway overloaded or serial worker not responding (0x0A)
+        """
         # init a serial exchange from the request
         rtu_query = RtuQuery(host)
         rtu_query.request.build(raw_pdu=req.pdu, slave_ad=req.ctx.unit_id)
@@ -660,18 +712,7 @@ class ModbusSerialWorker:
             rtu_query.cancelled = True
             logger.error('Serial worker not responding (unit %d)', rtu_query.request.slave_address)
             raise GatewayPathUnavailable()
-        # broadcast: written on the bus (no slave answers), or not (serial port lost)
-        if broadcast_response is not None:
-            if rtu_query.sent:
-                return broadcast_response
-            logger.debug('Broadcast not sent (serial port unavailable)')
-            raise GatewayTargetFailed()
-        # check receive frame status
-        if rtu_query.response.is_response_to(rtu_query.request):
-            return rtu_query.response.pdu
-        # slave failed to respond
-        logger.debug('No valid answer from unit %d', rtu_query.request.slave_address)
-        raise GatewayTargetFailed()
+        return rtu_query
 
 
 def broadcast_delay(value: str) -> float:

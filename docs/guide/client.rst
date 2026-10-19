@@ -190,7 +190,10 @@ a reply:
   recognized for the last 64 broadcasts, up to ``max(timeout, 10)`` seconds after their send: beyond, it closes the
   connection (the next request opens it again).
 - The slaves need some time to execute a broadcast before the next request on the bus (their turnaround delay, often
-  around 100 ms): wait between two requests if the gateway doesn't.
+  around 100 ms). Two broadcasts are spaced by at least :attr:`~.ModbusClient.broadcast_interval` seconds (0.15 by
+  default, a constructor argument too): a broadcast sent sooner waits, so a loop can't flood the gateway. Set it a
+  bit above the silent delay of the gateway (``--broadcast-delay`` of mbtcp-tcp2rtu, 0.1 s by default), or to 0 to
+  handle the pace yourself.
 
 Without ``broadcast``, the unit id 0 is a usual address: many Modbus/TCP devices accept it as their own.
 

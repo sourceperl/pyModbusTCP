@@ -58,3 +58,15 @@ def validate_timeout(value: object) -> float:
     if not (math.isfinite(value) and 0.0 < value < 3600.0):
         raise ValueError('timeout can\'t be set (valid between 0 and 3600)')
     return float(value)
+
+
+# max interval between two broadcast requests (s)
+MAX_BROADCAST_INTERVAL = 10.0
+
+
+def validate_broadcast_interval(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (float, int)):
+        raise TypeError('broadcast_interval must be a float')
+    if not (math.isfinite(value) and 0.0 <= value <= MAX_BROADCAST_INTERVAL):
+        raise ValueError(f'broadcast_interval can\'t be set (valid from 0 to {MAX_BROADCAST_INTERVAL:g})')
+    return float(value)

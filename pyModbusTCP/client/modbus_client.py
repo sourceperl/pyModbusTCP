@@ -1,5 +1,6 @@
 """ pyModbusTCP client: the ModbusClient class (settings, request status and error handling). """
 
+import math
 import random
 import socket
 from types import TracebackType
@@ -37,7 +38,8 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
     _ModbusExcept: TypeAlias = _errors.ModbusExcept
 
     def __init__(self, host: str = 'localhost', port: int = 502, unit_id: int = 1, timeout: float = 30.0,
-                 auto_open: bool = True, auto_close: bool = False, no_delay: bool = True):
+                 auto_open: bool = True, auto_close: bool = False, no_delay: bool = True,
+                 broadcast_interval: float = 0.15):
         """Constructor.
 
         :param host: hostname or IPv4/IPv6 address of the server
@@ -54,6 +56,9 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         :type auto_close: bool
         :param no_delay: disable Nagle's algorithm on TCP connection (True by default)
         :type no_delay: bool
+        :param broadcast_interval: min interval in seconds between two broadcast requests (default 0.15, 0 for no
+            limit): a broadcast sent sooner waits, a client never sends broadcasts faster than a serial line can take
+        :type broadcast_interval: float
         :return: Object ModbusClient
         :rtype: ModbusClient
         """
@@ -69,6 +74,9 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         self._auto_open = _to_bool(auto_open, 'auto_open')
         self._auto_close = _to_bool(auto_close, 'auto_close')
         self._no_delay = _to_bool(no_delay, 'no_delay')
+        self._broadcast_interval = _validators.validate_broadcast_interval(broadcast_interval)
+        # time of the last broadcast request (time.monotonic()), for broadcast_interval
+        self._last_broadcast = -math.inf
         # internal variables
         self._deadline = 0.0  # end of the current request (time.monotonic() value), see _send() and _recv()
         # MBAP transaction ID: a counter incremented at each request
@@ -78,8 +86,10 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         self._last_except = EXP_NONE  # last except code
 
     def __repr__(self) -> str:
-        r_str = 'ModbusClient(host=\'%s\', port=%d, unit_id=%d, timeout=%.2f, auto_open=%s, auto_close=%s, no_delay=%s)'
-        r_str %= (self.host, self.port, self.unit_id, self.timeout, self.auto_open, self.auto_close, self.no_delay)
+        r_str = ('ModbusClient(host=\'%s\', port=%d, unit_id=%d, timeout=%.2f, auto_open=%s, auto_close=%s, '
+                 'no_delay=%s, broadcast_interval=%g)')
+        r_str %= (self.host, self.port, self.unit_id, self.timeout, self.auto_open, self.auto_close, self.no_delay,
+                  self.broadcast_interval)
         return r_str
 
     def __del__(self) -> None:
@@ -200,6 +210,15 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
     @auto_close.setter
     def auto_close(self, value: bool) -> None:
         self._auto_close = _to_bool(value, 'auto_close')
+
+    @property
+    def broadcast_interval(self) -> float:
+        """Get or set the min interval in seconds between two broadcast requests (default 0.15, 0 for no limit)."""
+        return self._broadcast_interval
+
+    @broadcast_interval.setter
+    def broadcast_interval(self, value: float) -> None:
+        self._broadcast_interval = _validators.validate_broadcast_interval(value)
 
     @property
     def no_delay(self) -> bool:

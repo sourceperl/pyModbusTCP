@@ -399,7 +399,14 @@ def test_tcp2rtu_broadcast() -> None:
             start = time.monotonic()
             assert c.custom_request(bytes.fromhex(pdu)) == bytes.fromhex(response), pdu
             assert time.monotonic() - start < 0.9, 'answered before the timeout of the serial line'
+            # the next broadcast after the silence of the bus
+            time.sleep(0.35)
         assert c.write_single_coil(1, True)
+        # a broadcast while the bus is silent after the previous one: refused at once (busy), never queued
+        start = time.monotonic()
+        assert c.write_single_coil(2, True) is False and c.last_except == 0x06
+        assert time.monotonic() - start < 0.2
+        time.sleep(0.35)
         # the frames are on the bus, with the broadcast address, the next one after broadcast_delay
         frames = [frame for _, frame in port.writes]
         assert [frame[0] for frame in frames] == [0] * 5
@@ -411,6 +418,18 @@ def test_tcp2rtu_broadcast() -> None:
         assert c.custom_request(bytes.fromhex('06000a')) is None and c.last_except == 0x03
         assert len(port.writes) == 5
         c.close()
+        # a flood of broadcasts: the bus gets at most one per broadcast_delay, nothing waits after the flood
+        flooder = ModbusClient(host='127.0.0.1', port=tcp_port, unit_id=0, timeout=3.0)
+        before = len(port.writes)
+        end = time.monotonic() + 1.0
+        accepted = 0
+        while time.monotonic() < end:
+            accepted += flooder.write_multiple_registers(20480, [55])
+            time.sleep(0.01)
+        flooder.close()
+        assert 1 <= accepted <= 5 and len(port.writes) - before == accepted
+        time.sleep(0.5)
+        assert len(port.writes) - before == accepted, 'no backlog of old broadcasts'
     finally:
         worker.stop()
         srv.stop()
