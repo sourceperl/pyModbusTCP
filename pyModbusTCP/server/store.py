@@ -477,8 +477,8 @@ class RegistersAccess(SpaceAccess):
     """The access of the application to a space of registers, with typed values on 1, 2 or 4 registers.
 
     read_values() and write_values() take a :class:`~pyModbusTCP.codec.Codec` (any type and byte order). The
-    shortcuts read_uint32(), write_float32()... take big_endian: True (default) for the ``ABCD`` order (the first
-    register holds the most significant word), False for ``CDAB``.
+    shortcuts read_uint32(), write_float32()... take a :class:`~pyModbusTCP.codec.ByteOrder` (default ``ABCD``: the
+    first register holds the most significant word).
     """
 
     def read_values(self, address: int, codec: Codec, count: int = 1) -> list[Number]:
@@ -496,42 +496,37 @@ class RegistersAccess(SpaceAccess):
         """
         self.write(address, codec.encode(values))
 
-    def read_uint32(self, address: int, big_endian: bool = True) -> int:
+    def read_uint32(self, address: int, byte_order: ByteOrder = ByteOrder.ABCD) -> int:
         """Read an unsigned 32 bits int on 2 registers."""
-        return int(self.read_values(address, _codec(DataType.UINT32, big_endian))[0])
+        return int(self.read_values(address, Codec(DataType.UINT32, byte_order))[0])
 
-    def write_uint32(self, address: int, value: int, big_endian: bool = True) -> None:
+    def write_uint32(self, address: int, value: int, byte_order: ByteOrder = ByteOrder.ABCD) -> None:
         """Write an unsigned 32 bits int on 2 registers (ValueError out of 0 to 2**32 - 1)."""
-        self.write_values(address, [value], _codec(DataType.UINT32, big_endian))
+        self.write_values(address, [value], Codec(DataType.UINT32, byte_order))
 
-    def read_int32(self, address: int, big_endian: bool = True) -> int:
+    def read_int32(self, address: int, byte_order: ByteOrder = ByteOrder.ABCD) -> int:
         """Read a signed 32 bits int (2's complement) on 2 registers."""
-        return int(self.read_values(address, _codec(DataType.INT32, big_endian))[0])
+        return int(self.read_values(address, Codec(DataType.INT32, byte_order))[0])
 
-    def write_int32(self, address: int, value: int, big_endian: bool = True) -> None:
+    def write_int32(self, address: int, value: int, byte_order: ByteOrder = ByteOrder.ABCD) -> None:
         """Write a signed 32 bits int (2's complement) on 2 registers (ValueError out of -2**31 to 2**31 - 1)."""
-        self.write_values(address, [value], _codec(DataType.INT32, big_endian))
+        self.write_values(address, [value], Codec(DataType.INT32, byte_order))
 
-    def read_float32(self, address: int, big_endian: bool = True) -> float:
+    def read_float32(self, address: int, byte_order: ByteOrder = ByteOrder.ABCD) -> float:
         """Read an IEEE 754 single precision float on 2 registers."""
-        return float(self.read_values(address, _codec(DataType.FLOAT32, big_endian))[0])
+        return float(self.read_values(address, Codec(DataType.FLOAT32, byte_order))[0])
 
-    def write_float32(self, address: int, value: float, big_endian: bool = True) -> None:
+    def write_float32(self, address: int, value: float, byte_order: ByteOrder = ByteOrder.ABCD) -> None:
         """Write an IEEE 754 single precision float on 2 registers."""
-        self.write_values(address, [value], _codec(DataType.FLOAT32, big_endian))
+        self.write_values(address, [value], Codec(DataType.FLOAT32, byte_order))
 
-    def read_float64(self, address: int, big_endian: bool = True) -> float:
+    def read_float64(self, address: int, byte_order: ByteOrder = ByteOrder.ABCD) -> float:
         """Read an IEEE 754 double precision float on 4 registers."""
-        return float(self.read_values(address, _codec(DataType.FLOAT64, big_endian))[0])
+        return float(self.read_values(address, Codec(DataType.FLOAT64, byte_order))[0])
 
-    def write_float64(self, address: int, value: float, big_endian: bool = True) -> None:
+    def write_float64(self, address: int, value: float, byte_order: ByteOrder = ByteOrder.ABCD) -> None:
         """Write an IEEE 754 double precision float on 4 registers."""
-        self.write_values(address, [value], _codec(DataType.FLOAT64, big_endian))
-
-
-def _codec(data_type: DataType, big_endian: bool) -> Codec:
-    """The codec of the shortcuts of RegistersAccess: ABCD (big_endian) or CDAB."""
-    return Codec(data_type, ByteOrder.ABCD if big_endian else ByteOrder.CDAB)
+        self.write_values(address, [value], Codec(DataType.FLOAT64, byte_order))
 
 
 class AppAccess:

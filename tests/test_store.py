@@ -7,6 +7,7 @@ import unittest
 from typing import Any
 
 from pyModbusTCP.client import ModbusClient
+from pyModbusTCP.codec import ByteOrder
 from pyModbusTCP.constants import (
     EXP_DATA_ADDRESS,
     EXP_GATEWAY_PATH_UNAVAILABLE,
@@ -293,9 +294,16 @@ class TestTypedAccess(unittest.TestCase):
         regs.write_float32(0, 3.5)
         self.assertEqual(regs.read(0, 2), [0x4060, 0x0000])
         self.assertEqual(regs.read_float32(0), 3.5)
-        regs.write_float32(2, -1.25, big_endian=False)
+        regs.write_float32(2, -1.25, ByteOrder.CDAB)
         self.assertEqual(regs.read(2, 2), [0x0000, 0xBFA0])
-        self.assertEqual(regs.read_float32(2, big_endian=False), -1.25)
+        self.assertEqual(regs.read_float32(2, ByteOrder.CDAB), -1.25)
+        # every byte order, the old bool argument is refused
+        regs.write_uint32(12, 0x11223344, byte_order=ByteOrder.BADC)
+        self.assertEqual(regs.read(12, 2), [0x2211, 0x4433])
+        self.assertEqual(regs.read_uint32(12, ByteOrder.BADC), 0x11223344)
+        self.assertEqual(regs.read_uint32(12, ByteOrder.DCBA), 0x33441122)
+        with self.assertRaises(TypeError):
+            regs.read_uint32(12, False)  # type: ignore[arg-type]
         regs.write_int32(4, -2)
         self.assertEqual(regs.read(4, 2), [0xFFFF, 0xFFFE])
         self.assertEqual(regs.read_int32(4), -2)

@@ -95,8 +95,8 @@ Typed values
 ~~~~~~~~~~~~
 
 The registers have a typed access for the values on several registers, with a :ref:`Codec <utils-codec>` (any type
-and byte order), or with shortcuts for the common types (the first register holds the most significant word,
-``big_endian=False`` for the other order):
+and byte order), or with shortcuts for the common types, with a byte order (default ``ByteOrder.ABCD``: the first
+register holds the most significant word):
 
 .. code-block:: python
 
@@ -109,7 +109,7 @@ and byte order), or with shortcuts for the common types (the first register hold
 
     regs.write_float32(0, 230.4)          # IEEE 754 single precision, registers 0 and 1
     regs.write_int32(2, -1500)            # 2's complement, registers 2 and 3
-    regs.write_uint32(4, 123456, big_endian=False)
+    regs.write_uint32(4, 123456, ByteOrder.CDAB)     # the least significant word first
     total = regs.read_float64(10)         # double precision, registers 10 to 13
 
 Transactions
