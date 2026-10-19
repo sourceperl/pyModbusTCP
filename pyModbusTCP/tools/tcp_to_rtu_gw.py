@@ -90,7 +90,8 @@ count), so a request flood can't flood the log.
 LIMITATIONS
 -----------
 - Slaves never answer a broadcast request (--allow-broadcast): the client
-  gets exception 0x0B once the timeout has expired.
+  gets exception 0x0B once the timeout has expired (a pyModbusTCP client
+  sends it with broadcast=True: it doesn't wait, and ignores this reply).
 - Throughput is limited by the serial line: requests are served one at a time.
 
 USAGE

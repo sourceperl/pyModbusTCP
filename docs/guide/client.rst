@@ -164,6 +164,36 @@ and floats:
 
 .. _client-errors:
 
+Broadcast through a TCP to RTU gateway
+--------------------------------------
+
+Behind a TCP to RTU gateway, the unit id 0 is the broadcast address of the serial line: every slave executes the
+request, none of them answers. ``broadcast=True`` sends a write request to the unit id 0 (whatever the
+:attr:`~.ModbusClient.unit_id` of the client) and returns ``True`` as soon as the request is sent, without waiting for
+a reply:
+
+.. code-block:: python
+
+    c = ModbusClient(host='192.168.1.20', unit_id=1)
+
+    c.write_single_register(10, 42, broadcast=True)         # every slave of the bus, no reply
+    c.write_multiple_coils(0, [1, 0, 1], broadcast=True)
+    c.custom_request(bytes.fromhex('16000a00ff0000'), broadcast=True)   # mask write register (0x16)
+
+    c.read_holding_registers(0, 4)                          # a normal request to the unit 1
+
+- ``True`` means "sent", not "done": nobody confirms a broadcast.
+- Only the write functions take ``broadcast`` (0x05, 0x06, 0x0F, 0x10, and 0x15, 0x16 with ``custom_request()``): a
+  read has no meaning without a reply.
+- Some gateways answer a broadcast anyway (an echo, or an exception after their timeout): this late reply is ignored
+  by the next request, the connection stays open. Any other unexpected frame still closes it. A late reply is
+  recognized for the last 64 broadcasts, up to ``max(timeout, 10)`` seconds after their send: beyond, it closes the
+  connection (the next request opens it again).
+- The slaves need some time to execute a broadcast before the next request on the bus (their turnaround delay, often
+  around 100 ms): wait between two requests if the gateway doesn't.
+
+Without ``broadcast``, the unit id 0 is a usual address: many Modbus/TCP devices accept it as their own.
+
 Handle errors
 -------------
 

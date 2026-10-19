@@ -20,6 +20,10 @@ from ..constants import (
 from ._common import logger
 from ._errors import ModbusExcept, NetworkError
 
+# broadcast requests whose late reply is ignored (see _recv_pdu()): the last ones sent, for a limited time
+BROADCAST_IDS_MAX = 64
+BROADCAST_REPLY_DELAY = 10.0
+
 
 class ClientTransportMixin:
     """TCP layer of ModbusClient: open/close the connection, send a request PDU and receive the reply PDU.
@@ -38,6 +42,9 @@ class ClientTransportMixin:
     _sock: socket.socket | None
     _deadline: float
     _transaction_id: int
+    # transaction id -> time of the send (time.monotonic()) of the last broadcast requests, the oldest first: a late
+    # reply to one of them is ignored (see _recv_pdu())
+    _broadcast_ids: dict[int, float]
 
     @property
     def is_open(self) -> bool:
@@ -96,6 +103,8 @@ class ClientTransportMixin:
                 pass
             finally:
                 self._sock = None
+        # no late reply to a broadcast can come on a new connection
+        self._broadcast_ids.clear()
 
     def _set_sock_timeout(self, value: float) -> None:
         """Set the current socket timeout, but only if it differs by more than 10 ms from the current one.
@@ -164,6 +173,27 @@ class ClientTransportMixin:
         # debug
         self._on_tx_rx(frame=tx_frame, is_tx=True)
 
+    def _send_broadcast(self, pdu: bytes) -> None:
+        """Send a request PDU to the unit id 0 (broadcast), without waiting for a reply.
+
+        :param pdu: modbus frame PDU (a write function)
+        :type pdu: bytes
+        """
+        # for auto_open mode, check TCP and open on need
+        if self.auto_open and not self.is_open:
+            self._open()
+        tx_frame = self._add_mbap(pdu, unit_id=0)
+        self._send(tx_frame)
+        # a gateway may reply anyway (an echo, an exception after its timeout): see _recv_pdu()
+        self._broadcast_ids.pop(self._transaction_id, None)
+        self._broadcast_ids[self._transaction_id] = time.monotonic()
+        while len(self._broadcast_ids) > BROADCAST_IDS_MAX:
+            del self._broadcast_ids[next(iter(self._broadcast_ids))]
+        self._on_tx_rx(frame=tx_frame, is_tx=True)
+        # for auto_close mode, close socket after each request
+        if self.auto_close:
+            self.close()
+
     def _recv(self, size: int) -> bytes:
         """Receive data over current socket (at most size bytes).
 
@@ -218,10 +248,17 @@ class ClientTransportMixin:
         :returns: modbus frame PDU
         :rtype: bytes
         """
-        # receive 7 bytes header (MBAP)
-        rx_mbap = self._recv_all(MBAP_SIZE)
-        # decode MBAP
-        (f_transaction_id, f_protocol_id, f_length, f_unit_id) = struct.unpack('>HHHB', rx_mbap)
+        # receive 7 bytes header (MBAP), skip the late replies to a broadcast
+        while True:
+            rx_mbap = self._recv_all(MBAP_SIZE)
+            (f_transaction_id, f_protocol_id, f_length, f_unit_id) = struct.unpack('>HHHB', rx_mbap)
+            if not self._is_broadcast_reply(f_transaction_id, f_protocol_id, f_length, f_unit_id):
+                break
+            # a reply to a broadcast request (unit id 0) sent before this one: read and ignored
+            rx_pdu = self._recv_all(f_length - 1)
+            del self._broadcast_ids[f_transaction_id]
+            self._on_tx_rx(frame=rx_mbap + rx_pdu, is_tx=False)
+            self._debug_msg(f'late reply to the broadcast request {f_transaction_id} ignored')
         # check MBAP fields
         f_transaction_err = f_transaction_id != self._transaction_id
         f_protocol_err = f_protocol_id != 0
@@ -258,11 +295,24 @@ class ClientTransportMixin:
         # if no error, return PDU
         return rx_pdu
 
-    def _add_mbap(self, pdu: bytes) -> bytes:
+    def _is_broadcast_reply(self, transaction_id: int, protocol_id: int, length: int, unit_id: int) -> bool:
+        """Return True for the MBAP header of a late reply to a recent broadcast request (every field must match).
+
+        A broadcast request is recent for max(timeout, BROADCAST_REPLY_DELAY) seconds after its send.
+        """
+        sent = self._broadcast_ids.get(transaction_id)
+        if sent is None or transaction_id == self._transaction_id:
+            return False
+        recent = time.monotonic() - sent <= max(self.timeout, BROADCAST_REPLY_DELAY)
+        return recent and unit_id == 0 and protocol_id == 0 and MBAP_MIN_LENGTH <= length <= MBAP_MAX_LENGTH
+
+    def _add_mbap(self, pdu: bytes, unit_id: int | None = None) -> bytes:
         """Return full modbus frame with MBAP (modbus application protocol header) append to PDU.
 
         :param pdu: modbus PDU (protocol data unit)
         :type pdu: bytes
+        :param unit_id: unit id of the frame (default: the one of the client)
+        :type unit_id: int or None
         :returns: full modbus frame
         :rtype: bytes
         """
@@ -272,7 +322,8 @@ class ClientTransportMixin:
         self._transaction_id = (self._transaction_id + 1) & 0xffff
         protocol_id = 0
         length = len(pdu) + 1
-        mbap = struct.pack('>HHHB', self._transaction_id, protocol_id, length, self.unit_id)
+        unit_id = self.unit_id if unit_id is None else unit_id
+        mbap = struct.pack('>HHHB', self._transaction_id, protocol_id, length, unit_id)
         # full modbus/TCP frame = [MBAP]PDU
         return mbap + pdu
 

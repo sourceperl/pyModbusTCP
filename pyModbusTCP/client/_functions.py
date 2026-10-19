@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from ..constants import (
     ENCAPSULATED_INTERFACE_TRANSPORT,
+    MASK_WRITE_REGISTER,
     MAX_PDU_SIZE,
     MB_RECV_ERR,
     MEI_TYPE_READ_DEVICE_ID,
@@ -13,6 +14,7 @@ from ..constants import (
     READ_DISCRETE_INPUTS,
     READ_HOLDING_REGISTERS,
     READ_INPUT_REGISTERS,
+    WRITE_FILE_RECORD,
     WRITE_MULTIPLE_COILS,
     WRITE_MULTIPLE_REGISTERS,
     WRITE_READ_MULTIPLE_REGISTERS,
@@ -39,6 +41,10 @@ from ._errors import InternalError, NetworkError
 from ._validators import check_addr_nb, check_regs_values
 from .device_id import DeviceIdentificationResponse
 
+# the functions that can be broadcast: they write data and need no reply (not 0x17, it reads too)
+BROADCAST_FUNCTION_CODES = (WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER, WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS,
+                            WRITE_FILE_RECORD, MASK_WRITE_REGISTER)
+
 
 def _decode_regs(data: bytes, reg_nb: int) -> list[int]:
     """Decode the first reg_nb big-endian 16 bits registers of a modbus registers field."""
@@ -55,12 +61,17 @@ class ClientFunctionsMixin:
     if TYPE_CHECKING:
         # provided by ModbusClient
         def _req_pdu(self, tx_pdu: bytes, rx_min_len: int = 2) -> bytes: ...
+        def _broadcast_req(self, tx_pdu: bytes) -> bool: ...
         def _req_except_handler(self, _except: Exception) -> None: ...
 
-    def custom_request(self, pdu: bytes | bytearray) -> bytes | None:
+    def custom_request(self, pdu: bytes | bytearray, *, broadcast: bool = False) -> bytes | None:
         """Send a custom modbus request.
 
         The reply must have the same function code (or the same with the exception flag): otherwise it is an error.
+
+        With broadcast=True, the request is sent to the unit id 0 (a write to every slave of a serial line, through
+        a TCP to RTU gateway) without waiting for a reply: it returns the PDU sent (there is no reply PDU). Only for
+        a function that writes data (0x05, 0x06, 0x0F, 0x10, 0x15, 0x16): ValueError otherwise.
 
         :param pdu: a modbus PDU (protocol data unit) of 1 to 253 bytes: function code followed by the request data
             (the function code is not checked, a code with the exception flag set (0x80 to 0xFF) is sent as is,
@@ -75,6 +86,10 @@ class ClientFunctionsMixin:
         pdu = bytes(pdu)
         if not 1 <= len(pdu) <= MAX_PDU_SIZE:
             raise ValueError(f'pdu length out of range (valid from 1 to {MAX_PDU_SIZE} bytes)')
+        if _to_bool(broadcast, 'broadcast'):
+            if pdu[0] not in BROADCAST_FUNCTION_CODES:
+                raise ValueError(f'function 0x{pdu[0]:02X} can\'t be broadcast (no reply: only a write function)')
+            return pdu if self._broadcast_req(pdu) else None
         # make request
         try:
             return self._req_pdu(pdu)
@@ -262,13 +277,16 @@ class ClientFunctionsMixin:
             self._req_except_handler(e)
             return None
 
-    def write_single_coil(self, bit_addr: int, bit_value: bool) -> bool:
+    def write_single_coil(self, bit_addr: int, bit_value: bool, *, broadcast: bool = False) -> bool:
         """Modbus function WRITE_SINGLE_COIL (0x05).
 
         :param bit_addr: bit address (0 to 65535)
         :type bit_addr: int
         :param bit_value: bit value to write
         :type bit_value: bool
+        :param broadcast: send to the unit id 0 (every slave of a serial line, through a TCP to RTU gateway), without
+            waiting for a reply: True once the request is sent (default: False)
+        :type broadcast: bool
         :returns: True if write ok
         :rtype: bool
         """
@@ -281,15 +299,20 @@ class ClientFunctionsMixin:
         bit_value_raw = 0xff00 if bit_value else 0x0000
         # make request
         tx_pdu = struct.pack('>BHH', WRITE_SINGLE_COIL, bit_addr, bit_value_raw)
+        if _to_bool(broadcast, 'broadcast'):
+            return self._broadcast_req(tx_pdu)
         return self._write_req(tx_pdu, bit_addr, bit_value_raw)
 
-    def write_single_register(self, reg_addr: int, reg_value: int) -> bool:
+    def write_single_register(self, reg_addr: int, reg_value: int, *, broadcast: bool = False) -> bool:
         """Modbus function WRITE_SINGLE_REGISTER (0x06).
 
         :param reg_addr: register address (0 to 65535)
         :type reg_addr: int
         :param reg_value: register value to write
         :type reg_value: int
+        :param broadcast: send to the unit id 0 (every slave of a serial line, through a TCP to RTU gateway), without
+            waiting for a reply: True once the request is sent (default: False)
+        :type broadcast: bool
         :returns: True if write ok
         :rtype: bool
         """
@@ -302,15 +325,20 @@ class ClientFunctionsMixin:
             raise ValueError('reg_value out of range (valid from 0 to 65535)')
         # make request
         tx_pdu = struct.pack('>BHH', WRITE_SINGLE_REGISTER, reg_addr, reg_value)
+        if _to_bool(broadcast, 'broadcast'):
+            return self._broadcast_req(tx_pdu)
         return self._write_req(tx_pdu, reg_addr, reg_value)
 
-    def write_multiple_coils(self, bits_addr: int, bits_value: Iterable[int]) -> bool:
+    def write_multiple_coils(self, bits_addr: int, bits_value: Iterable[int], *, broadcast: bool = False) -> bool:
         """Modbus function WRITE_MULTIPLE_COILS (0x0F).
 
         :param bits_addr: bits address (0 to 65535)
         :type bits_addr: int
         :param bits_value: bits values to write (any iterable of bool or int)
         :type bits_value: list
+        :param broadcast: send to the unit id 0 (every slave of a serial line, through a TCP to RTU gateway), without
+            waiting for a reply: True once the request is sent (default: False)
+        :type broadcast: bool
         :returns: True if write ok
         :rtype: bool
         """
@@ -323,15 +351,20 @@ class ClientFunctionsMixin:
         tx_pdu = struct.pack('>BHHB', WRITE_MULTIPLE_COILS, bits_addr, len(bits_value), len(pdu_coils_part))
         tx_pdu += pdu_coils_part
         # make request
+        if _to_bool(broadcast, 'broadcast'):
+            return self._broadcast_req(tx_pdu)
         return self._write_req(tx_pdu, bits_addr, len(bits_value))
 
-    def write_multiple_registers(self, regs_addr: int, regs_value: Iterable[int]) -> bool:
+    def write_multiple_registers(self, regs_addr: int, regs_value: Iterable[int], *, broadcast: bool = False) -> bool:
         """Modbus function WRITE_MULTIPLE_REGISTERS (0x10).
 
         :param regs_addr: registers address (0 to 65535)
         :type regs_addr: int
         :param regs_value: registers values to write (any iterable of int)
         :type regs_value: list
+        :param broadcast: send to the unit id 0 (every slave of a serial line, through a TCP to RTU gateway), without
+            waiting for a reply: True once the request is sent (default: False)
+        :type broadcast: bool
         :returns: True if write ok
         :rtype: bool
         """
@@ -345,6 +378,8 @@ class ClientFunctionsMixin:
         tx_pdu = struct.pack('>BHHB', WRITE_MULTIPLE_REGISTERS, regs_addr, len(regs_value), len(pdu_regs_part))
         tx_pdu += pdu_regs_part
         # make request
+        if _to_bool(broadcast, 'broadcast'):
+            return self._broadcast_req(tx_pdu)
         return self._write_req(tx_pdu, regs_addr, len(regs_value))
 
     def write_read_multiple_registers(self, write_addr: int, write_values: Iterable[int],

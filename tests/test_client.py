@@ -466,3 +466,169 @@ class TestModbusClient(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FakeGateway:
+    """A Modbus/TCP server for the broadcast tests: records the frames, replies as told by reply(frame)."""
+
+    def __init__(self, reply: Callable[[bytes], bytes]) -> None:
+        self.reply = reply
+        self.frames: list[bytes] = []
+        self.connections = 0
+        self.sock = socket.socket()
+        self.sock.bind(('127.0.0.1', 0))
+        self.sock.listen(4)
+        self.port: int = self.sock.getsockname()[1]
+        threading.Thread(target=self._serve, daemon=True).start()
+
+    def _serve(self) -> None:
+        while True:
+            try:
+                conn, _ = self.sock.accept()
+            except OSError:
+                return
+            self.connections += 1
+            threading.Thread(target=self._session, args=(conn,), daemon=True).start()
+
+    def _session(self, conn: socket.socket) -> None:
+        with conn:
+            try:
+                while True:
+                    header = conn.recv(7)
+                    if len(header) < 7:
+                        return
+                    frame = header + conn.recv(struct.unpack('>H', header[4:6])[0] - 1)
+                    self.frames.append(frame)
+                    conn.sendall(self.reply(frame))
+            except OSError:
+                return
+
+    def close(self) -> None:
+        self.sock.close()
+
+
+def echo_unicast(frame: bytes) -> bytes:
+    """A gateway that never answers a broadcast (unit id 0), and echoes the other write requests."""
+    return b'' if frame[6] == 0 else frame
+
+
+class TestBroadcast(unittest.TestCase):
+    """Broadcast requests (unit id 0, through a TCP to RTU gateway): sent without waiting for a reply."""
+
+    def gateway(self, reply: Callable[[bytes], bytes]) -> FakeGateway:
+        gw = FakeGateway(reply)
+        self.addCleanup(gw.close)
+        return gw
+
+    def test_no_wait(self) -> None:
+        gw = self.gateway(echo_unicast)
+        c = ModbusClient(port=gw.port, unit_id=5, timeout=2.0)
+        self.addCleanup(c.close)
+        start = time.monotonic()
+        self.assertTrue(c.write_single_register(10, 42, broadcast=True))
+        self.assertTrue(c.write_single_coil(1, True, broadcast=True))
+        self.assertTrue(c.write_multiple_coils(0, [1, 0, 1], broadcast=True))
+        self.assertTrue(c.write_multiple_registers(0, [1, 2], broadcast=True))
+        self.assertLess(time.monotonic() - start, 1.0, 'a broadcast never waits for a reply')
+        self.assertEqual(c.last_error, MB_NO_ERR)
+        # unit id 0 in the frames, whatever the unit id of the client (kept for the other requests)
+        deadline = time.monotonic() + 2.0
+        while len(gw.frames) < 4 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual([frame[6] for frame in gw.frames], [0, 0, 0, 0])
+        self.assertEqual(gw.frames[0][7:], bytes.fromhex('06000a002a'))
+        self.assertEqual(c.unit_id, 5)
+        self.assertTrue(c.write_single_register(10, 42))
+        self.assertEqual(gw.frames[-1][6], 5)
+
+    def test_late_reply_is_ignored(self) -> None:
+        """A gateway that answers a broadcast anyway (an echo, an exception): the next request still succeeds."""
+        def echo(frame: bytes) -> bytes:
+            return frame
+
+        def exception_0x0b(frame: bytes) -> bytes:
+            return frame[:4] + b'\x00\x03' + bytes([frame[6], frame[7] | 0x80, 0x0B])
+
+        for broadcast_reply in (echo, exception_0x0b):
+            def reply(frame: bytes, broadcast_reply: Callable[[bytes], bytes] = broadcast_reply) -> bytes:
+                return broadcast_reply(frame) if frame[6] == 0 else frame
+
+            gw = self.gateway(reply)
+            c = ModbusClient(port=gw.port, unit_id=1, timeout=2.0)
+            self.addCleanup(c.close)
+            self.assertTrue(c.write_single_register(10, 42, broadcast=True))
+            self.assertTrue(c.write_single_register(11, 43, broadcast=True))
+            time.sleep(0.1)
+            self.assertTrue(c.write_single_register(12, 44))
+            self.assertTrue(c.is_open, 'the connection stays open')
+            self.assertEqual(gw.connections, 1)
+
+    def test_burst_of_broadcasts(self) -> None:
+        """30 broadcasts answered late (more than the 16 of the first version): the next request still succeeds."""
+        gw = self.gateway(lambda frame: frame)
+        c = ModbusClient(port=gw.port, unit_id=1, timeout=2.0)
+        self.addCleanup(c.close)
+        for value in range(30):
+            self.assertTrue(c.write_single_register(10, value, broadcast=True))
+        time.sleep(0.2)
+        self.assertTrue(c.write_single_register(12, 44))
+        self.assertTrue(c.is_open)
+        self.assertEqual(c._broadcast_ids, {}, 'every late reply consumed')
+
+    def test_old_broadcast_is_forgotten(self) -> None:
+        """A reply to a broadcast sent too long ago (or beyond the last 64) is not ignored: the connection is closed."""
+        from pyModbusTCP.client import _transport
+        gw = self.gateway(lambda frame: frame)
+        c = ModbusClient(port=gw.port, unit_id=1, timeout=2.0)
+        self.addCleanup(c.close)
+        self.assertTrue(c.write_single_register(10, 1, broadcast=True))
+        # as if it was sent long ago
+        for tid in c._broadcast_ids:
+            c._broadcast_ids[tid] -= _transport.BROADCAST_REPLY_DELAY + 1.0
+        time.sleep(0.1)
+        self.assertFalse(c.write_single_register(12, 44))
+        self.assertEqual(c.last_error, MB_RECV_ERR)
+        self.assertEqual(c._broadcast_ids, {}, 'cleared by close()')
+        # at most BROADCAST_IDS_MAX ids are kept, the oldest are dropped
+        gw = self.gateway(echo_unicast)
+        c = ModbusClient(port=gw.port, timeout=2.0)
+        self.addCleanup(c.close)
+        for _ in range(_transport.BROADCAST_IDS_MAX + 10):
+            c.write_single_register(0, 1, broadcast=True)
+        self.assertEqual(len(c._broadcast_ids), _transport.BROADCAST_IDS_MAX)
+        self.assertEqual(list(c._broadcast_ids)[-1], c._transaction_id)
+
+    def test_unexpected_reply_still_closes(self) -> None:
+        """A frame with an unknown transaction id is never ignored: the connection is closed, as before."""
+        gw = self.gateway(lambda frame: struct.pack('>H', (struct.unpack('>H', frame[:2])[0] + 100) & 0xFFFF)
+                          + frame[2:])
+        c = ModbusClient(port=gw.port, unit_id=1, timeout=2.0)
+        self.assertFalse(c.write_single_register(12, 44))
+        self.assertEqual(c.last_error, MB_RECV_ERR)
+        self.assertFalse(c.is_open)
+
+    def test_custom_request(self) -> None:
+        gw = self.gateway(echo_unicast)
+        c = ModbusClient(port=gw.port, timeout=2.0)
+        self.addCleanup(c.close)
+        pdu = bytes.fromhex('16000a00ff0000')
+        self.assertEqual(c.custom_request(pdu, broadcast=True), pdu)
+        # a function that reads can't be broadcast
+        for read_pdu in ('0300000001', '17000000010000000102002a', '2b0e0100'):
+            with self.assertRaises(ValueError):
+                c.custom_request(bytes.fromhex(read_pdu), broadcast=True)
+        with self.assertRaises(TypeError):
+            c.write_single_register(0, 1, broadcast='yes')  # type: ignore[arg-type]
+
+    def test_auto_close_and_errors(self) -> None:
+        gw = self.gateway(echo_unicast)
+        c = ModbusClient(port=gw.port, timeout=2.0, auto_close=True)
+        self.assertTrue(c.write_single_register(0, 1, broadcast=True))
+        self.assertFalse(c.is_open)
+        # nobody listening: False, with the error
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1', 0))
+            free_port = sock.getsockname()[1]
+        c = ModbusClient(port=free_port, timeout=0.5)
+        self.assertFalse(c.write_single_register(0, 1, broadcast=True))
+        self.assertEqual(c.last_error, MB_CONNECT_ERR)

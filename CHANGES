@@ -31,6 +31,8 @@ Revision history for pyModbusTCP
       the ABCD, CDAB, BADC or DCBA byte order, for the client and the server store (read_values/write_values).
       ByteOrder64 gives the 8 orders of a 64 bits value (like CDABGHEF), for a Codec only (rare devices).
     - client: context manager, TCP_NODELAY (no_delay), timeout for the whole request.
+    - client: broadcast=True on the write functions (and custom_request()) sends the request to the unit id 0
+      (broadcast of a TCP to RTU gateway) without waiting for a reply; a late reply of the gateway is ignored.
     - tools: command line tools (python -m pyModbusTCP.tools, or the mbtcp-* commands of pyModbusTCP-cli with
       "pip install pyModbusTCP[cli]"): mbtcp-server, mbtcp-client (table output, csv/json, write-read, typed
       values with -T/-b), mbtcp-tcp2rtu and mbtcp-rtu2tcp gateways (with RS-485 mode, needs pyserial).

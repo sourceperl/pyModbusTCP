@@ -60,6 +60,7 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         # private
         # set _sock first: __del__() always needs it, even if a validation below fails
         self._sock: socket.socket | None = None
+        self._broadcast_ids: dict[int, float] = {}
         # constructor arguments: validate them
         self._host = _validators.validate_host(host)
         self._port = _validators.validate_port(port)
@@ -274,6 +275,19 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         self._send_pdu(tx_pdu)
         # return receive PDU
         return self._recv_pdu(func_code=tx_pdu[0], min_len=rx_min_len)
+
+    def _broadcast_req(self, tx_pdu: bytes) -> bool:
+        """Broadcast request: send the PDU to the unit id 0, no reply is expected.
+
+        :returns: True if the request is sent
+        """
+        self._req_init()
+        try:
+            self._send_broadcast(tx_pdu)
+            return True
+        except _errors.InternalError as e:
+            self._req_except_handler(e)
+            return False
 
     def _req_init(self) -> None:
         """Reset request status flags."""
