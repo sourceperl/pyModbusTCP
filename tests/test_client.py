@@ -522,8 +522,12 @@ class TestBroadcast(unittest.TestCase):
 
     def test_no_wait(self) -> None:
         gw = self.gateway(echo_unicast)
-        c = ModbusClient(port=gw.port, unit_id=5, timeout=2.0)
+        # 127.0.0.1, not localhost: on Windows, a refused connection to ::1 (the gateway listens on IPv4 only) takes
+        # about 2 s before the client tries 127.0.0.1
+        c = ModbusClient(host='127.0.0.1', port=gw.port, unit_id=5, timeout=2.0)
         self.addCleanup(c.close)
+        # the connection is opened before the measure: only the broadcasts are timed
+        self.assertTrue(c.open())
         start = time.monotonic()
         self.assertTrue(c.write_single_register(10, 42, broadcast=True))
         self.assertTrue(c.write_single_coil(1, True, broadcast=True))
@@ -554,7 +558,7 @@ class TestBroadcast(unittest.TestCase):
                 return broadcast_reply(frame) if frame[6] == 0 else frame
 
             gw = self.gateway(reply)
-            c = ModbusClient(port=gw.port, unit_id=1, timeout=2.0)
+            c = ModbusClient(host='127.0.0.1', port=gw.port, unit_id=1, timeout=2.0)
             self.addCleanup(c.close)
             self.assertTrue(c.write_single_register(10, 42, broadcast=True))
             self.assertTrue(c.write_single_register(11, 43, broadcast=True))
@@ -566,7 +570,7 @@ class TestBroadcast(unittest.TestCase):
     def test_burst_of_broadcasts(self) -> None:
         """30 broadcasts answered late (more than the 16 of the first version): the next request still succeeds."""
         gw = self.gateway(lambda frame: frame)
-        c = ModbusClient(port=gw.port, unit_id=1, timeout=2.0)
+        c = ModbusClient(host='127.0.0.1', port=gw.port, unit_id=1, timeout=2.0)
         self.addCleanup(c.close)
         for value in range(30):
             self.assertTrue(c.write_single_register(10, value, broadcast=True))
@@ -579,7 +583,7 @@ class TestBroadcast(unittest.TestCase):
         """A reply to a broadcast sent too long ago (or beyond the last 64) is not ignored: the connection is closed."""
         from pyModbusTCP.client import _transport
         gw = self.gateway(lambda frame: frame)
-        c = ModbusClient(port=gw.port, unit_id=1, timeout=2.0)
+        c = ModbusClient(host='127.0.0.1', port=gw.port, unit_id=1, timeout=2.0)
         self.addCleanup(c.close)
         self.assertTrue(c.write_single_register(10, 1, broadcast=True))
         # as if it was sent long ago
@@ -591,7 +595,7 @@ class TestBroadcast(unittest.TestCase):
         self.assertEqual(c._broadcast_ids, {}, 'cleared by close()')
         # at most BROADCAST_IDS_MAX ids are kept, the oldest are dropped
         gw = self.gateway(echo_unicast)
-        c = ModbusClient(port=gw.port, timeout=2.0)
+        c = ModbusClient(host='127.0.0.1', port=gw.port, timeout=2.0)
         self.addCleanup(c.close)
         for _ in range(_transport.BROADCAST_IDS_MAX + 10):
             c.write_single_register(0, 1, broadcast=True)
@@ -602,14 +606,14 @@ class TestBroadcast(unittest.TestCase):
         """A frame with an unknown transaction id is never ignored: the connection is closed, as before."""
         gw = self.gateway(lambda frame: struct.pack('>H', (struct.unpack('>H', frame[:2])[0] + 100) & 0xFFFF)
                           + frame[2:])
-        c = ModbusClient(port=gw.port, unit_id=1, timeout=2.0)
+        c = ModbusClient(host='127.0.0.1', port=gw.port, unit_id=1, timeout=2.0)
         self.assertFalse(c.write_single_register(12, 44))
         self.assertEqual(c.last_error, MB_RECV_ERR)
         self.assertFalse(c.is_open)
 
     def test_custom_request(self) -> None:
         gw = self.gateway(echo_unicast)
-        c = ModbusClient(port=gw.port, timeout=2.0)
+        c = ModbusClient(host='127.0.0.1', port=gw.port, timeout=2.0)
         self.addCleanup(c.close)
         pdu = bytes.fromhex('16000a00ff0000')
         self.assertEqual(c.custom_request(pdu, broadcast=True), pdu)
@@ -622,13 +626,13 @@ class TestBroadcast(unittest.TestCase):
 
     def test_auto_close_and_errors(self) -> None:
         gw = self.gateway(echo_unicast)
-        c = ModbusClient(port=gw.port, timeout=2.0, auto_close=True)
+        c = ModbusClient(host='127.0.0.1', port=gw.port, timeout=2.0, auto_close=True)
         self.assertTrue(c.write_single_register(0, 1, broadcast=True))
         self.assertFalse(c.is_open)
         # nobody listening: False, with the error
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0))
             free_port = sock.getsockname()[1]
-        c = ModbusClient(port=free_port, timeout=0.5)
+        c = ModbusClient(host='127.0.0.1', port=free_port, timeout=0.5)
         self.assertFalse(c.write_single_register(0, 1, broadcast=True))
         self.assertEqual(c.last_error, MB_CONNECT_ERR)
