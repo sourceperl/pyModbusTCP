@@ -6,6 +6,7 @@ import random
 import select
 import socket
 import struct
+import sys
 import time
 from binascii import hexlify
 from socket import AF_UNSPEC, IPPROTO_TCP, SOCK_STREAM, TCP_NODELAY
@@ -177,12 +178,13 @@ class ClientTransportMixin:
             return True
         try:
             # poll(): no limit on the fd value, select() only on Windows (no poll(), but no such limit either)
-            if hasattr(select, 'poll'):
+            # (a sys.platform test, not hasattr(): the type checkers know that poll() is missing on Windows)
+            if sys.platform == 'win32':
+                readable = bool(select.select([self._sock], [], [], 0)[0])
+            else:
                 poller = select.poll()
                 poller.register(self._sock, select.POLLIN)
                 readable = bool(poller.poll(0))
-            else:
-                readable = bool(select.select([self._sock], [], [], 0)[0])
             # nothing to read: the connection is alive (or the server is gone without a FIN, nothing can tell)
             if not readable:
                 return False
