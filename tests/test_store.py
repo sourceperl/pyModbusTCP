@@ -553,8 +553,11 @@ class TestFunctionRegistry(ServerTestCase):
     def test_constructor_checks(self) -> None:
         self.assertEqual(sorted(ModbusServer().functions), sorted(STANDARD_FUNCTIONS))
         self.assertEqual(ModbusServer(functions={}).functions, {})
-        for kwargs, exc in (({'functions': {0x41: 'x'}}, TypeError), ({'functions': {0x100: len}}, ValueError),
-                            ({'functions': [1]}, TypeError), ({'fallback': 'x'}, TypeError)):
+        # bad arguments typed Any: they are deliberately not of the annotated type
+        cases: tuple[tuple[dict[str, Any], type[Exception]], ...] = (
+            ({'functions': {0x41: 'x'}}, TypeError), ({'functions': {0x100: len}}, ValueError),
+            ({'functions': [1]}, TypeError), ({'fallback': 'x'}, TypeError))
+        for kwargs, exc in cases:
             with self.subTest(kwargs=kwargs), self.assertRaises(exc):
                 ModbusServer(**kwargs)
 

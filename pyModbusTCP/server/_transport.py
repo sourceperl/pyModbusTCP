@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable
 from socketserver import BaseRequestHandler, ThreadingTCPServer
 from threading import Lock
-from typing import Any
+from typing import Any, cast
 
 from ._common import LogThrottle, _IPNetwork, client_ip, host_key, logger
 from .errors import Error, NetworkError
@@ -155,7 +155,6 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
 class ModbusRequestHandler(BaseRequestHandler):
     # default socket timeout (in s) on blocking operations
     _SOCKET_TIMEOUT: float = 1.0
-    server: CustomThreadingTCPServer
     # deadline in effect at the end of the last _recv_all() call (see handle())
     _last_deadline: float | None = None
 
@@ -238,6 +237,8 @@ class ModbusRequestHandler(BaseRequestHandler):
         # try/except: end current thread on ModbusServer._InternalError, OSError or socket.error
         # this also close the current TCP session associated with it
         session_data = SessionData()
+        # the server that created this handler (BaseRequestHandler.server is typed BaseServer)
+        server = cast(CustomThreadingTCPServer, self.server)
         try:
             # update server info structure
             (session_data.client.address, session_data.client.port) = self.request.getpeername()[:2]
@@ -250,8 +251,8 @@ class ModbusRequestHandler(BaseRequestHandler):
                 # receive mbap from client:
                 # - wait for a new request, the session is closed after idle_timeout without data (if set)
                 # - then the rest of the header must come in request_timeout (avoid a stalled request)
-                idle_timeout = self.server.idle_timeout
-                request_timeout = self.server.request_timeout
+                idle_timeout = server.idle_timeout
+                request_timeout = server.request_timeout
                 idle_deadline = None if idle_timeout is None else time.monotonic() + idle_timeout
                 session_data.request.mbap.raw = self._recv_all(7, idle_deadline, 'idle timeout', request_timeout)
                 # receive pdu from client: the whole request (MBAP header and PDU) must come in request_timeout
@@ -262,7 +263,7 @@ class ModbusRequestHandler(BaseRequestHandler):
                 # update response MBAP fields with request data
                 session_data.set_response_mbap()
                 # pass the current session data to request engine
-                self.server.engine(session_data)
+                server.engine(session_data)
                 # send the tx pdu with the last rx mbap (only length field change)
                 self._send_all(session_data.response.raw)
         except (Error, OSError) as e:

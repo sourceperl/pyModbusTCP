@@ -9,6 +9,7 @@ import struct
 import time
 from binascii import hexlify
 from socket import AF_UNSPEC, IPPROTO_TCP, SOCK_STREAM, TCP_NODELAY
+from typing import TYPE_CHECKING
 
 from ..constants import (
     MB_CONNECT_ERR,
@@ -38,15 +39,26 @@ class ClientTransportMixin:
     The frames are checked here (MBAP header, function code, exception), not their content.
     """
 
+    if TYPE_CHECKING:
+        # settings: properties of ModbusClient (read-only here, a variable would be an incompatible override of them)
+        @property
+        def host(self) -> str: ...
+        @property
+        def port(self) -> int: ...
+        @property
+        def unit_id(self) -> int: ...
+        @property
+        def timeout(self) -> float: ...
+        @property
+        def auto_open(self) -> bool: ...
+        @property
+        def auto_close(self) -> bool: ...
+        @property
+        def connect_retries(self) -> int: ...
+        @property
+        def connect_retry_delay(self) -> float: ...
+
     # set by ModbusClient (settings and connection state)
-    host: str
-    port: int
-    unit_id: int
-    timeout: float
-    auto_open: bool
-    auto_close: bool
-    connect_retries: int
-    connect_retry_delay: float
     _tcp_no_delay: bool
     _sock: socket.socket | None
     _deadline: float

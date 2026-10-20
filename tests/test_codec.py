@@ -1,6 +1,7 @@
 """Tests of pyModbusTCP.codec."""
 
 import math
+from typing import Any
 
 import pytest
 
@@ -56,7 +57,9 @@ def test_types() -> None:
 
 def test_errors() -> None:
     # strings are refused: the enums catch a typo at once
-    for args in (('float32',), (F32, 'CDAB'), (F32, 1)):
+    # (bad arguments typed Any: they are deliberately not of the annotated type)
+    bad_args: list[tuple[Any, ...]] = [('float32',), (F32, 'CDAB'), (F32, 1)]
+    for args in bad_args:
         with pytest.raises(TypeError):
             Codec(*args)
     with pytest.raises(AttributeError):
