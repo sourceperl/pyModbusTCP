@@ -8,10 +8,13 @@ class InternalError(Exception):
 class NetworkError(InternalError):
     """ Network or frame error: code is a MB_xxx_ERR constant. """
 
-    def __init__(self, code: int, message: str):
+    def __init__(self, code: int, message: str, *, retryable: bool = False):
         super().__init__(message)
         self.code = code
         self.message = message
+        # True if a new attempt is safe and may succeed: a connect error (but not an unknown host name), or a request
+        # that the server has surely not read (connection reset before any reply on a reused connection)
+        self.retryable = retryable
 
 
 class ModbusExcept(InternalError):

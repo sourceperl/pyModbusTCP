@@ -38,9 +38,12 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
     _ModbusExcept: TypeAlias = _errors.ModbusExcept
 
     def __init__(self, host: str = 'localhost', port: int = 502, unit_id: int = 1, timeout: float = 30.0,
-                 auto_open: bool = True, auto_close: bool = False, no_delay: bool = True,
-                 broadcast_interval: float = 0.15):
+                 auto_open: bool = True, auto_close: bool = False, *,
+                 connect_retries: int = 0, connect_retry_delay: float = 0.5,
+                 tcp_no_delay: bool = True, broadcast_interval: float = 0.15):
         """Constructor.
+
+        The arguments after auto_close are keyword-only (like ``ModbusClient('plc', connect_retries=3)``).
 
         :param host: hostname or IPv4/IPv6 address of the server
         :type host: str
@@ -54,8 +57,14 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         :type auto_open: bool
         :param auto_close: auto TCP close
         :type auto_close: bool
-        :param no_delay: disable Nagle's algorithm on TCP connection (True by default)
-        :type no_delay: bool
+        :param connect_retries: number of new connect attempts after a failed one (default 0: no retry), for
+            open() and the auto_open connections (a request is never sent twice, only the connection is retried)
+        :type connect_retries: int
+        :param connect_retry_delay: base delay in seconds before the first connect retry (default 0.5), doubled at
+            each next retry (exponential backoff, capped at 60 s, with a random jitter)
+        :type connect_retry_delay: float
+        :param tcp_no_delay: set the TCP_NODELAY option on the connection: disable Nagle's algorithm (True by default)
+        :type tcp_no_delay: bool
         :param broadcast_interval: min interval in seconds between two broadcast requests (default 0.15, 0 for no
             limit): a broadcast sent sooner waits, a client never sends broadcasts faster than a serial line can take
         :type broadcast_interval: float
@@ -73,12 +82,16 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         self._timeout = _validators.validate_timeout(timeout)
         self._auto_open = _to_bool(auto_open, 'auto_open')
         self._auto_close = _to_bool(auto_close, 'auto_close')
-        self._no_delay = _to_bool(no_delay, 'no_delay')
+        self._connect_retries = _validators.validate_connect_retries(connect_retries)
+        self._connect_retry_delay = _validators.validate_connect_retry_delay(connect_retry_delay)
+        self._tcp_no_delay = _to_bool(tcp_no_delay, 'tcp_no_delay')
         self._broadcast_interval = _validators.validate_broadcast_interval(broadcast_interval)
         # time of the last broadcast request (time.perf_counter()), for broadcast_interval
         self._last_broadcast = -math.inf
         # internal variables
         self._deadline = 0.0  # end of the current request (time.monotonic() value), see _send() and _recv()
+        self._rx_count = 0  # bytes received since the last send (see _recv())
+        self._conn_reused = False  # the current request is sent on a connection open before it (see _send_pdu())
         # MBAP transaction ID: a counter incremented at each request
         self._transaction_id = random.randint(0, 0xffff)
         self._version = VERSION  # this package version number
@@ -87,9 +100,9 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
 
     def __repr__(self) -> str:
         r_str = ('ModbusClient(host=\'%s\', port=%d, unit_id=%d, timeout=%.2f, auto_open=%s, auto_close=%s, '
-                 'no_delay=%s, broadcast_interval=%g)')
-        r_str %= (self.host, self.port, self.unit_id, self.timeout, self.auto_open, self.auto_close, self.no_delay,
-                  self.broadcast_interval)
+                 'connect_retries=%d, connect_retry_delay=%g, tcp_no_delay=%s, broadcast_interval=%g)')
+        r_str %= (self.host, self.port, self.unit_id, self.timeout, self.auto_open, self.auto_close,
+                  self.connect_retries, self.connect_retry_delay, self.tcp_no_delay, self.broadcast_interval)
         return r_str
 
     def __del__(self) -> None:
@@ -221,16 +234,34 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         self._broadcast_interval = _validators.validate_broadcast_interval(value)
 
     @property
-    def no_delay(self) -> bool:
-        """Get or set TCP_NODELAY mode on connection (True = disable Nagle's algorithm, default)."""
-        return self._no_delay
+    def connect_retries(self) -> int:
+        """Get or set the number of new connect attempts after a failed one (default 0: no retry)."""
+        return self._connect_retries
 
-    @no_delay.setter
-    def no_delay(self, value: bool) -> None:
-        self._no_delay = _to_bool(value, 'no_delay')
+    @connect_retries.setter
+    def connect_retries(self, value: int) -> None:
+        self._connect_retries = _validators.validate_connect_retries(value)
+
+    @property
+    def connect_retry_delay(self) -> float:
+        """Get or set the base delay in seconds before the first connect retry (default 0.5, doubled at each retry)."""
+        return self._connect_retry_delay
+
+    @connect_retry_delay.setter
+    def connect_retry_delay(self, value: float) -> None:
+        self._connect_retry_delay = _validators.validate_connect_retry_delay(value)
+
+    @property
+    def tcp_no_delay(self) -> bool:
+        """Get or set TCP_NODELAY mode on connection (True = disable Nagle's algorithm, default)."""
+        return self._tcp_no_delay
+
+    @tcp_no_delay.setter
+    def tcp_no_delay(self, value: bool) -> None:
+        self._tcp_no_delay = _to_bool(value, 'tcp_no_delay')
         # apply it at once on an open connection (like for the other settings, no need to reconnect)
-        if self.is_open:
-            self._set_sock_tcp_no_delay(value=self.no_delay)
+        if self._sock_open:
+            self._set_sock_tcp_no_delay(value=self.tcp_no_delay)
 
     def open(self) -> bool:
         """Connect to modbus server (open TCP connection).
@@ -290,9 +321,19 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         """
         # init request engine
         self._req_init()
-        # send PDU
+        self._conn_reused = False
+        try:
+            # send PDU
+            self._send_pdu(tx_pdu)
+            # return receive PDU
+            return self._recv_pdu(func_code=tx_pdu[0], min_len=rx_min_len)
+        except NetworkError as e:
+            # auto_open mode, a reused connection lost (reset) before the server read the request: reconnect and
+            # send it again, once (safe, even for a write: the server has not seen the first one)
+            if not (self.auto_open and self._conn_reused and e.retryable):
+                raise
+            self._debug_msg(f'{e.message} on a reused connection: reconnect and send the request again')
         self._send_pdu(tx_pdu)
-        # return receive PDU
         return self._recv_pdu(func_code=tx_pdu[0], min_len=rx_min_len)
 
     def _broadcast_req(self, tx_pdu: bytes) -> bool:

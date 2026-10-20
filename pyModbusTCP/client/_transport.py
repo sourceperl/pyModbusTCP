@@ -1,6 +1,9 @@
 """ pyModbusTCP client: TCP layer (connection, send/receive of the Modbus/TCP frames, frames trace). """
 
+import errno
 import logging
+import random
+import select
 import socket
 import struct
 import time
@@ -23,6 +26,10 @@ from ._errors import ModbusExcept, NetworkError
 # broadcast requests whose late reply is ignored (see _recv_pdu()): the last ones sent, for a limited time
 BROADCAST_IDS_MAX = 128
 BROADCAST_REPLY_DELAY = 10.0
+# max base delay between two connect attempts (s): the exponential backoff stops growing there
+CONNECT_RETRY_MAX_DELAY = 60.0
+# errno of a send/recv on a connection that the server has reset or no longer knows (it didn't read the request)
+CONN_LOST_ERRNOS = frozenset({errno.ECONNRESET, errno.EPIPE, errno.ECONNABORTED})
 
 
 class ClientTransportMixin:
@@ -38,9 +45,13 @@ class ClientTransportMixin:
     timeout: float
     auto_open: bool
     auto_close: bool
-    _no_delay: bool
+    connect_retries: int
+    connect_retry_delay: float
+    _tcp_no_delay: bool
     _sock: socket.socket | None
     _deadline: float
+    _rx_count: int
+    _conn_reused: bool
     _transaction_id: int
     # transaction id -> time of the send (time.monotonic()) of the last broadcast requests, the oldest first: a late
     # reply to one of them is ignored (see _recv_pdu())
@@ -50,7 +61,23 @@ class ClientTransportMixin:
 
     @property
     def is_open(self) -> bool:
-        """Get current status of the TCP connection (True = open)."""
+        """Get current status of the TCP connection (True = open).
+
+        A connection closed or reset by the server (server stopped, idle timeout...) is seen as closed: it is
+        closed on the client side too. A server gone without closing it (power cut, cable pulled) can't be seen:
+        the connection stays open until a request fails on it.
+        """
+        if not self._sock_open:
+            return False
+        if self._closed_by_peer():
+            self._debug_msg('connection closed by the server')
+            self.close()
+            return False
+        return True
+
+    @property
+    def _sock_open(self) -> bool:
+        """Return True if the client socket is open (local state only, the server may have closed the connection)."""
         if self._sock is None:
             return False
         try:
@@ -59,9 +86,39 @@ class ClientTransportMixin:
             return False
 
     def _open(self) -> None:
-        """Connect to modbus server (open TCP connection)."""
+        """Connect to modbus server (open TCP connection), with up to connect_retries new attempts on failure.
+
+        Only the connection is retried, never a request: a write request sent twice could be executed twice.
+        """
+        attempt = 0
+        while True:
+            try:
+                self._open_once()
+                if attempt:
+                    self._debug_msg(f'connected after {attempt} retr{"y" if attempt == 1 else "ies"}')
+                return
+            except NetworkError as e:
+                if not e.retryable or attempt >= self.connect_retries:
+                    raise
+                delay = self._connect_retry_wait(attempt)
+                attempt += 1
+                self._debug_msg(f'{e.message}: retry {attempt}/{self.connect_retries} in {delay:.3f} s')
+                time.sleep(delay)
+
+    def _connect_retry_wait(self, attempt: int) -> float:
+        """Delay in seconds before the connect retry number attempt + 1 (exponential backoff with jitter).
+
+        The base delay doubles at each retry (capped at CONNECT_RETRY_MAX_DELAY), the wait is a random value
+        between half and all of it: many clients disconnected at once by a server restart don't retry in sync.
+        """
+        # (exponent capped: 2.0 ** 32 already exceeds any cap, a large one would be a float overflow)
+        base = min(self.connect_retry_delay * 2.0 ** min(attempt, 32), CONNECT_RETRY_MAX_DELAY)
+        return base / 2 + random.uniform(0.0, base / 2)
+
+    def _open_once(self) -> None:
+        """Connect to modbus server (open TCP connection): one attempt."""
         # open an already open socket -> reset it
-        if self.is_open:
+        if self._sock_open:
             self.close()
         # list available sockets on the target host/port
         # AF_xxx : AF_INET -> IPv4, AF_INET6 -> IPv6,
@@ -71,7 +128,9 @@ class ClientTransportMixin:
         except (socket.gaierror, UnicodeError) as e:
             # name resolution failure: report it like any other connect error (no exception for the caller)
             # (UnicodeError: a name that the IDNA codec can't encode, like a label too long once encoded)
-            raise NetworkError(MB_CONNECT_ERR, f'host name resolution error: {e}') from None
+            # only a temporary DNS failure (EAI_AGAIN) is worth a retry, an unknown name stays unknown
+            retryable = isinstance(e, socket.gaierror) and e.errno == socket.EAI_AGAIN
+            raise NetworkError(MB_CONNECT_ERR, f'host name resolution error: {e}', retryable=retryable) from None
         # try each address in turn, keep the last failure reason for the error message
         last_err: OSError | None = None
         for af, sock_type, proto, _canon_name, sa in addr_infos:
@@ -84,7 +143,7 @@ class ClientTransportMixin:
                 self._sock.settimeout(self.timeout)
                 # disable Nagle's algorithm: modbus requests are small frames
                 # that expect an immediate reply (request/response pattern)
-                self._set_sock_tcp_no_delay(self._no_delay)
+                self._set_sock_tcp_no_delay(self._tcp_no_delay)
                 self._sock.connect(sa)
             except OSError as e:
                 last_err = e
@@ -92,9 +151,46 @@ class ClientTransportMixin:
                 continue
             break
         # check connect status
-        if not self.is_open:
+        if not self._sock_open:
             reason = 'connection refused' if last_err is None else f'connect error: {last_err}'
-            raise NetworkError(MB_CONNECT_ERR, reason)
+            raise NetworkError(MB_CONNECT_ERR, reason, retryable=True)
+
+    def _closed_by_peer(self) -> bool:
+        """Return True if the server has closed (FIN) or reset (RST) the open connection, without blocking.
+
+        A connection closed by the server stays open on the client side until a send/recv fails: this check finds it
+        (for is_open and before a request is sent on it). The bytes waiting on the socket (if any) are not read.
+        """
+        if self._sock is None:
+            return True
+        try:
+            # poll(): no limit on the fd value, select() only on Windows (no poll(), but no such limit either)
+            if hasattr(select, 'poll'):
+                poller = select.poll()
+                poller.register(self._sock, select.POLLIN)
+                readable = bool(poller.poll(0))
+            else:
+                readable = bool(select.select([self._sock], [], [], 0)[0])
+            # nothing to read: the connection is alive (or the server is gone without a FIN, nothing can tell)
+            if not readable:
+                return False
+            # readable: some data (a late reply, kept for _recv_pdu()), an end of stream (b'') or an error
+            return self._sock.recv(1, socket.MSG_PEEK) == b''
+        except (OSError, ValueError):
+            return True
+
+    def _open_for_request(self) -> bool:
+        """For auto_open mode: open the connection if it's closed, or if the server has closed it.
+
+        :returns: True if the connection was already open and is reused, False if it's a new one
+        """
+        if self._sock_open:
+            if not self._closed_by_peer():
+                return True
+            self._debug_msg('connection closed by the server: reconnect')
+            self.close()
+        self._open()
+        return False
 
     def close(self) -> None:
         """Close current TCP connection."""
@@ -142,7 +238,7 @@ class ClientTransportMixin:
         :type frame: bytes
         """
         # check socket status
-        if self._sock is None or not self.is_open:
+        if self._sock is None or not self._sock_open:
             raise NetworkError(MB_SOCK_CLOSE_ERR, 'try to send on a close socket')
         # the timeout is a limit for the whole request (send + receive), not for each recv() call:
         # a slow server sending its response byte by byte can't hold the client more than timeout seconds
@@ -155,19 +251,22 @@ class ClientTransportMixin:
         except TimeoutError:
             self.close()
             raise NetworkError(MB_TIMEOUT_ERR, 'timeout error')
-        except OSError:
+        except OSError as e:
             self.close()
-            raise NetworkError(MB_SEND_ERR, 'send error')
+            # a modbus frame is sent in one send() call: if it fails, nothing of it was sent
+            raise NetworkError(MB_SEND_ERR, f'send error: {e}', retryable=e.errno in CONN_LOST_ERRNOS) from None
+        self._rx_count = 0
 
     def _send_pdu(self, pdu: bytes) -> None:
         """Convert modbus PDU to frame and send it.
 
+        _conn_reused is set to True if the request is sent on a connection already open before it.
+
         :param pdu: modbus frame PDU
         :type pdu: bytes
         """
-        # for auto_open mode, check TCP and open on need
-        if self.auto_open and not self.is_open:
-            self._open()
+        # for auto_open mode, check TCP and open on need (also if the server has closed it)
+        self._conn_reused = self._open_for_request() if self.auto_open else self._sock_open
         # add MBAP header to PDU
         tx_frame = self._add_mbap(pdu)
         # send frame with error check
@@ -188,8 +287,8 @@ class ClientTransportMixin:
         wait = self._last_broadcast + self._broadcast_interval - time.perf_counter()
         if wait > 0:
             time.sleep(wait)
-        if self.auto_open and not self.is_open:
-            self._open()
+        if self.auto_open:
+            self._open_for_request()
         tx_frame = self._add_mbap(pdu, unit_id=0)
         self._send(tx_frame)
         # a gateway may reply anyway (an echo, an exception after its timeout): see _recv_pdu()
@@ -213,7 +312,7 @@ class ClientTransportMixin:
         :raises NetworkError: on timeout, closed or broken connection
         """
         # check socket status
-        if self._sock is None or not self.is_open:
+        if self._sock is None or not self._sock_open:
             raise NetworkError(MB_SOCK_CLOSE_ERR, 'try to recv on a close socket')
         # time remaining before the end of the request
         remaining = self._deadline - time.monotonic()
@@ -226,12 +325,17 @@ class ClientTransportMixin:
         except TimeoutError:
             self.close()
             raise NetworkError(MB_TIMEOUT_ERR, 'timeout error')
-        except OSError:
-            r_buffer = b''
+        except OSError as e:
+            self.close()
+            # reset before any byte of the reply: the server (or its TCP stack after a reboot) didn't read the request
+            # (an end of stream b'' is not enough: the server may have executed the request, then closed)
+            retryable = self._rx_count == 0 and e.errno in CONN_LOST_ERRNOS
+            raise NetworkError(MB_RECV_ERR, f'recv error: {e}', retryable=retryable) from None
         # handle recv error
         if not r_buffer:
             self.close()
-            raise NetworkError(MB_RECV_ERR, 'recv error')
+            raise NetworkError(MB_RECV_ERR, 'recv error: connection closed by the server')
+        self._rx_count += len(r_buffer)
         return r_buffer
 
     def _recv_all(self, size: int) -> bytes:

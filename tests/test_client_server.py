@@ -1,6 +1,7 @@
 """ Test of pyModbusTCP client-server interaction """
 
 import socket
+import time
 import unittest
 from collections.abc import Callable
 from random import choice, getrandbits, randint
@@ -60,26 +61,59 @@ class TestClientServer(unittest.TestCase):
         # test manual open
         self.client.open()
         self.assertTrue(self.client.is_open, "Client should be open after manual open")
-        # test server side close
+        # test server side close: stop() closes the sessions, the client sees it without any I/O operation
         self.server.stop()
-        self.assertTrue(self.client.is_open, "Client should still report as open until I/O operation")
-        # test I/O operation updates status
-        self.client.read_coils(0)
-        self.assertFalse(self.client.is_open, "Client should report as closed after I/O operation on closed server")
+        self.assertTrue(self._wait_closed(), "Client should report as closed once the server is stopped")
+        # closed on the client side too
+        self.assertIsNone(self.client._sock)
+        # a request fails (nobody listening), the status stays closed
+        self.assertIsNone(self.client.read_coils(0))
+        self.assertFalse(self.client.is_open)
+
+    def _wait_closed(self, timeout: float = 2.0) -> bool:
+        """Wait for is_open False (the FIN of the server may take a moment to arrive), return True if it is."""
+        deadline = time.monotonic() + timeout
+        while self.client.is_open:
+            if time.monotonic() > deadline:
+                return False
+            time.sleep(0.01)
+        return True
+
+    def test_client_is_open_server_restart(self) -> None:
+        """Server stopped then restarted on the same port: is_open is False, the next request reconnects."""
+        self.assertEqual(self.client.read_coils(0), [False])
+        port = self.client.port
+        self.server.stop()
+        self.assertTrue(self._wait_closed())
+        self.server = ModbusServer(host='127.0.0.1', port=port, no_block=True)
+        self.server.start()
+        self.assertEqual(self.client.read_coils(0), [False])
+        self.assertTrue(self.client.is_open)
+
+    def test_client_is_open_idle_timeout(self) -> None:
+        """The server closes an idle session: is_open is False, with no request."""
+        self.client.close()
+        self.server.stop()
+        self.server = ModbusServer(host='127.0.0.1', port=0, no_block=True, idle_timeout=0.2)
+        host, port = self.server.start()
+        self.client = ModbusClient(host=host, port=port)
+        self.assertTrue(self.client.open())
+        self.assertTrue(self.client.is_open)
+        self.assertTrue(self._wait_closed(3.0))
 
     def test_tcp_nodelay_sockopt(self) -> None:
-        """On socket TCP_NODELAY option must reflect the no_delay mode."""
-        # configure no_delay on and off and check getsockopt status
-        for no_delay, expected_status in ((True, 1), (False, 0)):
-            self.client.no_delay = no_delay
-            # restart socket and apply no_delay
+        """On socket TCP_NODELAY option must reflect the tcp_no_delay mode."""
+        # configure tcp_no_delay on and off and check getsockopt status
+        for tcp_no_delay, expected_status in ((True, 1), (False, 0)):
+            self.client.tcp_no_delay = tcp_no_delay
+            # restart socket and apply tcp_no_delay
             self.client.open()
             # check _sock type
             if not isinstance(self.client._sock, socket.socket):
                 raise TypeError("Expected self.client._sock to be socket")
             # enforce bool: macOS can return non-zero values other than 1 (e.g., 4) when enabled
-            no_delay_status = bool(self.client._sock.getsockopt(IPPROTO_TCP, TCP_NODELAY))
-            self.assertEqual(no_delay_status, expected_status)
+            status = bool(self.client._sock.getsockopt(IPPROTO_TCP, TCP_NODELAY))
+            self.assertEqual(status, expected_status)
             self.client.close()
 
     def test_listener_exception(self) -> None:

@@ -70,3 +70,24 @@ def validate_broadcast_interval(value: object) -> float:
     if not (math.isfinite(value) and 0.0 <= value <= MAX_BROADCAST_INTERVAL):
         raise ValueError(f'broadcast_interval can\'t be set (valid from 0 to {MAX_BROADCAST_INTERVAL:g})')
     return float(value)
+
+
+# max number of connect retries and max delay before a retry (s)
+MAX_CONNECT_RETRIES = 1000
+MAX_CONNECT_RETRY_DELAY = 60.0
+
+
+def validate_connect_retries(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError('connect_retries must be an int')
+    if not 0 <= value <= MAX_CONNECT_RETRIES:
+        raise ValueError(f'connect_retries can\'t be set (valid from 0 to {MAX_CONNECT_RETRIES})')
+    return value
+
+
+def validate_connect_retry_delay(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (float, int)):
+        raise TypeError('connect_retry_delay must be a float')
+    if not (math.isfinite(value) and 0.0 <= value <= MAX_CONNECT_RETRY_DELAY):
+        raise ValueError(f'connect_retry_delay can\'t be set (valid from 0 to {MAX_CONNECT_RETRY_DELAY:g})')
+    return float(value)

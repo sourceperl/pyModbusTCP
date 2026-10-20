@@ -15,6 +15,8 @@ Revision history for pyModbusTCP
     - client/server: stricter argument checks (TypeError/ValueError instead of a silent conversion or truncation),
       numpy booleans are no longer accepted as coil values.
     - client: the function code of a reply must match the request (MB_RECV_ERR otherwise).
+    - client (since 0.4.0a2): the arguments of ModbusClient after auto_close are keyword-only, no_delay is renamed
+      tcp_no_delay (argument and property).
     - server: the typed shortcuts of the store (read_float32(), write_int32()...) take a byte_order (ByteOrder,
       default ABCD) instead of big_endian: big_endian=False is now ByteOrder.CDAB, BADC and DCBA are available.
       New shortcuts read/write_uint16() and read/write_int16() (1 register, no byte order), read/write_uint64() and
@@ -30,7 +32,7 @@ Revision history for pyModbusTCP
     - codec: Codec(DataType, ByteOrder) converts 16/32/64 bits integers and IEEE floats to registers and back, in
       the ABCD, CDAB, BADC or DCBA byte order, for the client and the server store (read_values/write_values).
       ByteOrder64 gives the 8 orders of a 64 bits value (like CDABGHEF), for a Codec only (rare devices).
-    - client: context manager, TCP_NODELAY (no_delay), timeout for the whole request.
+    - client: context manager, TCP_NODELAY (tcp_no_delay), timeout for the whole request.
     - client: broadcast=True on the write functions (and custom_request()) sends the request to the unit id 0
       (broadcast of a TCP to RTU gateway) without waiting for a reply; a late reply of the gateway is ignored.
     - tools: mbtcp-tcp2rtu --allow-broadcast answers a broadcast at once with the normal response of its function
@@ -39,6 +41,13 @@ Revision history for pyModbusTCP
       the bus (--broadcast-buffer, default 4), the next ones get exception 0x06 at once; one that waited more than
       --broadcast-max-age (default 10 s) is dropped: a flood never builds a backlog of old writes.
     - client: broadcast_interval (default 0.15 s) spaces two broadcast requests: a loop can't flood a gateway.
+    - client: connect_retries (default 0) and connect_retry_delay (default 0.5 s) retry a failed connect, with an
+      exponential backoff and a jitter (open() and auto_open). A request is never sent twice.
+    - client: auto_open reconnects for the current request if the server has closed the connection (idle timeout,
+      restart): the request no longer fails, only the next one reconnected before. A request sent on a connection
+      reset before the server read it is sent again once on a new connection.
+    - client: is_open is False as soon as the server has closed or reset the connection (server stopped, idle
+      timeout), no longer only after a failed request; the connection is then closed on the client side too.
     - tools: command line tools (python -m pyModbusTCP.tools, or the mbtcp-* commands of pyModbusTCP-cli with
       "pip install pyModbusTCP[cli]"): mbtcp-server, mbtcp-client (table output, csv/json, write-read, typed
       values with -T/-b), mbtcp-tcp2rtu and mbtcp-rtu2tcp gateways (with RS-485 mode, needs pyserial).

@@ -17,6 +17,9 @@ The settings can also be changed later with the properties of the same name (:at
 :attr:`~.ModbusClient.port`, :attr:`~.ModbusClient.unit_id`, :attr:`~.ModbusClient.timeout`...). Changing the host or
 the port closes the current connection.
 
+The arguments after ``auto_close`` (``connect_retries``, ``connect_retry_delay``, ``tcp_no_delay`` and
+``broadcast_interval``) are keyword-only: ``ModbusClient('192.168.1.10', connect_retries=3)``.
+
 Invalid settings raise an exception at once (``ValueError`` for a bad value, ``TypeError`` for a bad type):
 
 .. code-block:: python
@@ -47,7 +50,12 @@ Manage the TCP connection
 -------------------------
 
 With the default settings (``auto_open=True``, ``auto_close=False``), the connection is opened at the first request
-and kept open for the next ones. It is opened again at the next request if the server closes it.
+and kept open for the next ones. If the server closes it (an idle timeout, a restart), the next request sees it
+before the send and reconnects at once: the request is sent on the new connection, it doesn't fail. If the
+connection is reset by the server just as the request is sent (it was not read), the request is sent again once on a
+new connection. A request that the server may have read is never sent again (a write could be executed twice): it
+fails, the next request reconnects. A server gone without closing the connection (a cable pulled, a power cut) can't
+be seen: the request fails on timeout.
 
 To open the connection before each request and close it after (useful with a server that accepts few
 connections, or for a request every few minutes):
@@ -68,7 +76,24 @@ To manage the connection yourself:
         regs_2 = c.read_holding_registers(55, 10)
         c.close()
 
-:attr:`~.ModbusClient.is_open` gives the current state of the connection.
+:attr:`~.ModbusClient.is_open` gives the current state of the connection. A connection closed or reset by the server
+(server stopped, idle timeout) is seen as closed at once, without a request, and it is closed on the client side too.
+A server gone without closing the connection (a cable pulled, a power cut) can't be seen: ``is_open`` stays True until
+a request fails on timeout.
+
+To retry a failed connection (a server that restarts, a link that comes back), set
+:attr:`~.ModbusClient.connect_retries`: after a failed connect, up to this number of new attempts are made, the first
+one after about :attr:`~.ModbusClient.connect_retry_delay` seconds, the delay doubled at each next one (up to 60 s,
+with a random jitter so that many clients don't retry in sync). This applies to :meth:`~.ModbusClient.open` and to
+the connections opened by ``auto_open``. An unknown host name is not retried. Only the connection is retried, never a
+request: a write sent twice could be executed twice, the application decides what to do on a request error.
+
+.. code-block:: python
+
+    # up to 5 retries, after ~0.5 s, ~1 s, ~2 s, ~4 s and ~8 s
+    c = ModbusClient(host='localhost', connect_retries=5, connect_retry_delay=0.5)
+
+While it retries, the call blocks: keep ``connect_retries`` low in a loop that must stay responsive.
 
 The client is also a context manager, the connection is closed at the end of the block:
 

@@ -101,6 +101,23 @@ class TestModbusClient(unittest.TestCase):
         with self.assertRaises(TypeError):
             c.unit_id = True
 
+    def test_constructor_args(self) -> None:
+        """The 6 first arguments can be positional (as in 0.3.x), the next ones are keyword-only."""
+        c = ModbusClient('127.0.0.1', 5020, 2, 5.0, False, True)
+        self.assertEqual((c.host, c.port, c.unit_id, c.timeout, c.auto_open, c.auto_close),
+                         ('127.0.0.1', 5020, 2, 5.0, False, True))
+        with self.assertRaises(TypeError):
+            ModbusClient('127.0.0.1', 5020, 2, 5.0, False, True, 3)  # type: ignore[call-arg]
+        c = ModbusClient(connect_retries=3, connect_retry_delay=1.0, tcp_no_delay=False, broadcast_interval=0.5)
+        self.assertEqual((c.connect_retries, c.connect_retry_delay, c.tcp_no_delay, c.broadcast_interval),
+                         (3, 1.0, False, 0.5))
+        self.assertTrue(repr(c).endswith('auto_open=True, auto_close=False, connect_retries=3, '
+                                         'connect_retry_delay=1, tcp_no_delay=False, broadcast_interval=0.5)'))
+        # the old name is gone
+        with self.assertRaises(TypeError):
+            ModbusClient(no_delay=False)  # type: ignore[call-arg]
+        self.assertRaises(TypeError, ModbusClient, tcp_no_delay='yes')
+
     def test_misc(self) -> None:
         """Check of misc default values."""
         self.assertEqual(ModbusClient().auto_open, True)
@@ -660,3 +677,291 @@ class TestBroadcast(unittest.TestCase):
         c = ModbusClient(host='127.0.0.1', port=free_port, timeout=0.5)
         self.assertFalse(c.write_single_register(0, 1, broadcast=True))
         self.assertEqual(c.last_error, MB_CONNECT_ERR)
+
+
+class TestConnectRetry(unittest.TestCase):
+    """ Connect retry (connect_retries, connect_retry_delay). """
+
+    @staticmethod
+    def _free_port() -> int:
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1', 0))
+            port: int = sock.getsockname()[1]
+            return port
+
+    def test_settings(self) -> None:
+        c = ModbusClient()
+        self.assertEqual(c.connect_retries, 0)
+        self.assertEqual(c.connect_retry_delay, 0.5)
+        c = ModbusClient(connect_retries=3, connect_retry_delay=1)
+        self.assertEqual(c.connect_retries, 3)
+        self.assertIsInstance(c.connect_retry_delay, float)
+        self.assertIn('connect_retries=3, connect_retry_delay=1', repr(c))
+        for bad_type in (True, 1.0, '1', None):
+            with self.assertRaises(TypeError):
+                ModbusClient(connect_retries=bad_type)  # type: ignore[arg-type]
+        for bad_type in (True, '1', None):
+            with self.assertRaises(TypeError):
+                ModbusClient(connect_retry_delay=bad_type)  # type: ignore[arg-type]
+        for bad_value in (-1, 1001):
+            with self.assertRaises(ValueError):
+                ModbusClient(connect_retries=bad_value)
+        for bad_float in (-0.1, 60.1, float('nan'), float('inf')):
+            with self.assertRaises(ValueError):
+                ModbusClient(connect_retry_delay=bad_float)
+        c.connect_retries = 0
+        c.connect_retry_delay = 0
+        self.assertEqual((c.connect_retries, c.connect_retry_delay), (0, 0.0))
+
+    def test_no_retry_by_default(self) -> None:
+        c = ModbusClient('127.0.0.1', self._free_port(), timeout=0.5)
+        with mock.patch('pyModbusTCP.client._transport.time.sleep') as sleep:
+            self.assertFalse(c.open())
+        self.assertEqual(c.last_error, MB_CONNECT_ERR)
+        sleep.assert_not_called()
+
+    def test_retries_exhausted(self) -> None:
+        """Every attempt fails: connect_retries + 1 attempts, an exponential backoff between them."""
+        c = ModbusClient('127.0.0.1', self._free_port(), timeout=0.5, connect_retries=4, connect_retry_delay=0.2)
+        with mock.patch('pyModbusTCP.client._transport.time.sleep') as sleep, \
+                mock.patch.object(c, '_open_once', wraps=c._open_once) as open_once:
+            self.assertFalse(c.open())
+        self.assertEqual(c.last_error, MB_CONNECT_ERR)
+        self.assertEqual(open_once.call_count, 5)
+        delays = [call.args[0] for call in sleep.call_args_list]
+        self.assertEqual(len(delays), 4)
+        # base delays 0.2, 0.4, 0.8, 1.6: the wait is between half and all of it
+        for n, delay in enumerate(delays):
+            base = 0.2 * 2 ** n
+            self.assertTrue(base / 2 <= delay <= base, f'retry {n + 1}: {delay} not in [{base / 2}, {base}]')
+
+    def test_backoff_cap(self) -> None:
+        c = ModbusClient(connect_retry_delay=10.0)
+        for attempt in (3, 10, 100):
+            self.assertLessEqual(c._connect_retry_wait(attempt), 60.0)
+            self.assertGreaterEqual(c._connect_retry_wait(attempt), 30.0)
+        self.assertEqual(ModbusClient(connect_retry_delay=0)._connect_retry_wait(5), 0.0)
+
+    def test_server_up_after_a_while(self) -> None:
+        """The server starts listening after the first attempts: a request with auto_open succeeds."""
+        port = self._free_port()
+        listening = threading.Event()
+
+        def late_server() -> None:
+            time.sleep(0.3)
+            with socket.socket() as listener:
+                listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                listener.bind(('127.0.0.1', port))
+                listener.listen()
+                listening.set()
+                listener.settimeout(5.0)
+                conn, _ = listener.accept()
+                with conn:
+                    conn.settimeout(5.0)
+                    req = conn.recv(256)
+                    conn.sendall(req[:2] + b'\x00\x00\x00\x05\x01\x03\x02\x00\x2a')
+                    conn.recv(256)
+
+        thread = threading.Thread(target=late_server, daemon=True)
+        thread.start()
+        c = ModbusClient('127.0.0.1', port, timeout=2.0, connect_retries=10, connect_retry_delay=0.05)
+        self.addCleanup(thread.join, 5.0)
+        self.addCleanup(c.close)
+        self.assertEqual(c.read_holding_registers(0), [42])
+        self.assertTrue(listening.is_set())
+        self.assertEqual(c.last_error, MB_NO_ERR)
+
+    def test_name_resolution(self) -> None:
+        """An unknown name is not retried, a temporary DNS failure (EAI_AGAIN) is."""
+        c = ModbusClient('plc.invalid', connect_retries=3, connect_retry_delay=0)
+        for errno, attempts in ((socket.EAI_NONAME, 1), (socket.EAI_AGAIN, 4)):
+            with mock.patch('pyModbusTCP.client._transport.socket.getaddrinfo',
+                            side_effect=socket.gaierror(errno, 'dns error')) as getaddrinfo:
+                self.assertFalse(c.open())
+            self.assertEqual(c.last_error, MB_CONNECT_ERR)
+            self.assertEqual(getaddrinfo.call_count, attempts)
+
+    def test_request_is_never_resent(self) -> None:
+        """A request that fails after the connect (recv error) is not sent again."""
+        requests: list[bytes] = []
+
+        def make_response(req: bytes) -> bytes:
+            requests.append(req)
+            return b''
+
+        port = TestModbusClient._start_fake_server(self, make_response)  # type: ignore[arg-type]
+        c = ModbusClient('127.0.0.1', port, timeout=1.0, connect_retries=3, connect_retry_delay=0)
+        self.addCleanup(c.close)
+        self.assertFalse(c.write_single_register(0, 1))
+        self.assertEqual(len(requests), 1)
+
+
+class TestConnectionClosedByServer(unittest.TestCase):
+    """ auto_open: a connection closed by the server is reopened by the request itself, not by the next one. """
+
+    REPLY = b'\x00\x00\x00\x05\x01\x03\x02\x00\x2a'  # MBAP (without transaction id) + read 1 register: 42
+
+    def _server(self, on_conn: Callable[[socket.socket, list[bytes]], None]) -> tuple[int, list[bytes]]:
+        """Start a server: on_conn(conn, requests) is called for each new connection (in a thread).
+
+        :returns: the TCP port and the list of every request received
+        """
+        listener = socket.socket()
+        self.addCleanup(listener.close)
+        listener.bind(('127.0.0.1', 0))
+        listener.listen()
+        requests: list[bytes] = []
+
+        def serve() -> None:
+            while True:
+                try:
+                    conn, _ = listener.accept()
+                except OSError:
+                    return
+                conn.settimeout(5.0)
+                try:
+                    on_conn(conn, requests)
+                except OSError:
+                    pass
+
+        threading.Thread(target=serve, daemon=True).start()
+        port: int = listener.getsockname()[1]
+        return port, requests
+
+    def _reply_then(self, close: Callable[[socket.socket], None]) -> Callable[[socket.socket, list[bytes]], None]:
+        """Connection handler: reply to the first request, then close(conn)."""
+        def on_conn(conn: socket.socket, requests: list[bytes]) -> None:
+            req = conn.recv(256)
+            requests.append(req)
+            conn.sendall(req[:2] + self.REPLY)
+            close(conn)
+        return on_conn
+
+    @staticmethod
+    def _rst(conn: socket.socket) -> None:
+        """Close with a RST (SO_LINGER 0) instead of a FIN."""
+        conn.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', 1, 0))
+        conn.close()
+
+    def _check_every_request_ok(self, port: int, requests: list[bytes], closed_check: bool = True) -> None:
+        c = ModbusClient('127.0.0.1', port, timeout=2.0)
+        self.addCleanup(c.close)
+        patcher = mock.patch.object(c, '_closed_by_peer', return_value=False) if not closed_check else None
+        for n in range(3):
+            self.assertEqual(c.read_holding_registers(0), [42], f'request {n}: {c.last_error_as_txt}')
+            self.assertEqual(c.last_error, MB_NO_ERR)
+            # let the server close the connection
+            time.sleep(0.1)
+            if patcher and n == 0:
+                # the close is not seen before the send (race): the request fails, then it is sent again
+                patcher.start()
+                self.addCleanup(patcher.stop)
+
+    def test_closed_by_server(self) -> None:
+        """The server closes the connection (FIN) after each reply, like an idle timeout: every request is ok."""
+        port, requests = self._server(self._reply_then(lambda conn: conn.close()))
+        self._check_every_request_ok(port, requests)
+        self.assertEqual(len(requests), 3)
+
+    def test_reset_by_server(self) -> None:
+        """The server resets the connection (RST) after each reply: every request is ok."""
+        port, requests = self._server(self._reply_then(self._rst))
+        self._check_every_request_ok(port, requests)
+        self.assertEqual(len(requests), 3)
+
+    def test_reset_not_seen_before_send(self) -> None:
+        """The connection is reset but the check before the send doesn't see it (the server resets it at this very
+        moment): the send fails with a reset, the server has not read the request: it is sent again once on a new
+        connection."""
+        port, requests = self._server(self._reply_then(self._rst))
+        self._check_every_request_ok(port, requests, closed_check=False)
+        # each request is received once: the first send, on the lost connection, never reached the server
+        self.assertEqual(len(requests), 3)
+
+    def test_close_not_seen_before_send(self) -> None:
+        """The connection is closed (FIN) but the check before the send doesn't see it: the reply is an end of
+        stream, like for a server that reads the request, then closes: it may have executed it, no new send."""
+        port, requests = self._server(self._reply_then(lambda conn: conn.close()))
+        c = ModbusClient('127.0.0.1', port, timeout=2.0)
+        self.addCleanup(c.close)
+        self.assertEqual(c.read_holding_registers(0), [42])
+        time.sleep(0.1)
+        with mock.patch.object(c, '_closed_by_peer', return_value=False):
+            self.assertIsNone(c.read_holding_registers(0))
+        self.assertEqual(c.last_error, MB_RECV_ERR)
+        # the next request reconnects
+        self.assertEqual(c.read_holding_registers(0), [42])
+        self.assertEqual(len(requests), 2)
+
+    def test_request_read_by_server_not_resent(self) -> None:
+        """The server reads the request, then closes without reply: it may have executed it, no new send."""
+        def on_conn(conn: socket.socket, requests: list[bytes]) -> None:
+            if requests:
+                req = conn.recv(256)
+                requests.append(req)
+                conn.close()
+            else:
+                self._reply_then(lambda c: None)(conn, requests)
+                # keep the 1st connection open, the server reads the next request on it, then closes
+                req = conn.recv(256)
+                requests.append(req)
+                conn.close()
+
+        port, requests = self._server(on_conn)
+        c = ModbusClient('127.0.0.1', port, timeout=2.0)
+        self.addCleanup(c.close)
+        self.assertEqual(c.read_holding_registers(0), [42])
+        self.assertFalse(c.write_single_register(0, 1))
+        self.assertEqual(c.last_error, MB_RECV_ERR)
+        time.sleep(0.1)
+        self.assertEqual(len(requests), 2)
+
+    def test_is_open(self) -> None:
+        """is_open is False once the server has closed (FIN) or reset (RST) the connection, with no request."""
+        for close in (lambda conn: conn.close(), self._rst):
+            with self.subTest(close=close):
+                port, _requests = self._server(self._reply_then(close))
+                c = ModbusClient('127.0.0.1', port, timeout=2.0, auto_open=False)
+                self.addCleanup(c.close)
+                self.assertTrue(c.open())
+                self.assertEqual(c.read_holding_registers(0), [42])
+                deadline = time.monotonic() + 2.0
+                while c.is_open and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertFalse(c.is_open)
+                # closed on the client side too: open() makes a new connection
+                self.assertIsNone(c._sock)
+                self.assertTrue(c.open())
+                self.assertTrue(c.is_open)
+
+    def test_no_reconnect_without_auto_open(self) -> None:
+        """auto_open=False: the application manages the connection, no reconnect."""
+        port, requests = self._server(self._reply_then(lambda conn: conn.close()))
+        c = ModbusClient('127.0.0.1', port, timeout=2.0, auto_open=False)
+        self.addCleanup(c.close)
+        self.assertTrue(c.open())
+        self.assertEqual(c.read_holding_registers(0), [42])
+        time.sleep(0.1)
+        self.assertIsNone(c.read_holding_registers(0))
+        self.assertEqual(len(requests), 1)
+
+    def test_late_data_is_not_a_close(self) -> None:
+        """Bytes waiting on the connection are not taken for a close (the check only peeks)."""
+        sent = threading.Event()
+
+        def late_bytes(conn: socket.socket) -> None:
+            conn.sendall(b'\x00\x01')
+            sent.set()
+            time.sleep(1.0)
+
+        port, _requests = self._server(self._reply_then(late_bytes))
+        c = ModbusClient('127.0.0.1', port, timeout=2.0)
+        self.addCleanup(c.close)
+        self.assertEqual(c.read_holding_registers(0), [42])
+        self.assertTrue(sent.wait(2.0))
+        time.sleep(0.05)
+        self.assertFalse(c._closed_by_peer())
+        self.assertTrue(c.is_open)
+        # the bytes are still there (only peeked)
+        assert c._sock is not None
+        self.assertEqual(c._sock.recv(16), b'\x00\x01')
