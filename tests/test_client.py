@@ -837,6 +837,9 @@ class TestConnectionClosedByServer(unittest.TestCase):
         def on_conn(conn: socket.socket, requests: list[bytes]) -> None:
             req = conn.recv(256)
             requests.append(req)
+            # cleared before the reply is sent: a reply_read set for a previous reply (an earlier subtest, a FIN
+            # close that doesn't wait for it) can't be taken for this one, the client sets it only once it's read
+            self.reply_read.clear()
             conn.sendall(req[:2] + self.REPLY)
             close(conn)
         return on_conn
@@ -848,7 +851,6 @@ class TestConnectionClosedByServer(unittest.TestCase):
         reply could destroy it before the client reads it (Linux keeps it).
         """
         self.reply_read.wait(5.0)
-        self.reply_read.clear()
         conn.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', 1, 0))
         conn.close()
 
