@@ -801,6 +801,10 @@ class TestConnectionClosedByServer(unittest.TestCase):
 
     REPLY = b'\x00\x00\x00\x05\x01\x03\x02\x00\x2a'  # MBAP (without transaction id) + read 1 register: 42
 
+    def setUp(self) -> None:
+        # set by the test once a reply is read: _rst() waits for it (see there)
+        self.reply_read = threading.Event()
+
     def _server(self, on_conn: Callable[[socket.socket, list[bytes]], None]) -> tuple[int, list[bytes]]:
         """Start a server: on_conn(conn, requests) is called for each new connection (in a thread).
 
@@ -837,9 +841,14 @@ class TestConnectionClosedByServer(unittest.TestCase):
             close(conn)
         return on_conn
 
-    @staticmethod
-    def _rst(conn: socket.socket) -> None:
-        """Close with a RST (SO_LINGER 0) instead of a FIN."""
+    def _rst(self, conn: socket.socket) -> None:
+        """Close with a RST (SO_LINGER 0) instead of a FIN, once the client has read the reply.
+
+        On Windows, a RST discards the received data not yet read by the application: a RST sent right after the
+        reply could destroy it before the client reads it (Linux keeps it).
+        """
+        self.reply_read.wait(5.0)
+        self.reply_read.clear()
         conn.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', 1, 0))
         conn.close()
 
@@ -850,6 +859,7 @@ class TestConnectionClosedByServer(unittest.TestCase):
         for n in range(3):
             self.assertEqual(c.read_holding_registers(0), [42], f'request {n}: {c.last_error_as_txt}')
             self.assertEqual(c.last_error, MB_NO_ERR)
+            self.reply_read.set()
             # let the server close the connection
             time.sleep(0.1)
             if patcher and n == 0:
@@ -879,19 +889,31 @@ class TestConnectionClosedByServer(unittest.TestCase):
         self.assertEqual(len(requests), 3)
 
     def test_close_not_seen_before_send(self) -> None:
-        """The connection is closed (FIN) but the check before the send doesn't see it: the reply is an end of
-        stream, like for a server that reads the request, then closes: it may have executed it, no new send."""
+        """The connection is closed (FIN) but the check before the send doesn't see it.
+
+        The server, closed, never reads this request, it answers with a RST. What the client gets depends on the OS:
+        - Linux/macOS: the end of stream first (b''), as for a server that reads the request then closes: it may
+          have executed it, the request fails, not sent again;
+        - Windows: the RST (ECONNRESET) before any reply byte: the request was surely not read, it is sent again
+          on a new connection and succeeds.
+        Either way, a request read by the server is never lost: every request received by the server is answered.
+        """
         port, requests = self._server(self._reply_then(lambda conn: conn.close()))
         c = ModbusClient('127.0.0.1', port, timeout=2.0)
         self.addCleanup(c.close)
         self.assertEqual(c.read_holding_registers(0), [42])
         time.sleep(0.1)
         with mock.patch.object(c, '_closed_by_peer', return_value=False):
-            self.assertIsNone(c.read_holding_registers(0))
-        self.assertEqual(c.last_error, MB_RECV_ERR)
+            result = c.read_holding_registers(0)
+        if result is None:
+            self.assertEqual(c.last_error, MB_RECV_ERR)
+        else:
+            self.assertEqual(result, [42])
         # the next request reconnects
         self.assertEqual(c.read_holding_registers(0), [42])
-        self.assertEqual(len(requests), 2)
+        # the server received exactly the requests that succeeded (2 or 3), never one more
+        nb_ok = 2 + (result is not None)
+        self.assertEqual(len(requests), nb_ok)
 
     def test_request_read_by_server_not_resent(self) -> None:
         """The server reads the request, then closes without reply: it may have executed it, no new send."""
@@ -925,6 +947,7 @@ class TestConnectionClosedByServer(unittest.TestCase):
                 self.addCleanup(c.close)
                 self.assertTrue(c.open())
                 self.assertEqual(c.read_holding_registers(0), [42])
+                self.reply_read.set()
                 deadline = time.monotonic() + 2.0
                 while c.is_open and time.monotonic() < deadline:
                     time.sleep(0.01)

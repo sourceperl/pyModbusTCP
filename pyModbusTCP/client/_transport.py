@@ -1,6 +1,5 @@
 """ pyModbusTCP client: TCP layer (connection, send/receive of the Modbus/TCP frames, frames trace). """
 
-import errno
 import logging
 import random
 import select
@@ -30,8 +29,9 @@ BROADCAST_IDS_MAX = 128
 BROADCAST_REPLY_DELAY = 10.0
 # max base delay between two connect attempts (s): the exponential backoff stops growing there
 CONNECT_RETRY_MAX_DELAY = 60.0
-# errno of a send/recv on a connection that the server has reset or no longer knows (it didn't read the request)
-CONN_LOST_ERRNOS = frozenset({errno.ECONNRESET, errno.EPIPE, errno.ECONNABORTED})
+# errors of a send/recv on a connection that the server has reset or no longer knows (it didn't read the request)
+# (exception classes, not errno values: they also match the WSAExxx codes of Windows)
+CONN_LOST_ERRORS = (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)
 
 
 class ClientTransportMixin:
@@ -268,7 +268,7 @@ class ClientTransportMixin:
         except OSError as e:
             self.close()
             # a modbus frame is sent in one send() call: if it fails, nothing of it was sent
-            raise NetworkError(MB_SEND_ERR, f'send error: {e}', retryable=e.errno in CONN_LOST_ERRNOS) from None
+            raise NetworkError(MB_SEND_ERR, f'send error: {e}', retryable=isinstance(e, CONN_LOST_ERRORS)) from None
         self._rx_count = 0
 
     def _send_pdu(self, pdu: bytes) -> None:
@@ -343,7 +343,7 @@ class ClientTransportMixin:
             self.close()
             # reset before any byte of the reply: the server (or its TCP stack after a reboot) didn't read the request
             # (an end of stream b'' is not enough: the server may have executed the request, then closed)
-            retryable = self._rx_count == 0 and e.errno in CONN_LOST_ERRNOS
+            retryable = self._rx_count == 0 and isinstance(e, CONN_LOST_ERRORS)
             raise NetworkError(MB_RECV_ERR, f'recv error: {e}', retryable=retryable) from None
         # handle recv error
         if not r_buffer:
