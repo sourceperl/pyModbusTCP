@@ -66,3 +66,6 @@ strict = true
 testpaths = ["tests"]
 # -ra: summary of skipped/failed tests at the end, strict: a typo in a marker or in this config is an error
 addopts = ["-ra", "--strict-markers", "--strict-config"]
+# a test that hangs (like a blocked read on a pseudo-terminal) dumps the stack of every thread after 120 s, instead of
+# a CI job that only stops on its own timeout without saying where
+faulthandler_timeout = 120

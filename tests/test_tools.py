@@ -1171,12 +1171,11 @@ def late_slave_gateway(late_reply: bytes) -> Generator[int, None, None]:
     serial = pytest.importorskip('serial')
     if not hasattr(os, 'openpty'):
         pytest.skip('no pseudo-terminal on this OS')
-    import tty
+    import select
 
     from pyModbusTCP.tools import tcp_to_rtu_gw
     master, slave = os.openpty()
-    tty.setraw(master)
-    tty.setraw(slave)
+    # pyserial sets the raw mode of the line (like in test_rtu2tcp_relay)
     port = serial.Serial(os.ttyname(slave), baudrate=115200)
     timeout = 0.3
     stop = threading.Event()
@@ -1184,6 +1183,10 @@ def late_slave_gateway(late_reply: bytes) -> Generator[int, None, None]:
     def rtu_slave() -> None:
         first = True
         while not stop.is_set():
+            # never block in read(): on macOS, close() of a descriptor waits for a read() of another thread on it,
+            # the teardown below would hang; the thread is joined before the descriptors are closed
+            if not select.select([master], [], [], 0.05)[0]:
+                continue
             try:
                 request = os.read(master, 256)
             except OSError:
@@ -1200,7 +1203,8 @@ def late_slave_gateway(late_reply: bytes) -> Generator[int, None, None]:
             time.sleep(0.05)
             os.write(master, rtu_frame(1, struct.pack(f'>BB{quantity}H', func_code, 2 * quantity, *regs)))
 
-    threading.Thread(target=rtu_slave, daemon=True).start()
+    slave_thread = threading.Thread(target=rtu_slave, daemon=True)
+    slave_thread.start()
     worker = tcp_to_rtu_gw.ModbusSerialWorker(port, timeout=timeout)
     thread = threading.Thread(target=worker.loop, daemon=True)
     thread.start()
@@ -1214,6 +1218,7 @@ def late_slave_gateway(late_reply: bytes) -> Generator[int, None, None]:
         worker.stop()
         srv.stop()
         thread.join(5.0)
+        slave_thread.join(5.0)
         port.close()
         os.close(master)
         os.close(slave)
