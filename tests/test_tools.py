@@ -315,15 +315,17 @@ def test_permission_error_detection() -> None:
 # --- mbtcp-tcp2rtu ---
 
 @pytest.mark.parametrize('kwargs, expected', [
-    ({}, {'0300000001': None, '0600000001': None, '08000000': None, 'u0': 0x0A, 'u248': 0x0A}),
-    ({'read_only': True}, {'0300000001': None, '2b0e0100': None, '0600000001': 0x01, '0f000000010101': 0x01,
+    ({}, {'0300000001': 0x0B, '0600000001': None, '08000000': None, 'u0': 0x0A, 'u248': 0x0A}),
+    ({'read_only': True}, {'0300000001': 0x0B, '2b0e0100': 0x0B, '0600000001': 0x01, '0f000000010101': 0x01,
                            '2b0d00': 0x01, '08000000': 0x01, 'u0': 0x0A}),
     ({'allow_broadcast': True}, {'u0': None, 'u248': 0x0A}),
 ])
 def test_tcp2rtu_filters(kwargs: dict, expected: dict) -> None:  # type: ignore[type-arg]
-    """Requests are relayed (None) or refused with a modbus exception before reaching the serial line.
+    """Requests are relayed or refused with a modbus exception (0x01, 0x0A) before reaching the serial line.
 
-    The serial line is a loopback (pyserial "loop://"): a relayed request comes back as its own answer.
+    The serial line is a loopback (pyserial "loop://"): a relayed request comes back as its own answer. This echo is
+    the valid response of 0x06 and of an unknown function like 0x08 (None: the echo is returned), not of a read
+    (0x03, 0x2B/0x0E): the gateway waits for a valid one until the timeout, exception 0x0B (relayed, then refused).
     """
     serial = pytest.importorskip('serial')
     from pyModbusTCP.tools import tcp_to_rtu_gw
@@ -1065,3 +1067,133 @@ def test_gateway_without_pyserial(command: str) -> None:
     proc = subprocess.run([sys.executable, '-c', code], check=False, capture_output=True, text=True, timeout=30)
     assert proc.returncode == 2, proc.stderr
     assert 'pip install "pyModbusTCP[serial]"' in proc.stderr
+
+
+# --- mbtcp-tcp2rtu: a late reply of a slave is never taken for the response of another request (audit S-02) ---
+
+def test_tcp2rtu_response_matches() -> None:
+    """The content of a response is checked against its request (RTU frames have no transaction id)."""
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools.tcp_to_rtu_gw import response_matches
+    cases = [
+        # read holding registers, 1 register: 2 bytes of data, no more no less
+        ('0300640001', '03021234', True), ('0300640001', '030412345678', False), ('0300640001', '0302123456', False),
+        # read coils, 10 bits: 2 bytes
+        ('01000a000a', '01020300', True), ('01000a000a', '010103', False),
+        # write single register / coil: the echo of the request
+        ('0600010005', '0600010005', True), ('0600010005', '0600020005', False), ('0500010000', '05000100ff', False),
+        # write multiple registers: address and quantity
+        ('10000a00020400010002', '10000a0002', True),
+        ('10000a00020400010002', '10000a0003', False),
+        # mask write register: the echo
+        ('16000a00ff0000', '16000a00ff0000', True), ('16000a00ff0000', '16000a00ff0001', False),
+        # write/read: the size of the read
+        ('170000000300100001020001', '1706000100020003', True), ('170000000300100001020001', '17020001', False),
+        # read device identification: MEI type and read code echoed
+        ('2b0e0100', '2b0e01830000010003414243', True), ('2b0e0100', '2b0e02830000010003414243', False),
+        # exception: exactly the function code and the exception code
+        ('0300640001', '8302', True), ('0300640001', '830200', False),
+        # unknown function: accepted as is
+        ('41', '4101020304', True),
+    ]
+    for req, resp, expected in cases:
+        assert response_matches(bytes.fromhex(req), bytes.fromhex(resp)) is expected, (req, resp)
+
+
+def test_tcp2rtu_find_response_in_merged_frames() -> None:
+    """A late reply read with the response as one block (too short a silence between them): the response is found."""
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools.tcp_to_rtu_gw import ModbusRTUFrame, find_response
+    request = ModbusRTUFrame(rtu_frame(1, bytes.fromhex('0300640001')))
+    late = rtu_frame(1, bytes.fromhex('030411112222'))
+    good = rtu_frame(1, bytes.fromhex('0302abcd'))
+    assert find_response(good, request) == good
+    assert find_response(late + good, request) == good
+    assert find_response(good + late, request) == good
+    assert find_response(late, request) == b''
+    assert find_response(late + late, request) == b''
+    assert find_response(b'\x01\x03', request) == b''
+
+
+@contextlib.contextmanager
+def late_slave_gateway(late_reply: bytes) -> Generator[int, None, None]:
+    """A gateway on a pseudo-terminal, with an RTU slave that answers the first request just after the gateway
+    timeout (with late_reply), then each request with the values of its addresses (0xAA00 + address).
+
+    :returns: the TCP port of the gateway
+    """
+    serial = pytest.importorskip('serial')
+    if not hasattr(os, 'openpty'):
+        pytest.skip('no pseudo-terminal on this OS')
+    import tty
+
+    from pyModbusTCP.tools import tcp_to_rtu_gw
+    master, slave = os.openpty()
+    tty.setraw(master)
+    tty.setraw(slave)
+    port = serial.Serial(os.ttyname(slave), baudrate=115200)
+    timeout = 0.3
+    stop = threading.Event()
+
+    def rtu_slave() -> None:
+        first = True
+        while not stop.is_set():
+            try:
+                request = os.read(master, 256)
+            except OSError:
+                return
+            if len(request) < 8:
+                continue
+            _, func_code, address, quantity = struct.unpack('>BBHH', request[:6])
+            if first:
+                first = False
+                time.sleep(timeout + 0.03)
+                os.write(master, late_reply)
+                continue
+            regs = [0xAA00 + address + i for i in range(quantity)]
+            time.sleep(0.05)
+            os.write(master, rtu_frame(1, struct.pack(f'>BB{quantity}H', func_code, 2 * quantity, *regs)))
+
+    threading.Thread(target=rtu_slave, daemon=True).start()
+    worker = tcp_to_rtu_gw.ModbusSerialWorker(port, timeout=timeout)
+    thread = threading.Thread(target=worker.loop, daemon=True)
+    thread.start()
+    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, store=MemoryStore(0), functions={},
+                       fallback=worker.relay_request)
+    _, tcp_port = srv.start()
+    try:
+        yield tcp_port
+    finally:
+        stop.set()
+        worker.stop()
+        srv.stop()
+        thread.join(5.0)
+        port.close()
+        os.close(master)
+        os.close(slave)
+
+
+def test_tcp2rtu_late_reply_is_not_the_next_response() -> None:
+    """A slave answers a read of 2 registers after the timeout: the next read (1 register) never gets this reply
+    (refused by its content, S-02), it gets its own response."""
+    with late_slave_gateway(rtu_frame(1, bytes.fromhex('030411112222'))) as tcp_port:
+        results: dict[str, Any] = {}
+
+        def client_a() -> None:
+            c = ModbusClient(host='127.0.0.1', port=tcp_port, timeout=3)
+            results['a'] = (c.read_holding_registers(0, 2), c.last_except)
+            c.close()
+
+        def client_b() -> None:
+            time.sleep(0.05)  # queued while the request of A is on the line
+            c = ModbusClient(host='127.0.0.1', port=tcp_port, timeout=3)
+            results['b'] = c.read_holding_registers(100, 1)
+            c.close()
+
+        threads = [threading.Thread(target=client_a), threading.Thread(target=client_b)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(10.0)
+    assert results['a'] == (None, 0x0B)
+    assert results['b'] == [0xAA00 + 100]

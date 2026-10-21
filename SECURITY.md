@@ -84,6 +84,12 @@ the exception 0x0A (gateway path unavailable) at once, like any request once 16 
 also has the `--max-connections` and `--max-connections-per-host` options of the server. Requests refused by its
 filters are logged once, then once per 10 s at most, so a request flood can't flood the log.
 
+An RTU frame has no transaction id: the gateway checks that the answer of a slave matches its request (slave
+address, function code, size of the data read, echo of a write) and ignores any other frame until the timeout: a
+late reply of a slave is not taken for the response of another request. One case remains: a late reply with
+exactly the shape of the next response to the same slave (same function, same quantity) can't be told apart. Set
+the timeout (`-t`) above the response time of the slowest slave.
+
 A request with an invalid function code (0, or 0x80 to 0xFF: the exception flag of a reply) gets the exception 0x01
 (illegal function) and is never written on the serial line.
 

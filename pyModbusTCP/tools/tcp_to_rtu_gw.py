@@ -28,8 +28,14 @@ HOW A REQUEST IS PROCESSED
 3. The frame is put in a queue. A single worker sends the frames one by one on
    the serial line (an RTU bus allows only one conversation at a time) and
    waits for the slave answer.
-4. The answer is checked (CRC, same slave address, same function code), the
-   address and CRC are removed, and the PDU is sent back to the TCP client.
+4. The answer is checked (CRC, same slave address, same function code, and a
+   content consistent with the request: the size of the data read, the echo
+   of a write), the address and CRC are removed, and the PDU is sent back to
+   the TCP client. An RTU frame has no transaction id: a frame that is not
+   the answer of the request (like a late reply of a slave to a previous
+   request) is ignored, and the gateway keeps listening until the timeout.
+   These frames are logged (once per 10 s at most): a slave that answers
+   late needs a longer timeout (-t).
 
 BROADCAST (unit id 0, with --allow-broadcast)
 ---------------------------------------------
@@ -114,6 +120,11 @@ LIMITATIONS
   reported (a pyModbusTCP client can also send it with broadcast=True, that
   doesn't wait for this response).
 - Throughput is limited by the serial line: requests are served one at a time.
+- The content of an answer is only checked for the standard functions (0x01
+  to 0x06, 0x0F, 0x10, 0x16, 0x17, 0x2B/0x0E). A reply later than the
+  timeout, with exactly the shape of the answer of the next request to the
+  same slave (same function and same quantity), can't be told apart from
+  it: set -t above the response time of the slowest slave.
 
 USAGE
 -----
@@ -203,6 +214,7 @@ from ..constants import (
     WRITE_FILE_RECORD,
     WRITE_MULTIPLE_COILS,
     WRITE_MULTIPLE_REGISTERS,
+    WRITE_READ_MULTIPLE_REGISTERS,
     WRITE_SINGLE_COIL,
     WRITE_SINGLE_REGISTER,
 )
@@ -283,6 +295,68 @@ def t35(baudrate: int, bytesize: int, parity: str, stopbits: float) -> float:
     return 3.5 * bits_per_char / baudrate
 
 
+def response_matches(req_pdu: bytes, resp_pdu: bytes) -> bool:
+    """Check the content of a response PDU against its request PDU (same function code, already checked).
+
+    RTU frames have no transaction id: a late reply of a slave (after the timeout of the previous request) can only
+    be told apart from the expected one by its content. For the standard functions, the response has a size set by
+    the request (functions 0x01 to 0x04, 0x17) or echoes a part of it (0x05, 0x06, 0x0F, 0x10, 0x16, 0x2B/0x0E).
+    The other functions are accepted as is (their content is unknown to the gateway), and so is a request too short
+    to be decoded (the slave answers it with an exception).
+
+    :param req_pdu: request PDU (function code first)
+    :param resp_pdu: response PDU (function code first)
+    :returns: True if the response may be the one of the request
+    """
+    func_code = req_pdu[0]
+    if resp_pdu[0] & 0x80:
+        # exception response: function code + exception code, nothing else
+        return len(resp_pdu) == 2
+    if func_code in (READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS,
+                     WRITE_READ_MULTIPLE_REGISTERS):
+        if len(req_pdu) < 5:
+            return True
+        quantity = int.from_bytes(req_pdu[3:5], 'big')
+        if func_code in (READ_COILS, READ_DISCRETE_INPUTS):
+            byte_count = (quantity + 7) // 8
+        else:
+            byte_count = 2 * quantity
+        return len(resp_pdu) == 2 + byte_count and resp_pdu[1] == byte_count
+    if func_code in (WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER):
+        # echo of the request
+        return len(req_pdu) < 5 or resp_pdu == req_pdu[:5]
+    if func_code in (WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS):
+        # address and quantity of the request
+        return len(req_pdu) < 5 or resp_pdu == req_pdu[:5]
+    if func_code == MASK_WRITE_REGISTER:
+        return len(req_pdu) < 7 or resp_pdu == req_pdu[:7]
+    if func_code == ENCAPSULATED_INTERFACE_TRANSPORT and req_pdu[1:2] == bytes([MEI_TYPE_READ_DEVICE_ID]):
+        # MEI type and read device id code echoed, then conformity level, more follows, next id, number of objects
+        return len(resp_pdu) >= 7 and resp_pdu[1:3] == req_pdu[1:3]
+    return True
+
+
+def find_response(raw: bytes, request: 'ModbusRTUFrame') -> bytes:
+    """Return the response of request in the bytes received, empty if there is none.
+
+    Usually raw is one frame. It may also be two frames read as one (a late reply of a slave followed too closely
+    by the response): the cut is searched where a prefix has a valid CRC.
+    """
+    if ModbusRTUFrame(raw).is_response_to(request):
+        return raw
+    # incremental CRC of the prefixes: a cut is only tried after a prefix with a valid CRC (a frame end)
+    crc = 0xFFFF
+    for index, byte in enumerate(raw[:-4], start=1):
+        crc ^= byte
+        for _ in range(8):
+            crc = (crc >> 1) ^ 0xA001 if crc & 1 else crc >> 1
+        if crc == 0 and index >= 4:
+            for part in (raw[:index], raw[index:]):
+                if ModbusRTUFrame(part).is_response_to(request):
+                    return part
+    return b''
+
+
 class ModbusRTUFrame:
     """Modbus RTU frame container class."""
 
@@ -318,12 +392,15 @@ class ModbusRTUFrame:
         """Check that frame is a valid response matching the given request.
 
         Guards against late/stray frames from another slave or another
-        function (the bus is shared and a slave may answer after our timeout).
+        function (the bus is shared and a slave may answer after our timeout):
+        same slave address, same function code, and a content consistent with
+        the request (see response_matches()).
         """
         return (self.is_valid
                 and self.slave_address == request.slave_address
                 # exception responses set the MSB of the function code
-                and (self.function_code & 0x7F) == request.function_code)
+                and (self.function_code & 0x7F) == request.function_code
+                and response_matches(request.pdu, self.pdu))
 
     def build(self, raw_pdu: bytes, slave_ad: int) -> None:
         """Build a full modbus RTU message from PDU and slave address.
@@ -458,6 +535,7 @@ class ModbusSerialWorker:
         self._overloaded_log = LogThrottle(logger)
         self._broadcast_busy_log = LogThrottle(logger, level=logging.INFO)
         self._broadcast_dropped_log = LogThrottle(logger)
+        self._stray_log = LogThrottle(logger)
         # broadcasts in the queue (waiting for the bus), at most broadcast_buffer
         self._broadcast_lock = Lock()
         self._broadcasts_waiting = 0
@@ -510,7 +588,12 @@ class ModbusSerialWorker:
     def _transaction(self, request: bytes) -> bytes:
         """Send a request frame on the serial line and return the raw answer.
 
-        :return: raw frame received, empty if no answer before timeout
+        RTU frames have no transaction id: a frame that is not the response of this request (a late reply of a
+        slave to a previous request, a corrupted frame) is ignored, and the gateway keeps listening for the right one
+        until the timeout. A late reply with exactly the shape of the response (same function, same quantity) can't
+        be told apart from it: the timeout must be longer than the response time of the slave.
+
+        :return: raw frame of the response, empty if no valid answer before timeout
         :raises serialutil.SerialException: on serial I/O error
         """
         port = self.serial_port
@@ -527,8 +610,30 @@ class ModbusSerialWorker:
             self._last_bus_activity = time.perf_counter() + self.broadcast_delay
             logger.debug('RTU broadcast, bus silent for %.3f s', self.broadcast_delay)
             return b''
-        # wait for the first byte of data until timeout delay
-        port.timeout = self.timeout
+        request_frame = ModbusRTUFrame(request)
+        deadline = time.monotonic() + self.timeout
+        while (remaining := deadline - time.monotonic()) > 0:
+            rx_raw = self._read_frame(remaining)
+            self._last_bus_activity = time.perf_counter()
+            if not rx_raw:
+                break
+            logger.debug('RTU Rx %s', hexdump(rx_raw))
+            response = find_response(rx_raw, request_frame)
+            if response:
+                return response
+            self._stray_log.event('Frame on the serial line that is not the response of the request: %d frame(s) '
+                                  'ignored (a late reply of a slave? its timeout -t may be too short), last %s',
+                                  hexdump(rx_raw))
+        logger.debug('RTU Rx timeout, no valid answer')
+        return b''
+
+    def _read_frame(self, timeout: float) -> bytes:
+        """Wait at most timeout seconds for the first byte of a frame, then read it until the line is silent.
+
+        :return: raw bytes received, empty if nothing before timeout
+        """
+        port = self.serial_port
+        port.timeout = timeout
         rx_raw: bytes = port.read(1)
         # if ok, wait for the remaining until the line is silent for end of frame delay.
         # Note: pyserial ignores inter_byte_timeout on POSIX, and read(n) waits for n bytes
@@ -540,11 +645,6 @@ class ModbusSerialWorker:
                 if not rx_chunk:
                     break
                 rx_raw += rx_chunk
-        self._last_bus_activity = time.perf_counter()
-        if rx_raw:
-            logger.debug('RTU Rx %s', hexdump(rx_raw))
-        else:
-            logger.debug('RTU Rx [0 bytes] timeout, no answer')
         return rx_raw
 
     def loop(self) -> None:
