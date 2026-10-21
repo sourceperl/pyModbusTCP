@@ -73,6 +73,8 @@ The server and the TCP to RTU gateway are designed to be safe by default:
 - they listen on `localhost` and on port 5020 by default: use `-H` with the address of the network interface that
   needs it (`0.0.0.0` only if every network of the host is trusted);
 - `-A/--allow` restricts the clients to some IP addresses or networks, `--read-only` refuses every write;
+- the TCP to RTU gateway only relays the standard data functions by default (no diagnostics, file records or vendor
+  functions): `--functions` sets the list;
 - the TCP to RTU gateway refuses broadcast requests (unit id 0) unless `--allow-broadcast` is set (and then only
   for the write functions, answered at once);
 - `--max-connections-per-host` (default 16) keeps a single client host from taking every connection, and the TCP

@@ -26,6 +26,9 @@ Revision history for pyModbusTCP
       positional): ModbusServer('0.0.0.0', 5020, read_only=True).
     - server: allowed_hosts is a tuple of str (was a list), set a new value to change it: a change in place
       would be silently lost.
+    - tools: mbtcp-tcp2rtu only relays the standard data functions by default (0x01 to 0x06, 0x0F, 0x10, 0x16, 0x17,
+      0x2B/0x0E): the others (diagnostics 0x08, file records 0x14/0x15, other MEI types, vendor functions) get
+      exception 0x01. --functions sets the list, "--functions all" relays every function as before.
     - server/tools: an allow list entry with host bits set (like "192.168.1.5/24", often a typo for one address)
       is refused (ValueError, or exit status 2 for -A/--allow): write "192.168.1.0/24" or "192.168.1.5".
 
@@ -44,6 +47,8 @@ Revision history for pyModbusTCP
       only the write functions can be broadcast (0x05, 0x06, 0x0F, 0x10, 0x15, 0x16). A few broadcasts can wait for
       the bus (--broadcast-buffer, default 4), the next ones get exception 0x06 at once; one that waited more than
       --broadcast-max-age (default 10 s) is dropped: a flood never builds a backlog of old writes.
+    - tools: mbtcp-tcp2rtu --functions, the whitelist of the relayed functions ("1,2,3,4,6,16", 0x2B by MEI type like
+      "0x2B/0x0E", or "all"); --read-only is a shortcut for the read functions, the two options are exclusive.
     - client: broadcast_interval (default 0.15 s) spaces two broadcast requests: a loop can't flood a gateway.
     - client: connect_retries (default 0) and connect_retry_delay (default 0.5 s) retry a failed connect, with an
       exponential backoff and a jitter (open() and auto_open). A request is never sent twice.

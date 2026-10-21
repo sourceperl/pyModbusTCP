@@ -315,13 +315,20 @@ def test_permission_error_detection() -> None:
 # --- mbtcp-tcp2rtu ---
 
 @pytest.mark.parametrize('kwargs, expected', [
-    ({}, {'0300000001': 0x0B, '0600000001': None, '08000000': None, 'u0': 0x0A, 'u248': 0x0A}),
+    # default: the standard data functions only (S-03), not the diagnostics, the file records, other MEI types...
+    ({}, {'0300000001': 0x0B, '0600000001': None, '16000a00ff0000': None, '2b0e0100': 0x0B, '08000000': 0x01,
+          '15': 0x01, '2b0d00': 0x01, '41': 0x01, 'u0': 0x0A, 'u248': 0x0A}),
     ({'read_only': True}, {'0300000001': 0x0B, '2b0e0100': 0x0B, '0600000001': 0x01, '0f000000010101': 0x01,
                            '2b0d00': 0x01, '08000000': 0x01, 'u0': 0x0A}),
     ({'allow_broadcast': True}, {'u0': None, 'u248': 0x0A}),
+    ('all', {'08000000': None, '4100': None, '2b0d00': None, '0600000001': None}),
+    ('3,0x08,0x2B/0x0D', {'0300000001': 0x0B, '08000000': None, '2b0d00': None, '0600000001': 0x01,
+                          '2b0e0100': 0x01}),
 ])
-def test_tcp2rtu_filters(kwargs: dict, expected: dict) -> None:  # type: ignore[type-arg]
+def test_tcp2rtu_filters(kwargs: dict | str, expected: dict) -> None:  # type: ignore[type-arg]
     """Requests are relayed or refused with a modbus exception (0x01, 0x0A) before reaching the serial line.
+
+    kwargs: the arguments of ModbusSerialWorker, or the text of a --functions filter.
 
     The serial line is a loopback (pyserial "loop://"): a relayed request comes back as its own answer. This echo is
     the valid response of 0x06 and of an unknown function like 0x08 (None: the echo is returned), not of a read
@@ -330,6 +337,8 @@ def test_tcp2rtu_filters(kwargs: dict, expected: dict) -> None:  # type: ignore[
     serial = pytest.importorskip('serial')
     from pyModbusTCP.tools import tcp_to_rtu_gw
     port = serial.serial_for_url('loop://', baudrate=19200)
+    if isinstance(kwargs, str):
+        kwargs = {'functions': tcp_to_rtu_gw.FunctionFilter.parse(kwargs)}
     worker = tcp_to_rtu_gw.ModbusSerialWorker(port, timeout=0.3, **kwargs)
     thread = threading.Thread(target=worker.loop, daemon=True)
     thread.start()
@@ -760,6 +769,11 @@ def test_tcp2rtu_cancelled_request_is_not_sent() -> None:
     ('tcp_to_rtu_gw', ['--rs485', '--rs485-delay-before-tx', '0.5'], '--rs485-delay-before-tx'),
     ('rtu_to_tcp_gw', ['--rs485-delay-before-rx', '0.001'], '--rs485-delay-before-rx needs --rs485'),
     ('rtu_to_tcp_gw', ['--rs485', '--rs485-delay-before-rx', '-1'], '--rs485-delay-before-rx'),
+    ('tcp_to_rtu_gw', ['--functions', '3,x'], '--functions'),
+    ('tcp_to_rtu_gw', ['--functions', '0x80'], 'out of 1 to 127'),
+    ('tcp_to_rtu_gw', ['--functions', '3/1'], 'only the function 0x2B has a MEI type'),
+    ('tcp_to_rtu_gw', ['--functions', ''], 'empty function code'),
+    ('tcp_to_rtu_gw', ['--functions', '3', '--read-only'], 'not allowed with argument'),
 ])
 def test_gateway_invalid_args(tool: str, args: list[str], error: str, capsys: pytest.CaptureFixture[str]) -> None:
     """Invalid serial settings are refused at startup (they made the gateway crash, or fail at each request)."""
@@ -770,6 +784,38 @@ def test_gateway_invalid_args(tool: str, args: list[str], error: str, capsys: py
         module.main(args + ['/dev/null'])
     assert exc.value.code == 2
     assert error in capsys.readouterr().err
+
+
+def test_tcp2rtu_function_filter() -> None:
+    """--functions: parse, match (0x2B by MEI type), log text; --read-only is a shortcut, exclusive with it."""
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools.tcp_to_rtu_gw import (
+        DEFAULT_FUNCTIONS,
+        READ_ONLY_FUNCTIONS,
+        FunctionFilter,
+        ModbusSerialWorker,
+    )
+    flt = FunctionFilter.parse(' 1, 0x03 ,16,0x2B, 43/13 ')
+    assert flt == FunctionFilter(frozenset({1, 3, 16}), frozenset({0x0E, 0x0D}))
+    assert flt.text() == '0x01, 0x03, 0x10, 0x2B/0x0D, 0x2B/0x0E'
+    assert flt.allows(b'\x03\x00\x00\x00\x01') and not flt.allows(b'\x06\x00\x00\x00\x01')
+    assert flt.allows(b'\x2b\x0d') and not flt.allows(b'\x2b\x0c') and not flt.allows(b'\x2b')
+    assert FunctionFilter.parse('ALL').codes is None and FunctionFilter.parse('all').allows(b'\x5a')
+    assert FunctionFilter.parse('all').text() == 'every function'
+    assert DEFAULT_FUNCTIONS.text() == '0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x0F, 0x10, 0x16, 0x17, 0x2B/0x0E'
+    assert READ_ONLY_FUNCTIONS.text() == '0x01, 0x02, 0x03, 0x04, 0x2B/0x0E'
+    for bad in ('0', '128', '3,,4', 'x', '0x2B/256', '6/1'):
+        with pytest.raises(ValueError):
+            FunctionFilter.parse(bad)
+    with pytest.raises(ValueError):
+        FunctionFilter(frozenset({0x2B}))
+    worker = ModbusSerialWorker(SilentSerial())  # type: ignore[arg-type]
+    assert worker.functions == DEFAULT_FUNCTIONS
+    assert ModbusSerialWorker(SilentSerial(), read_only=True).functions == READ_ONLY_FUNCTIONS  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        ModbusSerialWorker(SilentSerial(), read_only=True, functions=DEFAULT_FUNCTIONS)  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        ModbusSerialWorker(SilentSerial(), functions='1,2')  # type: ignore[arg-type]
 
 
 def test_gateway_api_checks() -> None:

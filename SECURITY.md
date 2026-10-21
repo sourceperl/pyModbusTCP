@@ -90,6 +90,12 @@ late reply of a slave is not taken for the response of another request. One case
 exactly the shape of the next response to the same slave (same function, same quantity) can't be told apart. Set
 the timeout (`-t`) above the response time of the slowest slave.
 
+The gateway only relays the standard functions that read and write data by default (0x01 to 0x06, 0x0F, 0x10, 0x16,
+0x17 and 0x2B/0x0E): the diagnostics 0x08 (restart of a slave, listen only mode that makes it silent until a power
+cycle), the file records, the other MEI types of 0x2B and the vendor functions (programming, firmware) get the
+exception 0x01 and never reach the serial line. `--functions` sets this whitelist (`--functions all`: every
+function, with a warning at startup), `--read-only` is a shortcut for the read functions.
+
 A request with an invalid function code (0, or 0x80 to 0xFF: the exception flag of a reply) gets the exception 0x01
 (illegal function) and is never written on the serial line.
 

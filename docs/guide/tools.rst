@@ -80,6 +80,28 @@ Examples
     # an RTU master on /dev/ttyUSB0 reads the Modbus/TCP server 192.168.1.10 (the gateway is the RTU slave 30)
     mbtcp-rtu2tcp -a 30 -H 192.168.1.10 /dev/ttyUSB0
 
+Functions relayed by mbtcp-tcp2rtu
+----------------------------------
+
+By default, the gateway only relays the standard functions that read and write data: 0x01 to 0x06, 0x0F, 0x10,
+0x16, 0x17 and the read device identification (0x2B/0x0E). The other functions get exception 0x01 (illegal function)
+and never reach the serial line: the diagnostics 0x08 (a sub-function restarts a slave, another one makes it silent
+until a power cycle), the file records 0x14 and 0x15, the other MEI types of 0x2B, the functions of a vendor
+(programming, firmware update...).
+
+``--functions`` sets the list, in decimal or hexadecimal, with the MEI type for 0x2B (``0x2B`` alone is
+``0x2B/0x0E``). ``--read-only`` is a shortcut for the read functions (0x01 to 0x04, 0x2B/0x0E) that also refuses the
+broadcasts: the two options are exclusive. The log shows the relayed functions at startup.
+
+.. code-block:: bash
+
+    # the reads, and the writes of registers only
+    mbtcp-tcp2rtu --functions 1,2,3,4,6,16 /dev/ttyUSB0
+    # the default list, plus the diagnostics of the slaves
+    mbtcp-tcp2rtu --functions 1,2,3,4,5,6,15,16,22,23,8,0x2B /dev/ttyUSB0
+    # every function, like before 0.4.0a3 (a warning is logged at startup)
+    mbtcp-tcp2rtu --functions all /dev/ttyUSB0
+
 Broadcast through mbtcp-tcp2rtu
 -------------------------------
 
@@ -89,8 +111,8 @@ the normal response of the function (the echo of the request for 0x05, 0x06, 0x1
 quantity for 0x0F and 0x10): a client never waits for a timeout. The bus then stays silent for
 ``--broadcast-delay`` seconds (default 0.1), so that the slaves execute the request before the next frame.
 
-A broadcast of another function (a read) is refused with exception 0x01, and a broadcast is never relayed with
-``--read-only``. The response only means "queued for the bus": no slave confirms a broadcast.
+A broadcast of another function (a read), or of a function out of ``--functions`` (like 0x15, not in the default
+list), is refused with exception 0x01, and a broadcast is never relayed with ``--read-only``. The response only means "queued for the bus": no slave confirms a broadcast.
 
 The response comes as soon as the broadcast is in the queue of the bus, in turn with the other requests of its client
 host (a request after a broadcast is never written before it). A few broadcasts can wait for the bus:
@@ -237,6 +259,8 @@ The server and the TCP to RTU gateway are designed to be safe by default:
 - they listen on ``localhost`` and on port 5020 by default: use ``-H`` with the address of the network interface
   that needs it (``0.0.0.0`` only if every network of the host is trusted);
 - ``-A/--allow`` restricts the clients to some IP addresses or networks, ``--read-only`` refuses every write;
+- the TCP to RTU gateway only relays the standard data functions by default (no diagnostics, file records or vendor
+  functions), ``--functions`` sets the list;
 - the TCP to RTU gateway refuses broadcast requests (unit id 0) unless ``--allow-broadcast`` is set (and then only
   for the write functions);
 - ``--max-connections-per-host`` (default 16) keeps a single client host from taking every connection, and the

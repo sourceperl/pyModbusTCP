@@ -46,7 +46,8 @@ request for 0x05, 0x06, 0x15 and 0x16, the address and quantity for 0x0F and
 0x10). The client never waits for a timeout. After the write, the bus stays
 silent for --broadcast-delay (default 0.1 s): the slaves execute the request
 before the next frame. Only these write functions can be broadcast (exception
-0x01 for the others: a read has no meaning without an answer).
+0x01 for the others: a read has no meaning without an answer), and only if
+they are relayed (0x15 is not in the default list of --functions).
 A few broadcasts can wait for the bus (--broadcast-buffer, default 4), each
 one in turn with the other requests of its client host. A broadcast that
 waited more than --broadcast-max-age (default 10 s) is dropped, never written:
@@ -57,8 +58,9 @@ once (a flood of broadcasts never builds a long backlog).
 ERRORS SEEN BY THE TCP CLIENT
 -----------------------------
 - Request refused by the gateway filters (see ACCESS CONTROL): Modbus exception
-  0x01 "Illegal Function" (--read-only, an invalid function code: 0 or 0x80
-  to 0xFF, or a broadcast of a function that is not a write) or 0x0A "Gateway
+  0x01 "Illegal Function" (a function out of --functions or --read-only, an
+  invalid function code: 0 or 0x80 to 0xFF, or a broadcast of a function
+  that is not a write) or 0x0A "Gateway
   Path Unavailable" (unit id 0 without --allow-broadcast, or reserved unit id
   248 to 255).
 - No valid answer from the slave before the timeout (-t): Modbus exception
@@ -88,8 +90,18 @@ the fallback handler of ModbusServer), so it applies its own filters:
   address of the network interface that needs it (or 0.0.0.0 for all of them).
 - -A/--allow (repeatable) restricts the clients to some IP addresses or
   networks (like -A 192.168.1.10 -A 10.0.0.0/24), others are disconnected.
+- Only the standard functions that read and write data are relayed by
+  default: 0x01 to 0x06, 0x0F, 0x10, 0x16, 0x17 and read device
+  identification 0x2B/0x0E. The others get exception 0x01: diagnostics 0x08
+  (it can restart a slave or make it silent until a power cycle), file
+  records 0x14/0x15, the other MEI types of 0x2B, the functions of a vendor
+  (programming, firmware...). --functions sets this list, like
+  --functions 1,2,3,4,6,16 (decimal or hexadecimal, 0x2B with its MEI type
+  like 0x2B/0x0E), or --functions all to relay every function (warning at
+  startup).
 - --read-only only relays the read functions (0x01 to 0x04 and read device
-  identification 0x2B/0x0E), every other function gets exception 0x01.
+  identification 0x2B/0x0E) and refuses the broadcasts: a shortcut for
+  --functions, the two options are exclusive.
 - A request with an invalid function code (0, or 0x80 to 0xFF: the exception
   flag of a reply) is never written on the bus: exception 0x01.
 - Broadcast requests (unit id 0) are a write to every slave of the bus: they
@@ -143,6 +155,9 @@ Same, reachable from one network only, read-only, 8E1 serial format:
 $ mbtcp-tcp2rtu -H 0.0.0.0 -A 192.168.1.0/24 --read-only \
     -b 19200 --parity E /dev/ttyUSB0
 
+Relay the reads and the writes of registers only (no coil write):
+$ mbtcp-tcp2rtu --functions 1,2,3,4,6,16 /dev/ttyUSB0
+
 RS-485 MODE
 -----------
 An USB-RS485 adapter switches its transceiver by itself: nothing to set. The
@@ -176,6 +191,7 @@ import struct
 import sys
 import time
 from collections import deque
+from dataclasses import dataclass
 from threading import Condition, Event, Lock
 
 from ._common import (
@@ -255,10 +271,6 @@ MAX_PENDING_PER_HOST = 2
 # lower bound for the end-of-frame delay: USB-serial adapters add latency
 # (e.g. FTDI latency timer), so the theoretical 3.5 char time is too short
 MIN_EOF_DELAY = 0.02
-# functions relayed in read-only mode (a whitelist: an unknown function may write)
-# 0x2B is only allowed for MEI type 0x0E (read device identification), see ModbusSerialWorker.is_allowed()
-READ_ONLY_FUNCTIONS = (READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS,
-                       ENCAPSULATED_INTERFACE_TRANSPORT)
 # unit id 0 is the broadcast address of a serial line, 248 to 255 are reserved
 BROADCAST_ADDRESS = 0
 MAX_SLAVE_ADDRESS = 247
@@ -277,6 +289,92 @@ MAX_BROADCAST_BUFFER = QUEUE_SIZE // 2
 # a broadcast that waited longer for the bus is dropped (s): an old write is never applied long after its send
 DEFAULT_BROADCAST_MAX_AGE = 10.0
 MAX_BROADCAST_MAX_AGE = 60.0
+
+
+@dataclass(frozen=True)
+class FunctionFilter:
+    """The functions that the gateway relays to the serial line (a whitelist: an unknown function may write).
+
+    0x2B (encapsulated interface transport) is a family of functions: it is allowed by MEI type (0x0E: read device
+    identification, the other types, like CANopen 0x0D, can write).
+
+    :param codes: the allowed function codes (0x01 to 0x7F, 0x2B excluded), None for every function
+    :param mei_types: the allowed MEI types of the function 0x2B (ignored when codes is None)
+    """
+
+    codes: frozenset[int] | None
+    mei_types: frozenset[int] = frozenset()
+
+    def __post_init__(self) -> None:
+        if self.codes is not None:
+            for code in self.codes:
+                if not 0x01 <= code <= 0x7F or code == ENCAPSULATED_INTERFACE_TRANSPORT:
+                    raise ValueError(f'invalid function code 0x{code:02X} in a function filter')
+        for mei_type in self.mei_types:
+            if not 0x00 <= mei_type <= 0xFF:
+                raise ValueError(f'invalid MEI type {mei_type} in a function filter')
+
+    @classmethod
+    def parse(cls, text: str) -> 'FunctionFilter':
+        """A filter from its text: "all", or function codes separated by commas, in decimal or hexadecimal, a
+        function 0x2B with its MEI type: "1,2,3,4,0x06,0x10,0x2B/0x0E" (0x2B alone is 0x2B/0x0E).
+
+        :raises ValueError: with a message for the user
+        """
+        if text.strip().lower() == 'all':
+            return cls(None)
+        codes: set[int] = set()
+        mei_types: set[int] = set()
+        for item in text.split(','):
+            item = item.strip()
+            if not item:
+                raise ValueError(f'empty function code in {text!r}')
+            code_txt, _, mei_txt = item.partition('/')
+            try:
+                code = int(code_txt, 0)
+                mei_type = int(mei_txt, 0) if mei_txt else MEI_TYPE_READ_DEVICE_ID
+            except ValueError:
+                raise ValueError(f'{item!r} is not a function code (like 3, 0x10 or 0x2B/0x0E)') from None
+            if not 0x01 <= code <= 0x7F:
+                raise ValueError(f'function code {item!r} out of 1 to 127 (0x01 to 0x7F)')
+            if code == ENCAPSULATED_INTERFACE_TRANSPORT:
+                if not 0x00 <= mei_type <= 0xFF:
+                    raise ValueError(f'MEI type of {item!r} out of 0 to 255')
+                mei_types.add(mei_type)
+            elif mei_txt:
+                raise ValueError(f'{item!r}: only the function 0x2B has a MEI type')
+            else:
+                codes.add(code)
+        return cls(frozenset(codes), frozenset(mei_types))
+
+    def allows(self, pdu: bytes) -> bool:
+        """True if the request PDU is of an allowed function."""
+        if self.codes is None:
+            return True
+        if pdu[0] == ENCAPSULATED_INTERFACE_TRANSPORT:
+            return len(pdu) >= 2 and pdu[1] in self.mei_types
+        return pdu[0] in self.codes
+
+    def text(self) -> str:
+        """The filter for the log: "0x01, 0x02, 0x03, 0x2B/0x0E" or "every function"."""
+        if self.codes is None:
+            return 'every function'
+        items = [f'0x{code:02X}' for code in sorted(self.codes)]
+        items += [f'0x{ENCAPSULATED_INTERFACE_TRANSPORT:02X}/0x{mei:02X}' for mei in sorted(self.mei_types)]
+        return ', '.join(items) or 'no function'
+
+
+# the functions relayed by default: the standard functions that read and write data (bits and registers), and the
+# read device identification; not the diagnostics (0x08 can restart a slave or make it silent), the file records,
+# the other MEI types or the functions of a vendor (programming, firmware...)
+DEFAULT_FUNCTIONS = FunctionFilter(frozenset({
+    READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS,
+    WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER, WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS,
+    MASK_WRITE_REGISTER, WRITE_READ_MULTIPLE_REGISTERS}), frozenset({MEI_TYPE_READ_DEVICE_ID}))
+# the functions relayed in read-only mode (--read-only, a shortcut for this filter, broadcast refused)
+READ_ONLY_FUNCTIONS = FunctionFilter(frozenset({
+    READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS}),
+    frozenset({MEI_TYPE_READ_DEVICE_ID}))
 
 
 def hexdump(data: bytes) -> str:
@@ -493,7 +591,7 @@ class ModbusSerialWorker:
     """A serial worker to manage I/O with RTU devices."""
 
     def __init__(self, port: Serial, timeout: float = 1.0, end_of_frame: float | None = None,
-                 allow_broadcast: bool = False, read_only: bool = False,
+                 allow_broadcast: bool = False, read_only: bool = False, functions: FunctionFilter | None = None,
                  broadcast_delay: float = DEFAULT_BROADCAST_DELAY,
                  broadcast_buffer: int = DEFAULT_BROADCAST_BUFFER,
                  broadcast_max_age: float = DEFAULT_BROADCAST_MAX_AGE) -> None:
@@ -503,6 +601,12 @@ class ModbusSerialWorker:
         # request filters (see is_allowed())
         self.allow_broadcast = allow_broadcast
         self.read_only = read_only
+        # the relayed functions: read_only is a shortcut for READ_ONLY_FUNCTIONS (with the broadcast refused)
+        if read_only and functions is not None:
+            raise ValueError('read_only and functions are exclusive (read_only is a shortcut for a functions filter)')
+        if functions is not None and not isinstance(functions, FunctionFilter):
+            raise TypeError('functions must be a FunctionFilter (or None for the default one)')
+        self.functions = READ_ONLY_FUNCTIONS if read_only else DEFAULT_FUNCTIONS if functions is None else functions
         # silent delay of the bus after a broadcast
         if isinstance(broadcast_delay, bool) or not isinstance(broadcast_delay, (int, float)) \
                 or not 0 <= broadcast_delay <= MAX_BROADCAST_DELAY:
@@ -729,12 +833,9 @@ class ModbusSerialWorker:
         # reserved addresses on a serial line
         if unit_id > MAX_SLAVE_ADDRESS:
             return EXP_GATEWAY_PATH_UNAVAILABLE
-        if self.read_only:
-            if func_code not in READ_ONLY_FUNCTIONS:
-                return EXP_ILLEGAL_FUNCTION
-            # 0x2B: other MEI types (like CANopen general reference 0x0D) can write
-            if func_code == ENCAPSULATED_INTERFACE_TRANSPORT and pdu[1:2] != bytes([MEI_TYPE_READ_DEVICE_ID]):
-                return EXP_ILLEGAL_FUNCTION
+        # the relayed functions (--functions, --read-only): a whitelist, 0x2B by MEI type
+        if not self.functions.allows(pdu):
+            return EXP_ILLEGAL_FUNCTION
         return 0
 
     def relay_request(self, req: Request) -> bytes:
@@ -894,6 +995,26 @@ def broadcast_max_age(value: str) -> float:
     return age
 
 
+def log_access_settings(srv: ModbusServer, worker: ModbusSerialWorker) -> None:
+    """Log the access control of the gateway at startup: the allowed clients and the relayed functions."""
+    if srv.allowed_hosts is not None:
+        logger.info('Allowed clients: %s', ', '.join(srv.allowed_hosts) or 'none')
+    if worker.read_only:
+        logger.info('Read-only mode: only read functions are relayed')
+    logger.info('Relayed functions: %s', worker.functions.text())
+    if worker.functions.codes is None:
+        logger.warning('Every function is relayed (--functions all): diagnostics, file records and vendor '
+                       'functions can restart, silence or reprogram the slaves')
+
+
+def function_filter(value: str) -> FunctionFilter:
+    """argparse type: the relayed functions ("all", or codes like "1,2,3,4,6,16,0x2B/0x0E")."""
+    try:
+        return FunctionFilter.parse(value)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e)) from None
+
+
 def main(argv: list[str] | None = None) -> int:
     # parse args
     parser = argparse.ArgumentParser(prog='mbtcp-tcp2rtu', description='Modbus/TCP to Modbus/RTU gateway',
@@ -904,8 +1025,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('-A', '--allow', action='append', type=ip_or_network, metavar='IP_OR_NETWORK',
                         help='allowed client IP address or network (like 10.0.0.0/24), repeatable '
                              '(default: every client)')
-    parser.add_argument('--read-only', action='store_true',
-                        help='only relay read functions (0x01 to 0x04, 0x2B/0x0E)')
+    functions = parser.add_mutually_exclusive_group()
+    functions.add_argument('--functions', type=function_filter, default=None, metavar='CODES',
+                           help='relayed functions, separated by commas, like "1,2,3,4,6,16,0x2B/0x0E" (0x2B with '
+                                'its MEI type, 0x0E if not given), or "all" (default: '
+                                f'{DEFAULT_FUNCTIONS.text()}); other functions get exception 0x01')
+    functions.add_argument('--read-only', action='store_true',
+                           help=f'only relay read functions ({READ_ONLY_FUNCTIONS.text()}), refuse broadcasts: a '
+                                'shortcut for --functions')
     parser.add_argument('--max-connections', type=int, default=64,
                         help='max number of simultaneous clients (default: 64)')
     parser.add_argument('--max-connections-per-host', type=int, default=16,
@@ -958,6 +1085,7 @@ def main(argv: list[str] | None = None) -> int:
         # init serial worker
         serial_worker = ModbusSerialWorker(serial_port, args.timeout, args.eof,
                                            allow_broadcast=args.allow_broadcast, read_only=args.read_only,
+                                           functions=args.functions,
                                            broadcast_delay=args.broadcast_delay,
                                            broadcast_buffer=args.broadcast_buffer,
                                            broadcast_max_age=args.broadcast_max_age)
@@ -966,15 +1094,12 @@ def main(argv: list[str] | None = None) -> int:
 
         # start modbus server: no local function, every request goes to the fallback that relays it
         logger.info('Start modbus server (%s, %d)', args.host, args.port)
-        # note: the serial worker applies the read-only mode itself (broadcast, MEI types...)
+        # note: the serial worker applies the function filter and the read-only mode itself (broadcast, MEI types...)
         srv = ModbusServer(host=args.host, port=args.port, no_block=True, store=MemoryStore(size=0), functions={},
                            fallback=serial_worker.relay_request,
                            allowed_hosts=args.allow, max_connections=args.max_connections,
                            max_connections_per_host=args.max_connections_per_host)
-        if args.allow:
-            logger.info('Allowed clients: %s', ', '.join(srv.allowed_hosts or []))
-        if args.read_only:
-            logger.info('Read-only mode: only read functions are relayed')
+        log_access_settings(srv, serial_worker)
         srv.start()
 
         # start serial worker loop (until Ctrl-C or SIGTERM)
