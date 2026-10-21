@@ -56,7 +56,7 @@ class ModbusServer:
     # kept for compatibility (allowed hosts check used outside of this class)
     _validate_allowed_hosts = staticmethod(_validators.validate_allowed_hosts)
 
-    def __init__(self, host: str = 'localhost', port: int = 502, no_block: bool = False, ipv6: bool = False,
+    def __init__(self, host: str = 'localhost', port: int = 502, no_block: bool = False, *, ipv6: bool = False,
                  store: DataStore | Mapping[int, DataStore] | None = None,
                  functions: Mapping[int, FunctionHandler] | None = None, fallback: FunctionHandler | None = None,
                  device_id: DeviceIdentification | None = None,
@@ -69,6 +69,11 @@ class ModbusServer:
         and optional device identification. Type validation is performed on critical
         parameters to prevent silent runtime failures.
 
+        The arguments after no_block are keyword-only (like ``ModbusServer('0.0.0.0', 5020, read_only=True)``).
+
+        The access control and limit settings (allowed_hosts, read_only, max_connections, max_connections_per_host,
+        request_timeout and idle_timeout) are also properties: a new value is checked like in the constructor and
+        applies at once to a running server (see each property). host, port and ipv6 apply at the next start().
 
         :param host: hostname or IPv4/IPv6 address to listen on (default is 'localhost')
         :type host: str
@@ -122,33 +127,27 @@ class ModbusServer:
         fallback = _validators.validate_fallback(fallback)
         device_id = _validators.validate_device_id(device_id)
 
-        # validate numeric parameters with constraints
-        request_timeout = _validators.validate_timeout(request_timeout, 'request_timeout')
-        idle_timeout = _validators.validate_timeout(idle_timeout, 'idle_timeout')
-        max_connections = _validators.validate_max_connections(max_connections)
-        max_connections_per_host = _validators.validate_max_connections(max_connections_per_host,
-                                                                        'max_connections_per_host')
-        read_only = _validators.validate_read_only(read_only)
-        allowed_networks = _validators.validate_allowed_hosts(allowed_hosts)
+        # ensure atomic start and stop operations, and a setting change never lost by a concurrent start()
+        # (reentrant: stop() may be called from a signal handler running in the thread that is inside start())
+        self._start_stop_lock = RLock()
+        # the TCP server of a running server (None when stopped): the settings below are passed to it by start(), and
+        # their setters update it at once (set first, the setters read it)
+        self._tcp_server: CustomThreadingTCPServer | None = None
 
-        # store network configuration
+        # store network configuration (applied by the next start())
         self.host = host
         self.port = port
         self.no_block = no_block
         self.ipv6 = ipv6
 
-        # store timeout settings
+        # access control and limits: properties, checked by their setters and applied at once to a running server
+        # (validated in this order: a constructor with a bad value raises before anything else is changed)
         self.request_timeout = request_timeout
         self.idle_timeout = idle_timeout
         self.max_connections = max_connections
         self.max_connections_per_host = max_connections_per_host
-
-        # store access control settings (the whitelist is kept as normalized networks, in CIDR notation)
         self.read_only = read_only
-        self._allowed_networks = allowed_networks
-        self.allowed_hosts: list[str] | None = None
-        if allowed_networks is not None:
-            self.allowed_hosts = [str(network) for network in allowed_networks]
+        self.allowed_hosts = allowed_hosts
 
         # data stores: unit id -> store (the key None: the store of every unit id)
         self._stores = stores
@@ -162,13 +161,8 @@ class ModbusServer:
         self.device_id = device_id
 
         # initialize internal state for server operation
-        # active server instance
-        self._tcp_server: CustomThreadingTCPServer | None = None
         # server thread handle
         self._srv_thread: Thread | None = None
-        # ensure atomic start and stop operations
-        # (reentrant: stop() may be called from a signal handler running in the thread that is inside start())
-        self._start_stop_lock = RLock()
 
     @property
     def store(self) -> DataStore:
@@ -180,6 +174,107 @@ class ModbusServer:
         if store is None:
             raise AttributeError('this server has one store per unit id: use server.stores[unit_id]')
         return store
+
+    # --- access control and limits: checked, and applied at once to a running server ---
+
+    @property
+    def allowed_hosts(self) -> tuple[str, ...] | None:
+        """Get or set the whitelist of the clients allowed to connect, as normalized networks (CIDR notation).
+
+        None: every client, an empty tuple: no client at all. A new value (an iterable of IP addresses or networks,
+        or None) is checked like the constructor argument. On a running server it applies at once: the next
+        connections are filtered with it, and the active sessions of the clients it no longer allows are closed.
+        The value is a tuple: change the whitelist by setting a new value, never in place.
+        """
+        networks = self._allowed_networks
+        return None if networks is None else tuple(str(network) for network in networks)
+
+    @allowed_hosts.setter
+    def allowed_hosts(self, value: Iterable[str] | None) -> None:
+        networks = _validators.validate_allowed_hosts(value)
+        with self._start_stop_lock:
+            self._allowed_networks = networks
+            tcp_server = self._tcp_server
+            if tcp_server is not None:
+                tcp_server.allowed_networks = networks
+                closed = tcp_server.shutdown_disallowed_sessions()
+                if closed:
+                    logger.info('allowed_hosts changed: %d session(s) of clients no longer allowed closed', closed)
+                if networks == ():
+                    logger.warning('allowed_hosts is an empty list: every connection will be refused')
+
+    @property
+    def read_only(self) -> bool:
+        """Get or set the read-only mode (see the constructor): applies from the next request."""
+        return self._read_only
+
+    @read_only.setter
+    def read_only(self, value: bool) -> None:
+        self._read_only = _validators.validate_read_only(value)
+
+    @property
+    def max_connections(self) -> int | None:
+        """Get or set the max number of simultaneous client connections (None: no limit).
+
+        On a running server, it applies to the next connections (the active sessions are kept).
+        """
+        return self._max_connections
+
+    @max_connections.setter
+    def max_connections(self, value: int | None) -> None:
+        value = _validators.validate_max_connections(value)
+        with self._start_stop_lock:
+            self._max_connections = value
+            if self._tcp_server is not None:
+                self._tcp_server.max_connections = value
+
+    @property
+    def max_connections_per_host(self) -> int | None:
+        """Get or set the max number of simultaneous connections of a client host (None: no limit).
+
+        On a running server, it applies to the next connections (the active sessions are kept).
+        """
+        return self._max_connections_per_host
+
+    @max_connections_per_host.setter
+    def max_connections_per_host(self, value: int | None) -> None:
+        value = _validators.validate_max_connections(value, 'max_connections_per_host')
+        with self._start_stop_lock:
+            self._max_connections_per_host = value
+            if self._tcp_server is not None:
+                self._tcp_server.max_connections_per_host = value
+
+    @property
+    def request_timeout(self) -> float | None:
+        """Get or set the max time in seconds to receive a whole request (None: no limit).
+
+        On a running server, it applies from the next request of each session.
+        """
+        return self._request_timeout
+
+    @request_timeout.setter
+    def request_timeout(self, value: float | None) -> None:
+        value = _validators.validate_timeout(value, 'request_timeout')
+        with self._start_stop_lock:
+            self._request_timeout = value
+            if self._tcp_server is not None:
+                self._tcp_server.request_timeout = value
+
+    @property
+    def idle_timeout(self) -> float | None:
+        """Get or set the max time in seconds without any request before a session is closed (None: no limit).
+
+        On a running server, it applies from the next wait for a request of each session.
+        """
+        return self._idle_timeout
+
+    @idle_timeout.setter
+    def idle_timeout(self, value: float | None) -> None:
+        value = _validators.validate_timeout(value, 'idle_timeout')
+        with self._start_stop_lock:
+            self._idle_timeout = value
+            if self._tcp_server is not None:
+                self._tcp_server.idle_timeout = value
 
     @property
     def is_run(self) -> bool:
@@ -221,7 +316,8 @@ class ModbusServer:
                  'read_only=%s, allowed_hosts=%s)')
         r_str %= (self.host, self.port, self.no_block, self.ipv6, self._stores.get(None, self.stores),
                   sorted(self.functions), self.fallback, self.device_id, self.request_timeout, self.idle_timeout,
-                  self.max_connections, self.max_connections_per_host, self.read_only, self.allowed_hosts)
+                  self.max_connections, self.max_connections_per_host, self.read_only,
+                  None if self.allowed_hosts is None else list(self.allowed_hosts))
         return r_str
 
     def function(self, code: int) -> Callable[[FunctionHandler], FunctionHandler]:
@@ -336,6 +432,8 @@ class ModbusServer:
                                                            bind_and_activate=False, ipv6=self.ipv6)
                 # pass some things shared with server threads (access via self.server in ModbusRequestHandler.handle())
                 tcp_server.engine = self._engine
+                # (under the start/stop lock: a setter can't change one of them between this copy and the publication
+                # of tcp_server in self._tcp_server below, from where the setters update it)
                 tcp_server.request_timeout = self.request_timeout
                 tcp_server.idle_timeout = self.idle_timeout
                 tcp_server.max_connections = self.max_connections

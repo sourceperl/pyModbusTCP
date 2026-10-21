@@ -50,6 +50,10 @@ supported.
 | `allowed_hosts` | `None` (every client) | Whitelist of IP addresses or networks (CIDR notation, IPv4 and IPv6). Other clients are disconnected at once, before any function handler (or fallback) is called. Refusals are logged (one message per 10 s at most). An empty list allows no client at all (a warning is logged at startup). |
 | `read_only` | `False` | Every request that writes data (functions 0x05, 0x06, 0x0F, 0x10, 0x15, 0x16 and 0x17) gets an "illegal function" exception, whatever its handler (a custom function or a fallback too). A fallback handler (like a gateway) only gets the read functions (0x01 to 0x04, 0x2B/0x0E): any other function may write. For finer rules (some spaces, some clients), stack the `ReadOnly`, `AccessControl` or `Guard` wrappers on the data store. |
 
+These options are also properties of the server: a new value is checked like the constructor argument and
+applies at once to a running server. A new `allowed_hosts` filters the next connections and closes the active
+sessions of the clients it no longer allows.
+
 `allowed_hosts` is a filter on the source IP address, **not an authentication**: on a shared network segment
 an attacker can spoof an allowed address (ARP spoofing for example). Use it as a second line of defense behind
 a firewall.

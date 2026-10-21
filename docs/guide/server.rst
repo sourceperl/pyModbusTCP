@@ -324,6 +324,20 @@ Like every allow list of pyModbusTCP, ``allowed_hosts`` is ``None`` for every cl
 client at all: the server then refuses every connection, and logs a warning at startup (an empty list from a
 configuration is often a mistake).
 
+The arguments after ``no_block`` are keyword-only: ``ModbusServer('192.168.1.10', 502, read_only=True)``.
+
+These settings can also be changed later, even while the server runs: ``allowed_hosts``, ``read_only``,
+``max_connections``, ``max_connections_per_host``, ``request_timeout`` and ``idle_timeout`` are properties, a new
+value is checked like the constructor argument (``ValueError`` or ``TypeError``, nothing changed) and applies at once.
+A new ``allowed_hosts`` filters the next connections and closes the sessions of the clients it no longer allows; a
+lower ``max_connections`` only refuses the next connections. ``allowed_hosts`` is a tuple: set a new value, never
+change it in place.
+
+.. code-block:: python
+
+    server.allowed_hosts = ['192.168.1.0/24', '10.0.0.5']    # applied at once, other clients disconnected
+    server.read_only = True                                   # from the next request
+
 ``allowed_hosts`` filters on the source IP address: it's not an authentication. See :doc:`../security` for the
 deployment recommendations and the limits of these protections.
 

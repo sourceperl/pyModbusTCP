@@ -135,8 +135,8 @@ class TestModbusServer(unittest.TestCase):
             self.assertFalse(server.is_running)
 
 
-class TestModbusServerLimits(unittest.TestCase):
-    """Tests of request_timeout, idle_timeout, max_connections and allowed_hosts."""
+class _LiveServerTestCase(unittest.TestCase):
+    """Helpers of the tests on a running server, with raw client sockets (no test of its own)."""
 
     # read 1 holding register at address 0: MBAP (transaction 1, unit 1) + PDU
     REQ_FRAME = b'\x00\x01\x00\x00\x00\x06\x01\x03\x00\x00\x00\x01'
@@ -182,6 +182,10 @@ class TestModbusServerLimits(unittest.TestCase):
             return resp
         except ConnectionError:
             return b''
+
+
+class TestModbusServerLimits(_LiveServerTestCase):
+    """Tests of request_timeout, idle_timeout, max_connections and allowed_hosts."""
 
     def test_defaults(self) -> None:
         server = ModbusServer()
@@ -510,6 +514,114 @@ class TestModbusServerLimits(unittest.TestCase):
         with self.assertLogs('pyModbusTCP.server', level='WARNING'):
             self.assertIsNotNone(self._closed_after(self._connect(), 2.0), 'host out of allowed_hosts is not closed')
         self.assertEqual(calls, [])
+
+
+class TestRuntimeSettings(_LiveServerTestCase):
+    """The access control and limit settings changed after the constructor: checked, and applied (audit S-01)."""
+
+    def test_keyword_only_arguments(self) -> None:
+        """host, port and no_block are the only positional arguments."""
+        server = ModbusServer('127.0.0.1', 0, True)
+        self.assertEqual((server.host, server.port, server.no_block), ('127.0.0.1', 0, True))
+        args: tuple[Any, ...] = ('127.0.0.1', 502, False, True)
+        with self.assertRaises(TypeError):
+            ModbusServer(*args)
+
+    def test_allowed_hosts_set_before_start(self) -> None:
+        """A whitelist set as a property before start() is applied (it was ignored before the fix)."""
+        server = ModbusServer(host='127.0.0.1', port=0, no_block=True)
+        server.allowed_hosts = ['10.9.9.9']
+        self.port = server.start()[1]
+        self.addCleanup(server.stop)
+        with self.assertLogs('pyModbusTCP.server', level='WARNING'):
+            self.assertEqual(self._request(self._connect()), b'')
+
+    def test_allowed_hosts_set_on_a_running_server(self) -> None:
+        """A new whitelist filters the next connections and closes the sessions of the clients it no longer allows."""
+        server = self._start_server()
+        sock = self._connect()
+        self.assertEqual(len(self._request(sock)), self.RESP_LEN)
+        with self.assertLogs('pyModbusTCP.server', level='INFO') as logs:
+            server.allowed_hosts = ['10.1.2.3']
+        self.assertIn('1 session(s) of clients no longer allowed closed', '\n'.join(logs.output))
+        self.assertIsNotNone(self._closed_after(sock, 2.0), 'session of a client no longer allowed is not closed')
+        with self.assertLogs('pyModbusTCP.server', level='WARNING'):
+            self.assertEqual(self._request(self._connect()), b'')
+        # allowed again: a new connection is served, a session of an allowed client is kept on a change
+        server.allowed_hosts = ['127.0.0.0/8']
+        sock = self._connect()
+        self.assertEqual(len(self._request(sock)), self.RESP_LEN)
+        server.allowed_hosts = None
+        self.assertEqual(len(self._request(sock)), self.RESP_LEN)
+
+    def test_allowed_hosts_value_and_checks(self) -> None:
+        server = ModbusServer(allowed_hosts=['192.168.1.10'])
+        # a tuple: a change in place (like append()) fails instead of being silently ignored
+        self.assertEqual(server.allowed_hosts, ('192.168.1.10/32',))
+        bad_values: tuple[Any, ...] = ('10.0.0.1', ['localhost'], ['10.0.0.5/24'], [42])
+        for value in bad_values:
+            with self.subTest(value=value), self.assertRaises((TypeError, ValueError)):
+                server.allowed_hosts = value
+            # a refused value changes nothing
+            self.assertEqual(server.allowed_hosts, ('192.168.1.10/32',))
+        server.allowed_hosts = []
+        self.assertEqual(server.allowed_hosts, ())
+        server.allowed_hosts = None
+        self.assertIsNone(server.allowed_hosts)
+
+    def test_read_only_set_on_a_running_server(self) -> None:
+        server = self._start_server()
+        client = ModbusClient(host='127.0.0.1', port=self.port)
+        self.addCleanup(client.close)
+        self.assertTrue(client.write_single_register(0, 1))
+        server.read_only = True
+        self.assertFalse(client.write_single_register(0, 2))
+        self.assertEqual(client.last_except, 0x01)
+        server.read_only = False
+        self.assertTrue(client.write_single_register(0, 3))
+        # checked like the constructor argument ('no' would be true)
+        bad_values: tuple[Any, ...] = ('no', 1, None)
+        for value in bad_values:
+            with self.subTest(value=value), self.assertRaises(TypeError):
+                server.read_only = value
+        self.assertFalse(server.read_only)
+
+    def test_limits_set_on_a_running_server(self) -> None:
+        server = self._start_server(max_connections=None, idle_timeout=None)
+        socks = [self._connect() for _ in range(2)]
+        for sock in socks:
+            self.assertEqual(len(self._request(sock)), self.RESP_LEN)
+        # the next connections only: the 2 active sessions are kept
+        server.max_connections = 2
+        with self.assertLogs('pyModbusTCP.server', level='WARNING'):
+            self.assertEqual(self._request(self._connect()), b'')
+        for sock in socks:
+            self.assertEqual(len(self._request(sock)), self.RESP_LEN)
+        server.max_connections = None
+        server.max_connections_per_host = 2
+        with self.assertLogs('pyModbusTCP.server', level='WARNING'):
+            self.assertEqual(self._request(self._connect()), b'')
+        server.max_connections_per_host = None
+        # idle_timeout applies from the next wait for a request of each session
+        server.idle_timeout = 0.5
+        sock = self._connect()
+        self.assertEqual(len(self._request(sock)), self.RESP_LEN)
+        self.assertIsNotNone(self._closed_after(sock, 3.0), 'new idle_timeout not applied')
+
+    def test_limits_checks(self) -> None:
+        server = ModbusServer()
+        bad_values: tuple[tuple[str, Any, type[Exception]], ...] = (
+            ('max_connections', 0, ValueError), ('max_connections', True, TypeError),
+            ('max_connections_per_host', -1, ValueError), ('request_timeout', 0, ValueError),
+            ('idle_timeout', float('inf'), ValueError), ('idle_timeout', '5', TypeError))
+        for name, value, exc in bad_values:
+            before = getattr(server, name)
+            with self.subTest(name=name, value=value), self.assertRaises(exc):
+                setattr(server, name, value)
+            self.assertEqual(getattr(server, name), before)
+        server.request_timeout = 5
+        self.assertEqual(server.request_timeout, 5.0)
+        self.assertIsInstance(server.request_timeout, float)
 
 
 class TestModbusServerSpecFrames(unittest.TestCase):
@@ -1049,7 +1161,7 @@ class TestAllowedHostsOption(unittest.TestCase):
     def test_hosts_are_normalized(self) -> None:
         server = ModbusServer(allowed_hosts=['192.168.1.10', '10.0.0.0/24', '::1', 'fd00::/8', ' 127.0.0.1 '])
         self.assertEqual(server.allowed_hosts,
-                         ['192.168.1.10/32', '10.0.0.0/24', '::1/128', 'fd00::/8', '127.0.0.1/32'])
+                         ('192.168.1.10/32', '10.0.0.0/24', '::1/128', 'fd00::/8', '127.0.0.1/32'))
         self.assertIn("allowed_hosts=['192.168.1.10/32'", repr(server))
         # a network with host bits set is refused (often a typo for one address: it would allow the whole network)
         with self.assertRaisesRegex(ValueError, "host bits set: use '192.168.1.0/24' for the network, or "
@@ -1058,14 +1170,14 @@ class TestAllowedHostsOption(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'write_hosts item .*host bits'):
             AccessControl(MemoryStore(), write_hosts=['10.0.0.1/8'])
         self.assertEqual(ModbusServer(allowed_hosts=['192.168.1.5/32', ' 10.0.0.0/8 ']).allowed_hosts,
-                         ['192.168.1.5/32', '10.0.0.0/8'])
+                         ('192.168.1.5/32', '10.0.0.0/8'))
 
     def test_empty_list_allows_no_host(self) -> None:
         """The convention of every allow list: None for every host, an empty list for no host at all."""
         empty_lists: tuple[Iterable[str], ...] = ([], (), set())
         for hosts in empty_lists:
             server = ModbusServer(allowed_hosts=hosts)
-            self.assertEqual(server.allowed_hosts, [])
+            self.assertEqual(server.allowed_hosts, ())
             tcp_server = self._tcp_server(hosts)
             self.assertFalse(tcp_server.is_allowed(('127.0.0.1', 50000)))
             self.assertFalse(tcp_server.is_allowed(('::1', 50000, 0, 0)))
@@ -1079,7 +1191,7 @@ class TestAllowedHostsOption(unittest.TestCase):
 
     def test_any_iterable_is_accepted(self) -> None:
         for hosts in (('127.0.0.1',), iter(['127.0.0.1']), {'127.0.0.1'}, (host for host in ['127.0.0.1'])):
-            self.assertEqual(ModbusServer(allowed_hosts=hosts).allowed_hosts, ['127.0.0.1/32'])
+            self.assertEqual(ModbusServer(allowed_hosts=hosts).allowed_hosts, ('127.0.0.1/32',))
 
     def test_params_check(self) -> None:
         # hostnames are not supported
