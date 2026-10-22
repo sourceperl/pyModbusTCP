@@ -1357,8 +1357,34 @@ class TestAllowedHostsOption(unittest.TestCase):
         self.assertTrue(tcp_server.is_allowed(('::ffff:192.168.1.7', 1234, 0, 0)))
         self.assertFalse(tcp_server.is_allowed(('::ffff:10.0.0.1', 1234, 0, 0)))
 
-    def test_link_local_zone_id(self) -> None:
-        self.assertTrue(self._tcp_server(['fe80::/10']).is_allowed(('fe80::1%eth0', 1234, 0, 0)))
+    def test_ipv4_mapped_entry(self) -> None:
+        """An IPv4-mapped entry is converted to IPv4: the server sees such a client as IPv4, the IPv6 form never
+        matched it (S-09)."""
+        server = ModbusServer(allowed_hosts=['::ffff:192.168.1.10', '::ffff:10.0.0.0/104'])
+        self.assertEqual(server.allowed_hosts, ('192.168.1.10/32', '10.0.0.0/8'))
+        tcp_server = self._tcp_server(['::ffff:192.168.1.10', '::ffff:10.0.0.0/104'])
+        for address, expected in (('192.168.1.10', True), ('::ffff:192.168.1.10', True), ('10.9.8.7', True),
+                                  ('::ffff:10.9.8.7', True), ('192.168.1.11', False), ('::ffff:192.168.1.11', False)):
+            client = (address, 1234, 0, 0) if ':' in address else (address, 1234)
+            self.assertEqual(tcp_server.is_allowed(client), expected, address)
+        self.assertEqual(ModbusServer(allowed_hosts=['::ffff:0:0/96']).allowed_hosts, ('0.0.0.0/0',))
+
+    def test_link_local_entry_is_refused(self) -> None:
+        """An allow list can't tell the interface of a link-local client: a link-local entry (or any entry with an
+        interface) is refused, it would allow every interface (S-09)."""
+        for entry in ('fe80::/10', 'fe80::1', 'fe80::/64', 'febf::1'):
+            with self.subTest(entry=entry), self.assertRaisesRegex(ValueError, 'link-local address'):
+                ModbusServer(allowed_hosts=[entry])
+        for entry in ('fe80::1%eth0', '2001:db8::1%eth0', '::1%lo'):
+            with self.subTest(entry=entry), self.assertRaisesRegex(ValueError, 'interface'):
+                ModbusServer(allowed_hosts=[entry])
+        # the same rule for every allow list
+        with self.assertRaisesRegex(ValueError, 'write_hosts item .*link-local'):
+            AccessControl(MemoryStore(), write_hosts=['fe80::/10'])
+        # a wider network that contains fe80::/10 is a choice of the user (every IPv6 client): kept
+        self.assertEqual(ModbusServer(allowed_hosts=['::/0']).allowed_hosts, ('::/0',))
+        # the zone id of a client is dropped for the match: a link-local client only matches a wider network
+        self.assertTrue(self._tcp_server(['::/0']).is_allowed(('fe80::1%eth0', 1234, 0, 0)))
         self.assertFalse(self._tcp_server(['::1']).is_allowed(('fe80::1%eth0', 1234, 0, 0)))
 
     def test_invalid_client_address_is_refused(self) -> None:

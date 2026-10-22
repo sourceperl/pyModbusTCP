@@ -116,7 +116,9 @@ class ModbusServer:
         :type read_only: bool
         :param allowed_hosts: whitelist of the clients allowed to connect: IP addresses or networks in CIDR notation\
             (like ['192.168.1.10', '10.0.0.0/24', '::1']), other connections are closed at once, None to accept\
-            every client (default), an empty list for no client at all, hostnames are not supported
+            every client (default), an empty list for no client at all, hostnames are not supported; an IPv4-mapped\
+            entry (::ffff:a.b.c.d) is converted to IPv4, a link-local entry (fe80::/10) is refused (an allow list\
+            can't tell the interface of a client)
         :type allowed_hosts: iterable of str or None
         :param max_connections_per_host: max number of simultaneous connections from the same client host (an IPv4\
             address, or an IPv6 network, see ipv6_host_prefix), the next ones are closed immediately: a single host\

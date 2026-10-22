@@ -35,6 +35,9 @@ Revision history for pyModbusTCP
     - tools: mbtcp-tcp2rtu only relays the standard data functions by default (0x01 to 0x06, 0x0F, 0x10, 0x16, 0x17,
       0x2B/0x0E): the others (diagnostics 0x08, file records 0x14/0x15, other MEI types, vendor functions) get
       exception 0x01. --functions sets the list, "--functions all" relays every function as before.
+    - server/tools: in an allow list (allowed_hosts, AccessControl, -A/--allow), an IPv4-mapped entry
+      ("::ffff:192.168.1.10") is converted to IPv4 (it never matched: the server sees such a client as IPv4), a
+      link-local entry (fe80::/10) or an entry with an interface ("%eth0") is refused (it allowed every interface).
     - server/tools: an allow list entry with host bits set (like "192.168.1.5/24", often a typo for one address)
       is refused (ValueError, or exit status 2 for -A/--allow): write "192.168.1.0/24" or "192.168.1.5".
 

@@ -145,18 +145,38 @@ def validate_read_only(read_only: bool) -> bool:
     return read_only
 
 
+# IPv4 clients of a dual-stack IPv6 socket (::ffff:a.b.c.d), seen as IPv4 by the server (see client_ip())
+_IPV4_MAPPED = ipaddress.IPv6Network('::ffff:0:0/96')
+# link-local addresses: their interface is not part of an IP network (see parse_network())
+_LINK_LOCAL = ipaddress.IPv6Network('fe80::/10')
+
+
 def parse_network(text: str) -> _IPNetwork:
     """An IP address or a network in CIDR notation, like "192.168.1.10" or "192.168.1.0/24".
 
     A network with host bits set, like "192.168.1.5/24", is refused: it is often a typo for one address, and it
     would allow the whole network.
 
+    The entries are written as the server sees the clients:
+
+    - an IPv4-mapped entry (like "::ffff:192.168.1.10", the form of an IPv4 client on a dual-stack IPv6 socket) is
+      converted to IPv4 ("192.168.1.10/32"): the server sees such a client as an IPv4 one, the IPv6 form would never
+      match it;
+    - a link-local entry (fe80::/10) is refused, and so is an entry with an interface ("%eth0"): an allow list can't
+      tell the interface of a client, "fe80::1" would allow it on every interface. Listen on the link-local address
+      of one interface (host='fe80::1%eth0'), or filter by interface on the firewall.
+
     :raises ValueError: with a message for the user
     """
+    if '%' in text:
+        raise ValueError(f'{text!r} has an interface (zone id): an allow list entry is an IP address or network only, '
+                         'it can\'t tell the interface of a client')
     try:
-        return ipaddress.ip_network(text.strip())
+        network = ipaddress.ip_network(text.strip())
     except ValueError:
         pass
+    else:
+        return _check_entry(text, network)
     try:
         network = ipaddress.ip_network(text.strip(), strict=False)
     except ValueError:
@@ -164,6 +184,20 @@ def parse_network(text: str) -> _IPNetwork:
     address = text.strip().split('/')[0]
     raise ValueError(f'{text!r} has host bits set: use {str(network)!r} for the network, or {address!r} for the '
                      'address only')
+
+
+def _check_entry(text: str, network: _IPNetwork) -> _IPNetwork:
+    """An allow list entry as the server sees the clients: IPv4-mapped converted to IPv4, link-local refused."""
+    if isinstance(network, ipaddress.IPv6Network):
+        ipv4 = network.network_address.ipv4_mapped
+        if ipv4 is not None and network.subnet_of(_IPV4_MAPPED):
+            return ipaddress.IPv4Network((ipv4, network.prefixlen - 96))
+        if network.subnet_of(_LINK_LOCAL):
+            raise ValueError(f'{text!r} is a link-local address (fe80::/10): an allow list can\'t tell the interface '
+                             'of a client, it would allow the link-local clients of every interface; listen on the '
+                             'link-local address of one interface (host=\'fe80::1%eth0\') or filter by interface on '
+                             'the firewall')
+    return network
 
 
 def validate_allowed_hosts(allowed_hosts: Iterable[str] | None,

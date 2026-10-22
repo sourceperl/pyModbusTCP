@@ -297,6 +297,14 @@ def test_server_command() -> None:
         assert 'Read-only mode' in out
 
 
+def test_server_link_local_allow() -> None:
+    """-A fe80::/10 is refused (an allow list can't tell the interface of a client), with the way to do it."""
+    proc = subprocess.run([sys.executable, '-m', 'pyModbusTCP.tools.server', '-A', 'fe80::/10'], check=False,
+                          capture_output=True, text=True, timeout=30)
+    assert proc.returncode == 2
+    assert 'link-local address' in proc.stderr
+
+
 def test_server_invalid_allow() -> None:
     proc = subprocess.run([sys.executable, '-m', 'pyModbusTCP.tools.server', '-A', 'not-an-ip'], check=False,
                           capture_output=True, text=True, timeout=30)

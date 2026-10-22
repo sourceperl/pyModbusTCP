@@ -47,7 +47,7 @@ supported.
 | Option | Default | Effect |
 |---|---|---|
 | `host` | `'localhost'` | Interface the server listens on. An empty host (the wildcard address of `bind()`: every interface) is refused: write `'0.0.0.0'` (or `'::'`) to listen on every interface on purpose. So is an IPv4 address in a legacy form that `bind()` reads as another address: `'0'`, `'00'` or `'0x0'` is 0.0.0.0 (every interface), `'192.168.010.1'` is 192.168.8.1 (octal), `'127.1'` is 127.0.0.1. |
-| `allowed_hosts` | `None` (every client) | Whitelist of IP addresses or networks (CIDR notation, IPv4 and IPv6). Other clients are disconnected at once, before any function handler (or fallback) is called. Refusals are logged (one message per 10 s at most). An empty list allows no client at all (a warning is logged at startup). |
+| `allowed_hosts` | `None` (every client) | Whitelist of IP addresses or networks (CIDR notation, IPv4 and IPv6). Other clients are disconnected at once, before any function handler (or fallback) is called. Refusals are logged (one message per 10 s at most). An empty list allows no client at all (a warning is logged at startup). An IPv4-mapped entry (`::ffff:192.168.1.10`) is converted to IPv4, the form of such a client for the server; a link-local entry (`fe80::/10`), or an entry with an interface (`%eth0`), is refused (see "Link-local IPv6 addresses"). |
 | `read_only` | `False` | The standard write functions (0x05, 0x06, 0x0F, 0x10, 0x15, 0x16 and 0x17) get an "illegal function" exception, whatever their handler. A fallback handler (like a gateway) only gets the read functions (0x01 to 0x04, 0x2B/0x0E): any other function may write. A function added or replaced by the application is not checked: if it writes data, it must test `server.read_only` (see the known limitations). For finer rules (some spaces, some clients), stack the `ReadOnly`, `AccessControl` or `Guard` wrappers on the data store. |
 
 These options are also properties of the server: a new value is checked like the constructor argument and
@@ -158,9 +158,11 @@ accepted with it, by the server and by the client (`'fe80::1%eth0'`, `'fe80::1%2
 Windows). Without it the target is ambiguous: `ValueError`, with the form to write. An interface on another address
 (`'2001:db8::1%eth0'`) is a configuration error: refused too.
 
-`allowed_hosts` (and `AccessControl`) can't tell the interface of a link-local client: the interface is not part of
-an IP network, and an entry like `fe80::/10` allows the link-local clients of every interface. To accept the
-link-local clients of one link only:
+`allowed_hosts` (and `AccessControl`, `-A/--allow`) can't tell the interface of a link-local client: the interface
+is not part of an IP network, an entry like `fe80::/10` would allow the link-local clients of every interface. So a
+link-local entry, or an entry with an interface (`fe80::1%eth0`), is refused (`ValueError`, exit status 2 for the
+tools). A wider entry that contains `fe80::/10` (like `::/0`, every IPv6 client) is accepted: the link-local clients of
+every interface are then allowed, on purpose. To accept the link-local clients of one link only:
 
 - listen on the link-local address of this interface (`ModbusServer(host='fe80::1%eth1', ipv6=True)`): the other
   links can't reach the server;
