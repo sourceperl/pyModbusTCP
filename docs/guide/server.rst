@@ -285,6 +285,25 @@ exception:
 - ``ModbusServer(functions={})`` starts without any function, ``fallback=handler`` handles the function codes without
   handler (like a gateway that relays every request).
 - An unexpected exception of a handler is logged, the client gets a "slave device failure" and its session goes on.
+- ``read_only=True`` only refuses the standard write functions: it doesn't know what a handler of the application does.
+  A handler that writes data (a new function, or a standard one replaced) tests the mode itself, at each call (the
+  mode can change while the server runs):
+
+  .. code-block:: python
+
+      from pyModbusTCP.server import IllegalFunction
+
+      @server.function(0x42)
+      def set_register(req: Request) -> bytes:
+          if server.read_only:
+              raise IllegalFunction()
+          (address, value) = req.unpack('>HH', 1, 5)
+          with req.transaction() as tx:
+              tx.write(Space.HOLDING_REGISTERS, address, [value])
+          return req.reply('HH', address, value)
+
+  A store wrapped in :class:`~pyModbusTCP.server.ReadOnly` refuses every write of the clients instead, whatever the
+  function (see `Access rules`_).
 
 See the :doc:`../examples/server_custom_function` example.
 
@@ -314,7 +333,7 @@ The server has several protections, all set in the :class:`~pyModbusTCP.server.M
         host='192.168.1.10',                  # listen on this interface only (default: localhost)
         port=502,
         allowed_hosts=['192.168.1.0/24'],     # other clients are disconnected at once
-        read_only=True,                       # every write request gets an "illegal function" exception
+        read_only=True,                       # the standard write functions get an "illegal function" exception
         max_connections=16,                   # simultaneous clients (default: 64)
         max_connections_per_host=4,           # simultaneous connections of one client host (default: 16)
         ipv6_host_prefix=64,                  # an IPv6 client host is a /64 network (default), 128: by address

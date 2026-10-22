@@ -82,6 +82,8 @@ Revision history for pyModbusTCP
       are properties: a new value is checked like in the constructor and applies at once, also to a running server
       (a whitelist set after the constructor was silently ignored: every client was still accepted). A new
       allowed_hosts closes the sessions of the clients it no longer allows.
+    - docs: read_only only refuses the standard write functions: a function handler of the application that writes
+      data tests server.read_only itself (server guide, SECURITY.md, docstring).
     - server: a handler that returns a PDU over 253 bytes gets a "slave device failure" (no oversized frame).
     - server: the change events of the threaded listeners wait in a bounded queue (MemoryStore.notify_queue_size,
       10000): a slow listener can't make the memory grow without limit, the events over it are dropped and logged.

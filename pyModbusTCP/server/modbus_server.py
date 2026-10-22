@@ -105,9 +105,11 @@ class ModbusServer:
         :param max_connections: max number of simultaneous client connections, the next ones are closed immediately,\
             None for no limit (default is 64)
         :type max_connections: int or None
-        :param read_only: refuse every request that writes data (functions 0x05, 0x06, 0x0F, 0x10, 0x15, 0x16 and\
-            0x17) with an "illegal function" exception, whatever their handler; the fallback handler only gets the\
-            read functions (0x01 to 0x04, 0x2B/0x0E) (default is False)
+        :param read_only: refuse the standard write functions (0x05, 0x06, 0x0F, 0x10, 0x15, 0x16 and 0x17) with an\
+            "illegal function" exception, whatever their handler; the fallback handler only gets the read functions\
+            (0x01 to 0x04, 0x2B/0x0E) (default is False). A function added or replaced by the application (see\
+            function()) is not checked: if it writes data, it must test server.read_only itself (and raise\
+            IllegalFunction), or the store must be wrapped in a ReadOnly wrapper
         :type read_only: bool
         :param allowed_hosts: whitelist of the clients allowed to connect: IP addresses or networks in CIDR notation\
             (like ['192.168.1.10', '10.0.0.0/24', '::1']), other connections are closed at once, None to accept\
@@ -214,7 +216,11 @@ class ModbusServer:
 
     @property
     def read_only(self) -> bool:
-        """Get or set the read-only mode (see the constructor): applies from the next request."""
+        """Get or set the read-only mode (see the constructor): applies from the next request.
+
+        Only the standard write functions are refused: a function handler of the application that writes data tests
+        it at each call (``if server.read_only: raise IllegalFunction()``).
+        """
         return self._read_only
 
     @read_only.setter

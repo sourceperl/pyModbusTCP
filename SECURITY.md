@@ -48,7 +48,7 @@ supported.
 |---|---|---|
 | `host` | `'localhost'` | Interface the server listens on. |
 | `allowed_hosts` | `None` (every client) | Whitelist of IP addresses or networks (CIDR notation, IPv4 and IPv6). Other clients are disconnected at once, before any function handler (or fallback) is called. Refusals are logged (one message per 10 s at most). An empty list allows no client at all (a warning is logged at startup). |
-| `read_only` | `False` | Every request that writes data (functions 0x05, 0x06, 0x0F, 0x10, 0x15, 0x16 and 0x17) gets an "illegal function" exception, whatever its handler (a custom function or a fallback too). A fallback handler (like a gateway) only gets the read functions (0x01 to 0x04, 0x2B/0x0E): any other function may write. For finer rules (some spaces, some clients), stack the `ReadOnly`, `AccessControl` or `Guard` wrappers on the data store. |
+| `read_only` | `False` | The standard write functions (0x05, 0x06, 0x0F, 0x10, 0x15, 0x16 and 0x17) get an "illegal function" exception, whatever their handler. A fallback handler (like a gateway) only gets the read functions (0x01 to 0x04, 0x2B/0x0E): any other function may write. A function added or replaced by the application is not checked: if it writes data, it must test `server.read_only` (see the known limitations). For finer rules (some spaces, some clients), stack the `ReadOnly`, `AccessControl` or `Guard` wrappers on the data store. |
 
 These options are also properties of the server: a new value is checked like the constructor argument and
 applies at once to a running server. A new `allowed_hosts` filters the next connections and closes the active
@@ -195,9 +195,22 @@ the connections of the previous one are fully closed by the system.
 These points are not vulnerabilities of the code, but behaviors to take into account in the design of an
 application.
 
-- **`read_only` only knows the standard write function codes for the custom functions**: a custom function
-  (0x41 to 0x48 for example) that writes data must refuse the writes on its own, or use a store with a
-  `ReadOnly` wrapper. A fallback handler is safe: in read-only mode, it only gets the read functions.
+- **`read_only` only knows the standard write function codes**: `read_only` filters the function code of a request,
+  not what its handler does. A function added by the application (0x41 to 0x48 for example), or a standard function
+  it replaced (like a 0x03 that also writes a counter), runs in read-only mode and can write the data store. Such a
+  handler must test the mode at each call (it can change while the server runs):
+
+  ```python
+  @server.function(0x41)
+  def set_register(req: Request) -> bytes:
+      if server.read_only:
+          raise IllegalFunction()
+      ...
+  ```
+
+  Or wrap the store in a `ReadOnly` wrapper: it refuses every write of a client, whatever the function, as long as
+  the handler writes through `req.transaction()`. A fallback handler is safe: in read-only mode, it only gets the
+  read functions.
 - **`ModbusClient` is not thread-safe**: share an instance between threads only with an external lock.
 - **Client name resolution** is not limited by `timeout`, and the connection timeout applies to each address
   returned by the resolver in turn.
