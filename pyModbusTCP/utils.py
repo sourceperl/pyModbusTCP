@@ -1,8 +1,8 @@
 """ pyModbusTCP utils functions """
 
+import ipaddress
 import operator
 import re
-import socket
 import struct
 from collections.abc import Iterable, Sequence
 from typing import Any
@@ -326,18 +326,17 @@ def valid_host(host_str: str) -> bool:
     # an empty host or a NUL char (rejected by the system resolver functions) can't be valid
     if not host_str or '\x00' in host_str:
         return False
-    # IPv4 valid address ?
-    try:
-        socket.inet_pton(socket.AF_INET, host_str)
-        return True
-    except OSError:
-        pass
-    # IPv6 valid address ?
-    try:
-        socket.inet_pton(socket.AF_INET6, host_str)
-        return True
-    except OSError:
-        pass
+    # IPv4 or IPv6 valid address ?
+    # the ipaddress module, not socket.inet_pton(): its result depends on the OS (the inet_pton() of macOS takes
+    # "192.168.010.1", with a leading zero, that the resolver may read in octal), ipaddress is strict everywhere
+    # (no leading zero since Python 3.9.5); a zone id ("fe80::1%eth0", accepted by IPv6Address) is not a host here
+    if '%' not in host_str:
+        for address_class in (ipaddress.IPv4Address, ipaddress.IPv6Address):
+            try:
+                address_class(host_str)
+                return True
+            except ValueError:
+                pass
     # valid hostname ?
     # strip final dot, if present
     if host_str[-1] == '.':

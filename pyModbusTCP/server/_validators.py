@@ -5,7 +5,6 @@ from __future__ import annotations
 import ipaddress
 import math
 import re
-import socket
 from collections.abc import Callable, Iterable, Mapping
 from typing import TYPE_CHECKING, Any
 
@@ -37,9 +36,10 @@ def validate_host(host: str) -> str:
     address, sep, zone_id = host.partition('%')
     if sep:
         # a link-local IPv6 address with its interface: the address of an interface, bind() takes it
+        # (ipaddress, strict on every OS, like utils.valid_host(); not socket.inet_pton())
         try:
-            socket.inet_pton(socket.AF_INET6, address)
-        except OSError:
+            ipaddress.IPv6Address(address)
+        except ValueError:
             valid = False
         else:
             valid = bool(_RE_ZONE_ID.fullmatch(zone_id))

@@ -228,6 +228,22 @@ class TestUtils(unittest.TestCase):
         self.assertIs(valid_host(name + '.'), True)
         self.assertIs(valid_host('a' + name), False)
 
+    def test_valid_host_doesnt_depend_on_the_os(self) -> None:
+        """The addresses are checked by the ipaddress module, never by socket.inet_pton(): the inet_pton() of macOS
+        takes "192.168.010.1" (a leading zero), the one of Linux refuses it (CI failure on macOS only)."""
+        from unittest import mock
+
+        from pyModbusTCP.server import ModbusServer
+
+        with mock.patch('socket.inet_pton', side_effect=AssertionError('socket.inet_pton() must not be used')):
+            for host in ('192.168.010.1', '127.000.000.001', '0'):
+                self.assertIs(valid_host(host), False, host)
+                with self.assertRaises(ValueError):
+                    ModbusServer(host=host)
+            for host in ('192.168.10.1', '::1', 'plc.local'):
+                self.assertIs(valid_host(host), True, host)
+            self.assertEqual(ModbusServer(host='fe80::1%eth0').host, 'fe80::1%eth0')
+
     def test_valid_host_rejects_trailing_newline(self) -> None:
         self.assertTrue(valid_host('example.com'))
         for bad in ('example.com\n', 'example.com\r\n', '\nexample.com', 'exa mple.com'):
