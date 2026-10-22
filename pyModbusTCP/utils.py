@@ -303,6 +303,9 @@ _RE_HOST_PART_OK = re.compile('(?!-)[a-z0-9_-]{1,63}(?<!-)', re.IGNORECASE | re.
 _RE_NUMERIC_LABEL = re.compile('[0-9]+|0x[0-9a-f]*', re.IGNORECASE | re.ASCII)
 # max length of a hostname, without its final dot (RFC 1035: 255 bytes on the wire, 253 chars as text)
 _HOSTNAME_MAX_LEN = 253
+# the zone id of a link-local IPv6 address ("eth0" in "fe80::1%eth0"): an interface name (15 chars at most on Linux
+# and the BSDs) or index (Windows)
+_RE_ZONE_ID = re.compile('[a-z0-9_.-]{1,15}', re.IGNORECASE | re.ASCII)
 
 
 def valid_host(host_str: str) -> bool:
@@ -312,7 +315,13 @@ def valid_host(host_str: str) -> bool:
     a legacy form that the resolver would read as another address is refused, like a missing byte ("192.168.1" is
     192.168.0.1), a leading zero (octal: "192.168.010.1" is 192.168.8.1), a number or a hexadecimal value
     ("2130706433" and "0x7f.1" are 127.0.0.1). So is any name whose last label is a number. A hostname is at most
-    253 chars (a final dot excluded) and ASCII only: an internationalized domain name
+    253 chars (a final dot excluded) and ASCII only.
+
+    A link-local IPv6 address (fe80::/10) is valid with its interface only ("fe80::1%eth0", "fe80::1%2"): every
+    interface has an address in fe80::/64, the interface tells which link is meant. Without it, the target is
+    ambiguous (refused), and an interface on another address is a configuration error (refused too).
+
+    An internationalized domain name
     (IDN) is valid in its ASCII form (punycode, like ``'xn--caf-dma.fr'``), not in its Unicode form (``'café.fr'``).
     The conversion is left to the application: the codec of the standard library (``str.encode('idna')``) follows
     IDNA 2003, which differs from the current IDNA 2008 for some names (``'faß.de'`` would become ``'fass.de'``, another
@@ -329,14 +338,21 @@ def valid_host(host_str: str) -> bool:
     # IPv4 or IPv6 valid address ?
     # the ipaddress module, not socket.inet_pton(): its result depends on the OS (the inet_pton() of macOS takes
     # "192.168.010.1", with a leading zero, that the resolver may read in octal), ipaddress is strict everywhere
-    # (no leading zero since Python 3.9.5); a zone id ("fe80::1%eth0", accepted by IPv6Address) is not a host here
-    if '%' not in host_str:
-        for address_class in (ipaddress.IPv4Address, ipaddress.IPv6Address):
-            try:
-                address_class(host_str)
-                return True
-            except ValueError:
-                pass
+    # (no leading zero since Python 3.9.5)
+    address, sep, zone_id = host_str.partition('%')
+    if sep:
+        # an interface: only for a link-local IPv6 address
+        ip = _ipv6_address(address)
+        return ip is not None and ip.is_link_local and bool(_RE_ZONE_ID.fullmatch(zone_id))
+    try:
+        ipaddress.IPv4Address(host_str)
+        return True
+    except ValueError:
+        pass
+    ip = _ipv6_address(host_str)
+    if ip is not None:
+        # a link-local address needs its interface (see link_local_without_zone())
+        return not ip.is_link_local
     # valid hostname ?
     # strip final dot, if present
     if host_str[-1] == '.':
@@ -352,9 +368,26 @@ def valid_host(host_str: str) -> bool:
     return not _RE_NUMERIC_LABEL.fullmatch(parts[-1])
 
 
+def link_local_without_zone(host_str: str) -> bool:
+    """Return True for a link-local IPv6 address without its interface (like "fe80::1"): refused by valid_host(),
+    a caller can give a specific error message for it."""
+    ip = _ipv6_address(host_str)
+    return ip is not None and ip.is_link_local
+
+
 ####################
 # internal functions
 ####################
+
+def _ipv6_address(text: str) -> ipaddress.IPv6Address | None:
+    """An IPv6 address without zone id ("%..."), None if text is not one."""
+    if '%' in text:
+        return None
+    try:
+        return ipaddress.IPv6Address(text)
+    except ValueError:
+        return None
+
 
 # a byte -> its 8 bits as bool (LSB first)
 _BYTE_TO_BITS = tuple(tuple(bool(byte >> bit & 1) for bit in range(8)) for byte in range(256))

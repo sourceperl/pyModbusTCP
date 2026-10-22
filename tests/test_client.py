@@ -37,6 +37,11 @@ class TestModbusClient(unittest.TestCase):
         # an empty host or a host with a NUL char is invalid too (ValueError, not another exception)
         self.assertRaises(ValueError, ModbusClient, host='')
         self.assertRaises(ValueError, ModbusClient, host='bad\x00host')
+        # a link-local IPv6 address: with its interface only (the message gives the form), never on another address
+        self.assertEqual(ModbusClient(host='fe80::1%eth0').host, 'fe80::1%eth0')
+        self.assertRaisesRegex(ValueError, "link-local IPv6 address: give its interface, like 'fe80::1%eth0'",
+                               ModbusClient, host='fe80::1')
+        self.assertRaises(ValueError, ModbusClient, host='2001:db8::1%eth0')
         # shouldn't raise ValueError for valid value
         try:
             [ModbusClient(host=h) for h in ['CamelCaseHost', 'plc-1.net', 'my.good.host',

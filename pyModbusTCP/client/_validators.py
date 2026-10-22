@@ -2,7 +2,7 @@
 
 import math
 
-from ..utils import valid_host
+from ..utils import link_local_without_zone, valid_host
 
 
 def check_addr_nb(addr: int, nb: int, max_nb: int, addr_name: str, nb_name: str, action: str = 'read') -> None:
@@ -31,6 +31,9 @@ def validate_host(value: object) -> str:
     if not isinstance(value, str):
         raise TypeError('host must be a str')
     if not valid_host(value):
+        if link_local_without_zone(value):
+            raise ValueError(f'host {value!r} is a link-local IPv6 address: give its interface, like '
+                             f'\'{value}%eth0\' (\'{value}%2\' with an interface index on Windows)')
         raise ValueError('host can\'t be set (not a valid IP address or hostname)')
     return value
 

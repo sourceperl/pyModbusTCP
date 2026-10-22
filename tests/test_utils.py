@@ -228,6 +228,22 @@ class TestUtils(unittest.TestCase):
         self.assertIs(valid_host(name + '.'), True)
         self.assertIs(valid_host('a' + name), False)
 
+    def test_valid_host_link_local(self) -> None:
+        """A link-local IPv6 address (fe80::/10) is valid with its interface only, and an interface only on such an
+        address."""
+        from pyModbusTCP.utils import link_local_without_zone
+        for host in ('fe80::1%eth0', 'fe80::1%2', 'FE80::A%enp0s31f6', 'febf::1%eth0', 'fe80::1%br-lan.10'):
+            self.assertIs(valid_host(host), True, host)
+        for host in ('fe80::1', 'febf::1',                         # no interface: ambiguous target
+                     '2001:db8::1%eth0', '::1%lo', 'fec0::1%eth0',  # interface on another address
+                     '127.0.0.1%eth0', 'plc.local%eth0',
+                     'fe80::1%', 'fe80::1%eth 0', 'fe80::1%eth0\n', 'fe80::1%a/b', 'fe80::1%' + 'a' * 16,
+                     'fe80::1%eth0%eth1'):
+            self.assertIs(valid_host(host), False, repr(host))
+        self.assertTrue(link_local_without_zone('fe80::1'))
+        for host in ('fe80::1%eth0', '::1', '2001:db8::1', '127.0.0.1', 'plc.local'):
+            self.assertFalse(link_local_without_zone(host), host)
+
     def test_valid_host_doesnt_depend_on_the_os(self) -> None:
         """The addresses are checked by the ipaddress module, never by socket.inet_pton(): the inet_pton() of macOS
         takes "192.168.010.1" (a leading zero), the one of Linux refuses it (CI failure on macOS only)."""

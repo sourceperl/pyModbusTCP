@@ -132,6 +132,13 @@ class TestModbusServer(unittest.TestCase):
         for host in ('127.0.0.1', '0.0.0.0', '::', '::1', 'localhost', 'plc-gw.local', 'fe80::1%eth0', 'fe80::1%2'):
             with self.subTest(host=host):
                 self.assertEqual(ModbusServer(host=host).host, host)
+        # a link-local IPv6 address needs its interface (it tells the link to listen on), an interface on another
+        # address is a configuration error
+        with self.assertRaisesRegex(ValueError, 'link-local IPv6 address: give its interface'):
+            ModbusServer(host='fe80::1')
+        for host in ('2001:db8::1%eth0', '::1%lo', 'fe80::1%' + 'a' * 16):
+            with self.subTest(host=host), self.assertRaisesRegex(ValueError, 'standard form'):
+                ModbusServer(host=host)
         server = ModbusServer(host='127.0.0.1')
         for host in ('', '0'):
             with self.assertRaises(ValueError):

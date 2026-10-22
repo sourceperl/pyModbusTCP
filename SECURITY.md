@@ -150,6 +150,30 @@ that floods it delays the broadcasts of the others (0x06), never their other req
 With N client hosts that send requests at the same time, each one gets 1/N of the serial line: many hosts can
 still slow down the others. As for the server, `--allow` and the firewall are the real protections.
 
+### Link-local IPv6 addresses
+
+Every IPv6 interface has a link-local address (`fe80::/10`), only valid on its own link (never routed). Every
+interface has one in the same `fe80::/64`: the interface tells which link is meant, so a link-local address is only
+accepted with it, by the server and by the client (`'fe80::1%eth0'`, `'fe80::1%2'` with an interface index on
+Windows). Without it the target is ambiguous: `ValueError`, with the form to write. An interface on another address
+(`'2001:db8::1%eth0'`) is a configuration error: refused too.
+
+`allowed_hosts` (and `AccessControl`) can't tell the interface of a link-local client: the interface is not part of
+an IP network, and an entry like `fe80::/10` allows the link-local clients of every interface. To accept the
+link-local clients of one link only:
+
+- listen on the link-local address of this interface (`ModbusServer(host='fe80::1%eth1', ipv6=True)`): the other
+  links can't reach the server;
+- or filter by interface on the firewall (`ip6tables -A INPUT -i eth1 -p tcp --dport 502 -j ACCEPT`).
+
+`max_connections_per_host` counts the link-local clients by `fe80::/64` too: two clients `fe80::1` of two links share
+one quota.
+
+Link-local addresses depend on the name or the index of an interface (renamed, or numbered in another order at
+boot), and a router can't filter them: keep them for commissioning and troubleshooting. In production, give the
+Modbus devices and servers fixed addresses (unique local `fd00::/8`, or global ones), that the firewall and
+`allowed_hosts` filter.
+
 ### Listening socket
 
 On Windows, the listening port is reserved with `SO_EXCLUSIVEADDRUSE`: no other socket (of the same process, of

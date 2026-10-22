@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import ipaddress
 import math
-import re
 from collections.abc import Callable, Iterable, Mapping
 from typing import TYPE_CHECKING, Any
 
-from ..utils import valid_host
+from ..utils import link_local_without_zone, valid_host
 from ._common import _IPNetwork
 from .device_id import DeviceIdentification
 
@@ -16,13 +15,10 @@ if TYPE_CHECKING:
     from .store import DataStore
 
 
-# the zone id of a link-local IPv6 address (like "eth0" in "fe80::1%eth0"): an interface name or index
-_RE_ZONE_ID = re.compile('[a-z0-9_.-]{1,64}', re.IGNORECASE | re.ASCII)
-
-
 def validate_host(host: str) -> str:
-    """Check the address to listen on: an IPv4 address in its standard form, an IPv6 address (with a zone id for a
-    link-local one, like "fe80::1%eth0") or a hostname (resolved by start()).
+    """Check the address to listen on: an IPv4 address in its standard form, an IPv6 address (a link-local one with
+    its interface, like "fe80::1%eth0", the server then only listens on this link) or a hostname (resolved by
+    start()).
 
     A legacy IPv4 form is refused: bind() would read it as another address, "0", "00" or "0x0" as 0.0.0.0 (every
     interface), "192.168.010.1" as 192.168.8.1 (octal), "127.1" as 127.0.0.1 (see utils.valid_host()).
@@ -33,19 +29,11 @@ def validate_host(host: str) -> str:
     if not host.strip():
         raise ValueError('host must not be empty: use \'0.0.0.0\' (or \'::\' with ipv6=True) to listen on every '
                          'interface')
-    address, sep, zone_id = host.partition('%')
-    if sep:
-        # a link-local IPv6 address with its interface: the address of an interface, bind() takes it
-        # (ipaddress, strict on every OS, like utils.valid_host(); not socket.inet_pton())
-        try:
-            ipaddress.IPv6Address(address)
-        except ValueError:
-            valid = False
-        else:
-            valid = bool(_RE_ZONE_ID.fullmatch(zone_id))
-    else:
-        valid = valid_host(host)
-    if not valid:
+    # standard IPv4/IPv6 forms, hostnames, a link-local IPv6 address with its interface: utils.valid_host()
+    if link_local_without_zone(host):
+        raise ValueError(f'host {host!r} is a link-local IPv6 address: give its interface, like \'{host}%eth0\' '
+                         f'(\'{host}%2\' with an interface index on Windows)')
+    if not valid_host(host):
         raise ValueError(f'host {host!r} is not an IP address in its standard form or a hostname (a legacy IPv4 form '
                          'like \'127.1\', \'0\' or \'192.168.010.1\' is refused: write \'127.0.0.1\', \'0.0.0.0\' '
                          'or \'192.168.10.1\')')

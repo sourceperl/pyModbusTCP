@@ -85,6 +85,9 @@ Revision history for pyModbusTCP
     - utils: valid_host() refuses the legacy IPv4 forms that the resolver reads as another address ("192.168.1" is
       192.168.0.1, "192.168.010.1" is 192.168.8.1, "2130706433" or "0x7f.1" is 127.0.0.1), any name whose last label
       is a number, and a hostname over 253 chars: ModbusClient(host=...) raises ValueError for them.
+    - client/server: a link-local IPv6 address (fe80::/10) is accepted with its interface only, like 'fe80::1%eth0'
+      (the client refused it, and took 'fe80::1' that failed at connect time); an interface on another address is
+      refused. SECURITY.md: link-local addresses and allowed_hosts.
     - server: read_only also refuses 0x15 (write file record) and 0x16 (mask write register), and a fallback
       handler only gets the read functions (0x01 to 0x04, 0x2B/0x0E): 0x08 or a private function could write.
     - server: allowed_hosts, read_only, max_connections, max_connections_per_host, request_timeout and idle_timeout
