@@ -29,7 +29,9 @@ Invalid settings raise an exception at once (``ValueError`` for a bad value, ``T
     except ValueError as e:
         print('bad setting: %s' % e)
 
-``host`` is an IPv4/IPv6 address or a hostname. A hostname is ASCII only: give an internationalized domain name in
+``host`` is an IPv4/IPv6 address or a hostname. An IPv4 address is in its standard form only: a form that the system
+would read as another address is refused (``ValueError``), like ``'192.168.1'`` (192.168.0.1) or
+``'192.168.010.1'`` (192.168.8.1, a leading zero is octal). A hostname is ASCII only: give an internationalized domain name in
 its ASCII form (punycode), the conversion is up to the application:
 
 .. code-block:: python

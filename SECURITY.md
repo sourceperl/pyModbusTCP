@@ -189,7 +189,10 @@ the connections of the previous one are fully closed by the system.
   An invalid MBAP header closes the connection.
 - The transaction ID is a 16 bits counter (from a random start value): two consecutive requests never share
   the same ID, so a late reply to a previous request is never taken for the current one.
-- Parameters are checked before any network I/O (types, ranges, end of the address space).
+- Parameters are checked before any network I/O (types, ranges, end of the address space). The host is an IPv4
+  address in its standard form, an IPv6 address or a hostname: a legacy IPv4 form that the resolver reads as another
+  address (`192.168.1`, `192.168.010.1`, `0x7f.1`, `2130706433`) is refused, so a typo never reaches another device
+  and a check on the text of an address can't be bypassed with another notation.
 
 ## Known limitations
 

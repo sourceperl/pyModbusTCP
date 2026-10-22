@@ -297,12 +297,22 @@ def crc16(frame: bytes) -> int:
 # re.ASCII: with re.IGNORECASE alone, [a-z] also matches some non-ASCII chars (like "K", the Kelvin sign, or
 # "İ"), that the IDNA codec of the resolver may expand beyond 63 chars (UnicodeError at connect time)
 _RE_HOST_PART_OK = re.compile('(?!-)[a-z0-9_-]{1,63}(?<!-)', re.IGNORECASE | re.ASCII)
+# the last label of a hostname that is a number (decimal, octal or hexadecimal): the name is not a name, the resolver
+# reads it as a legacy IPv4 address (inet_aton(): "192.168.1" is 192.168.0.1, "192.168.010.1" is 192.168.8.1,
+# "2130706433" or "0x7f.1" is 127.0.0.1); a real top-level domain is never numeric (RFC 3696, section 2)
+_RE_NUMERIC_LABEL = re.compile('[0-9]+|0x[0-9a-f]*', re.IGNORECASE | re.ASCII)
+# max length of a hostname, without its final dot (RFC 1035: 255 bytes on the wire, 253 chars as text)
+_HOSTNAME_MAX_LEN = 253
 
 
 def valid_host(host_str: str) -> bool:
     """Validate a host string.
 
-    Can be an IPv4/6 address or a valid hostname. A hostname is ASCII only: an internationalized domain name
+    Can be an IPv4/6 address or a valid hostname. An IPv4 address is in its standard form only ("192.168.1.10"):
+    a legacy form that the resolver would read as another address is refused, like a missing byte ("192.168.1" is
+    192.168.0.1), a leading zero (octal: "192.168.010.1" is 192.168.8.1), a number or a hexadecimal value
+    ("2130706433" and "0x7f.1" are 127.0.0.1). So is any name whose last label is a number. A hostname is at most
+    253 chars (a final dot excluded) and ASCII only: an internationalized domain name
     (IDN) is valid in its ASCII form (punycode, like ``'xn--caf-dma.fr'``), not in its Unicode form (``'café.fr'``).
     The conversion is left to the application: the codec of the standard library (``str.encode('idna')``) follows
     IDNA 2003, which differs from the current IDNA 2008 for some names (``'faß.de'`` would become ``'fass.de'``, another
@@ -329,14 +339,18 @@ def valid_host(host_str: str) -> bool:
     except OSError:
         pass
     # valid hostname ?
-    if len(host_str) > 255:
-        return False
     # strip final dot, if present
     if host_str[-1] == '.':
         host_str = host_str[:-1]
+    if not 0 < len(host_str) <= _HOSTNAME_MAX_LEN:
+        return False
     # validate each part of the hostname (part_1.part_2.part_3)
     # fullmatch: a "$" anchor would accept a trailing newline (like "example.com\n")
-    return all(_RE_HOST_PART_OK.fullmatch(part) for part in host_str.split('.'))
+    parts = host_str.split('.')
+    if not all(_RE_HOST_PART_OK.fullmatch(part) for part in parts):
+        return False
+    # a numeric last label: a legacy form of IPv4 address for the resolver (another address than it looks like)
+    return not _RE_NUMERIC_LABEL.fullmatch(parts[-1])
 
 
 ####################

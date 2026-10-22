@@ -206,6 +206,28 @@ class TestUtils(unittest.TestCase):
         for host in ['', '\x00', 'a\x00b', 'host\x00', 'wrong@host', '-bad.example.com', 'x' * 64, 'a' * 256]:
             self.assertIs(valid_host(host), False, repr(host))
 
+    def test_valid_host_legacy_ipv4_forms(self) -> None:
+        """The legacy IPv4 forms that the resolver reads as another address are refused (S-08), and so is a name whose
+        last label is a number; a hostname is at most 253 chars (final dot excluded)."""
+        for host in ('192.168.1',          # 192.168.0.1
+                     '192.168.010.1',      # 192.168.8.1 (octal)
+                     '192.168.1.010',      # 192.168.1.8
+                     '10.1', '127.1',      # 10.0.0.1, 127.0.0.1
+                     '0x7f.1', '0x7f', '0X7F.0.0.1', '127.0.0.0x1',
+                     '2130706433', '017700000001',   # 127.0.0.1
+                     '999.1.1.1', '1.2.3.4.5', 'plc.1', 'host.0x10', '192.168.1.'):
+            self.assertIs(valid_host(host), False, host)
+        # the standard forms, and the names with digits (not their last label alone)
+        for host in ('192.168.1.10', '10.0.0.1', '::1', '::ffff:10.0.0.1', 'plc-01', 'plc1.local', '1plc.example',
+                     '1.example.com', 'host.x1', 'host.1a', '0xcafe.example', 'example.com.'):
+            self.assertIs(valid_host(host), True, host)
+        # 253 chars (a final dot allowed), 254 refused
+        name = '.'.join(['a' * 63] * 3 + ['a' * 61])
+        self.assertEqual(len(name), 253)
+        self.assertIs(valid_host(name), True)
+        self.assertIs(valid_host(name + '.'), True)
+        self.assertIs(valid_host('a' + name), False)
+
     def test_valid_host_rejects_trailing_newline(self) -> None:
         self.assertTrue(valid_host('example.com'))
         for bad in ('example.com\n', 'example.com\r\n', '\nexample.com', 'exa mple.com'):
