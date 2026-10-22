@@ -77,7 +77,8 @@ class ModbusServer:
         constructor and applies at once to a running server (see each property). host, port and ipv6 apply at the
         next start().
 
-        :param host: hostname or IPv4/IPv6 address to listen on (default is 'localhost')
+        :param host: hostname or IPv4/IPv6 address to listen on (default is 'localhost'), '0.0.0.0' (or '::' with\
+            ipv6=True) for every interface; an empty host is refused (ValueError)
         :type host: str
         :param port: TCP port number (default is 502), use 0 to let the OS choose a free port
         :type port: int
@@ -185,6 +186,19 @@ class ModbusServer:
         if store is None:
             raise AttributeError('this server has one store per unit id: use server.stores[unit_id]')
         return store
+
+    @property
+    def host(self) -> str:
+        """Get or set the address to listen on (applied by the next start()).
+
+        An empty host is refused (ValueError): for bind(), it is every interface. Use '0.0.0.0' (or '::' with
+        ipv6=True) for that.
+        """
+        return self._host
+
+    @host.setter
+    def host(self, value: str) -> None:
+        self._host = _validators.validate_host(value)
 
     # --- access control and limits: checked, and applied at once to a running server ---
 

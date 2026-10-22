@@ -118,6 +118,16 @@ class TestModbusServer(unittest.TestCase):
         for port in (-1, 65536, 70000):
             with self.subTest(port=port), self.assertRaises(ValueError):
                 ModbusServer(port=port)
+        # an empty host would listen on every interface (the wildcard address of bind()): refused (S-07)
+        for host in ('', ' '):
+            with self.subTest(host=host), self.assertRaisesRegex(ValueError, "use '0.0.0.0'"):
+                ModbusServer(host=host)
+        server = ModbusServer(host='127.0.0.1')
+        with self.assertRaises(ValueError):
+            server.host = ''
+        self.assertEqual(server.host, '127.0.0.1')
+        server.host = '0.0.0.0'
+        self.assertEqual(server.host, '0.0.0.0')
         self.assertEqual(ModbusServer(port=0).port, 0)
         self.assertEqual(ModbusServer(port=65535).port, 65535)
 

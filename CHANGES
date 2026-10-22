@@ -27,6 +27,8 @@ Revision history for pyModbusTCP
     - examples: client_serial_gw.py and server_serial_gw.py are removed (replaced by the gateways of the tools).
     - server: the arguments of ModbusServer after no_block are keyword-only (only host, port and no_block are
       positional): ModbusServer('0.0.0.0', 5020, read_only=True).
+    - server: an empty host is refused (ValueError, exit status 2 for -H '' of the tools): it listened on every
+      interface; write '0.0.0.0' (or '::' with ipv6=True) for that.
     - server: allowed_hosts is a tuple of str (was a list), set a new value to change it: a change in place
       would be silently lost.
     - tools: mbtcp-tcp2rtu only relays the standard data functions by default (0x01 to 0x06, 0x0F, 0x10, 0x16, 0x17,

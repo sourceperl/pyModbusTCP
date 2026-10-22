@@ -18,6 +18,10 @@ def validate_host(host: str) -> str:
     # the address itself is checked by start() (name resolution, bind), like before
     if not isinstance(host, str):
         raise TypeError('host must be a str')
+    # an empty host is the wildcard address for bind(): every interface, never by mistake (like an empty setting)
+    if not host.strip():
+        raise ValueError('host must not be empty: use \'0.0.0.0\' (or \'::\' with ipv6=True) to listen on every '
+                         'interface')
     return host
 
 
