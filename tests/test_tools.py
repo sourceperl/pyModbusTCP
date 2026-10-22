@@ -1194,8 +1194,12 @@ def test_tcp2rtu_find_response_in_merged_frames() -> None:
 
 @contextlib.contextmanager
 def late_slave_gateway(late_reply: bytes) -> Generator[int, None, None]:
-    """A gateway on a pseudo-terminal, with an RTU slave that answers the first request just after the gateway
-    timeout (with late_reply), then each request with the values of its addresses (0xAA00 + address).
+    """A gateway on a pseudo-terminal, with an RTU slave that answers the first request after the gateway timeout
+    (with late_reply), then each request with the values of its addresses (0xAA00 + address).
+
+    Timeline (in s, from the first request): the gateway gives up the first request at 1.0 and sends the next one,
+    the late reply comes at 1.3, the response of the next request at 1.6, before its own timeout at 2.0. Every margin
+    is 0.3 s or more: a loaded CI runner (macOS) is late by tens of ms (pty flush, serial timeouts, scheduling).
 
     :returns: the TCP port of the gateway
     """
@@ -1208,7 +1212,9 @@ def late_slave_gateway(late_reply: bytes) -> Generator[int, None, None]:
     master, slave = os.openpty()
     # pyserial sets the raw mode of the line (like in test_rtu2tcp_relay)
     port = serial.Serial(os.ttyname(slave), baudrate=115200)
-    timeout = 0.3
+    timeout = 1.0
+    late_delay = timeout + 0.3
+    response_delay = 0.6
     stop = threading.Event()
 
     def rtu_slave() -> None:
@@ -1227,11 +1233,11 @@ def late_slave_gateway(late_reply: bytes) -> Generator[int, None, None]:
             _, func_code, address, quantity = struct.unpack('>BBHH', request[:6])
             if first:
                 first = False
-                time.sleep(timeout + 0.03)
+                time.sleep(late_delay)
                 os.write(master, late_reply)
                 continue
             regs = [0xAA00 + address + i for i in range(quantity)]
-            time.sleep(0.05)
+            time.sleep(response_delay)
             os.write(master, rtu_frame(1, struct.pack(f'>BB{quantity}H', func_code, 2 * quantity, *regs)))
 
     slave_thread = threading.Thread(target=rtu_slave, daemon=True)
@@ -1262,13 +1268,13 @@ def test_tcp2rtu_late_reply_is_not_the_next_response() -> None:
         results: dict[str, Any] = {}
 
         def client_a() -> None:
-            c = ModbusClient(host='127.0.0.1', port=tcp_port, timeout=3)
+            c = ModbusClient(host='127.0.0.1', port=tcp_port, timeout=5)
             results['a'] = (c.read_holding_registers(0, 2), c.last_except)
             c.close()
 
         def client_b() -> None:
-            time.sleep(0.05)  # queued while the request of A is on the line
-            c = ModbusClient(host='127.0.0.1', port=tcp_port, timeout=3)
+            time.sleep(0.2)  # queued while the request of A is on the line (until 1.0 s)
+            c = ModbusClient(host='127.0.0.1', port=tcp_port, timeout=5)
             results['b'] = c.read_holding_registers(100, 1)
             c.close()
 
@@ -1277,5 +1283,6 @@ def test_tcp2rtu_late_reply_is_not_the_next_response() -> None:
             t.start()
         for t in threads:
             t.join(10.0)
-    assert results['a'] == (None, 0x0B)
-    assert results['b'] == [0xAA00 + 100]
+    # A: no valid answer before the timeout of the gateway; B: its own value, never the late reply of A
+    assert results['a'] == (None, 0x0B), results
+    assert results['b'] == [0xAA00 + 100], results
