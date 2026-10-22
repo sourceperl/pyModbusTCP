@@ -52,7 +52,8 @@ table  for a human: a header (server, request, response time) and a table. Each 
        values that changed since the previous read are highlighted.
 plain  one line per item, "address value" (--hex and --signed choose the notation of the registers). With
        -T, the address is the one of the first register of the value, --hex gives the bits of the value.
-csv    "timestamp,address,value" lines, with a header line.
+csv    "timestamp,address,value" lines, with a header line. A device-id text that a spreadsheet would read as a
+       formula (it starts with =, +, - or @) gets a leading "'".
 json   one JSON object per read (JSON Lines with -i).
 auto   (default) table when the output is a terminal, plain otherwise (a pipe, a file): scripts get a stable output.
 
@@ -318,6 +319,19 @@ def safe_text(value: bytes) -> str:
     """An object of the device identification as text: never print raw control chars sent by a server."""
     text = value.decode('ascii', errors='backslashreplace')
     return ''.join(c if c.isprintable() else f'\\x{ord(c):02x}' for c in text)
+
+
+# a cell that starts with one of these chars is a formula for a spreadsheet (CWE-1236)
+CSV_FORMULA_CHARS = ('=', '+', '-', '@', '\t', '\r', '\n')
+
+
+def csv_text(text: str) -> str:
+    """A text sent by a server, for a csv cell: never read as a formula by a spreadsheet.
+
+    A text that starts with =, +, -, @ (or a tab, CR, LF) gets a leading "'" (like =HYPERLINK(...) or
+    =cmd|...): the spreadsheet shows it as text. Only for the texts of a server: the values read are numbers.
+    """
+    return "'" + text if text.startswith(CSV_FORMULA_CHARS) else text
 
 
 def device_object_name(obj_id: int) -> str:
@@ -709,7 +723,7 @@ class Output:
             writer = csv.writer(self.stream, lineterminator='\n')
             writer.writerow(('id', 'name', 'value'))
             for obj_id, value in objects:
-                writer.writerow((f'0x{obj_id:02X}', device_object_name(obj_id), safe_text(value)))
+                writer.writerow((f'0x{obj_id:02X}', device_object_name(obj_id), csv_text(safe_text(value))))
             self.stream.flush()
         elif self.format == 'json':
             # json.dumps escapes the control chars: the decoded text is kept as is

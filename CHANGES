@@ -84,6 +84,8 @@ Revision history for pyModbusTCP
     - tools: mbtcp-tcp2rtu no longer returns a late reply of a slave as the response of the next request (a client
       could read the value of another address): the content of an answer is checked against its request (size of
       the data read, echo of a write), and other frames are ignored until the timeout.
+    - tools: mbtcp-client device-id -f csv: a text of the server that starts with =, +, - or @ gets a leading "'"
+      (formula injection in a spreadsheet, CWE-1236).
     - utils: valid_host() edge cases (empty host, NUL and non-ASCII chars).
     - utils: valid_host() refuses the legacy IPv4 forms that the resolver reads as another address ("192.168.1" is
       192.168.0.1, "192.168.010.1" is 192.168.8.1, "2130706433" or "0x7f.1" is 127.0.0.1), any name whose last label

@@ -219,6 +219,9 @@ the connections of the previous one are fully closed by the system.
   address in its standard form, an IPv6 address or a hostname: a legacy IPv4 form that the resolver reads as another
   address (`192.168.1`, `192.168.010.1`, `0x7f.1`, `2130706433`) is refused, so a typo never reaches another device
   and a check on the text of an address can't be bypassed with another notation.
+- `mbtcp-client` never prints a control char sent by a server (the device identification texts are escaped, like
+  `\x1b`), and in its `csv` output a device identification text that starts with `=`, `+`, `-` or `@` gets a
+  leading `'`: a spreadsheet shows it as text, never runs it as a formula (CWE-1236).
 
 ## Known limitations
 

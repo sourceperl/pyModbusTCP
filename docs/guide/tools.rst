@@ -194,7 +194,8 @@ marked ``*``) for a few seconds. ``--no-color`` (or the ``NO_COLOR`` environment
 ``-f/--format`` chooses another output, for a script:
 
 - ``plain``: one ``address value`` line per item (``--hex`` and ``--signed`` choose the notation of the registers);
-- ``csv``: ``timestamp,address,value`` lines, after a header line;
+- ``csv``: ``timestamp,address,value`` lines, after a header line; a text of ``device-id`` that a spreadsheet would
+  read as a formula (it starts with ``=``, ``+``, ``-`` or ``@``) gets a leading ``'``, so it is shown as text;
 - ``json``: one JSON object per read (JSON Lines with ``-i``);
 - ``auto`` (default): ``table`` on a terminal, ``plain`` otherwise (a pipe, a file), so the output of a script never
   changes.

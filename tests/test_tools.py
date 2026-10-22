@@ -174,6 +174,32 @@ def test_client_device_id_is_sanitized(server: tuple[ModbusServer, int], capsys:
     assert out.splitlines() == ['0x00 ACME', '0x01 X\\x1b[31m', '0x02 ']
 
 
+@pytest.mark.parametrize('text, cell', [
+    ('=HYPERLINK("http://x","y")', '\'=HYPERLINK("http://x","y")'), ("+cmd|' /C calc'!A0", "'+cmd|' /C calc'!A0"),
+    ('-2+3', "'-2+3"), ('@SUM(A1)', "'@SUM(A1)"), ('\tx', "'\tx"), ('ACME', 'ACME'), ('A=1', 'A=1'), ('', ''),
+])
+def test_csv_text(text: str, cell: str) -> None:
+    assert cli_tool.csv_text(text) == cell
+
+
+def test_client_device_id_csv_no_formula(capsys: pytest.CaptureFixture[str]) -> None:
+    """A device-id text is never a formula in the csv output (CWE-1236)."""
+    import csv
+    import io
+    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True,
+                       device_id=DeviceIdentification(vendor_name=b'=HYPERLINK("http://evil","x")',
+                                                      product_code=b'@SUM(1)', major_minor_revision=b'1.0'))
+    _, port = srv.start()
+    try:
+        status, out, _ = run_client(capsys, ['-H', '127.0.0.1', '-p', str(port), 'device-id', '-f', 'csv'])
+    finally:
+        srv.stop()
+    assert status == 0
+    rows = list(csv.reader(io.StringIO(out)))
+    assert rows[0] == ['id', 'name', 'value']
+    assert [row[2] for row in rows[1:]] == ['\'=HYPERLINK("http://evil","x")', "'@SUM(1)", '1.0']
+
+
 def test_client_errors(server: tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
     srv, port = server
     base = ['-H', '127.0.0.1', '-p', str(port)]
