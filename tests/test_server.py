@@ -454,6 +454,36 @@ class TestModbusServerLimits(_LiveServerTestCase):
         self.assertEqual(tcp_server._host_sessions, {})
         self.assertEqual(tcp_server._session_keys, {})
 
+    def test_ipv6_bind_address(self) -> None:
+        """An IPv6 server binds a link-local address with its scope id (bind((host, port)) drops the zone: EINVAL)."""
+        from pyModbusTCP.server._transport import ipv6_bind_address
+        sockaddr = ('fe80::1111:2222:3333:4444%eth0', 5020, 0, 3)
+        with mock.patch('socket.getaddrinfo', return_value=[(socket.AF_INET6, socket.SOCK_STREAM, 6, '', sockaddr)]) \
+                as getaddrinfo:
+            self.assertEqual(ipv6_bind_address(('fe80::1111:2222:3333:4444%eth0', 5020)), sockaddr)
+        getaddrinfo.assert_called_once_with('fe80::1111:2222:3333:4444%eth0', 5020, socket.AF_INET6,
+                                            socket.SOCK_STREAM, 0, socket.AI_NUMERICHOST)
+        # the other addresses are bound as given (no name resolution here)
+        with mock.patch('socket.getaddrinfo', side_effect=AssertionError('no resolution expected')):
+            for address in (('::1', 502), ('::', 0), ('localhost', 502), ('2001:db8::1', 502, 0, 0)):
+                self.assertEqual(ipv6_bind_address(address), address)
+        # an unknown interface: an OSError (socket.gaierror), start() raises NetworkError
+        with mock.patch('socket.getaddrinfo', side_effect=socket.gaierror(socket.EAI_NONAME, 'unknown')), \
+                self.assertRaises(OSError):
+            ipv6_bind_address(('fe80::1%nosuchif', 502))
+
+    def test_ipv6_link_local_bind_uses_the_scope_id(self) -> None:
+        """server_bind() of an IPv6 server gives the full link-local address (with its scope id) to bind()."""
+        tcp_server = ModbusServer.CustomThreadingTCPServer.__new__(ModbusServer.CustomThreadingTCPServer)
+        tcp_server.address_family = socket.AF_INET6
+        tcp_server.server_address = ('fe80::1%eth0', 5020)
+        tcp_server.socket = mock.Mock()
+        tcp_server.socket.getsockname.return_value = ('fe80::1%eth0', 5020, 0, 3)
+        sockaddr = ('fe80::1%eth0', 5020, 0, 3)
+        with mock.patch('socket.getaddrinfo', return_value=[(socket.AF_INET6, socket.SOCK_STREAM, 6, '', sockaddr)]):
+            tcp_server.server_bind()
+        tcp_server.socket.bind.assert_called_once_with(sockaddr)
+
     def test_ipv6_host_prefix_option(self) -> None:
         self.assertEqual(ModbusServer().ipv6_host_prefix, 64)
         self.assertIn('ipv6_host_prefix=64', repr(ModbusServer()))

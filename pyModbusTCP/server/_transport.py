@@ -22,6 +22,21 @@ from .errors import Error, NetworkError
 from .session import SessionData
 
 
+def ipv6_bind_address(server_address: Any) -> Any:
+    """The address for the bind() of an IPv6 socket: with its scope id for a link-local one ("fe80::1%eth0").
+
+    bind((host, port)) drops the zone id of host: a link-local address without its interface is EINVAL. getaddrinfo()
+    gives the full address (host, port, flowinfo, scope id), the interface name translated to its index.
+
+    :raises OSError: (socket.gaierror) for an unknown interface
+    """
+    host, port = server_address[0], server_address[1]
+    if not isinstance(host, str) or '%' not in host:
+        return server_address
+    infos = socket.getaddrinfo(host, port, socket.AF_INET6, socket.SOCK_STREAM, 0, socket.AI_NUMERICHOST)
+    return infos[0][4]
+
+
 class CustomThreadingTCPServer(ThreadingTCPServer):
     """Threaded TCP server."""
     address_family = socket.AF_INET
@@ -68,6 +83,8 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
         # Windows: no other socket (of this process, of another one, of another user) can bind this port
         if sys.platform == 'win32':
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        if self.address_family == socket.AF_INET6:
+            self.server_address = ipv6_bind_address(self.server_address)
         super().server_bind()
 
     @property
