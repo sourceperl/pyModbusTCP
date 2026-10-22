@@ -14,7 +14,8 @@ logger = logging.getLogger('pyModbusTCP.server')
 # an IPv4 or IPv6 network (an address is a network with a full prefix)
 _IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
 
-# an IPv6 client is counted by /64 network: a host usually gets a whole /64, so one address per connection is easy
+# an IPv6 client is counted by /64 network by default: a host usually gets a whole /64 (SLAAC, temporary addresses),
+# so one address per connection is easy; 128 (by address) only fits a network where a host can't choose its addresses
 HOST_IPV6_PREFIX = 64
 
 
@@ -33,16 +34,17 @@ def client_ip(client_address: Any) -> ipaddress.IPv4Address | ipaddress.IPv6Addr
     return ip
 
 
-def host_key(client_address: Any) -> str:
+def host_key(client_address: Any, ipv6_prefix: int = HOST_IPV6_PREFIX) -> str:
     """Return the key used to count the connections (or requests) of a client host.
 
-    An IPv4 client is counted by address, an IPv6 client by /64 network (see HOST_IPV6_PREFIX).
+    An IPv4 client is counted by address, an IPv6 client by network of ipv6_prefix bits (/64 by default, see
+    HOST_IPV6_PREFIX; 128: by address).
     """
     ip = client_ip(client_address)
     if ip is None:
         return str(client_address[0]) if isinstance(client_address, (tuple, list)) and client_address else '?'
     if isinstance(ip, ipaddress.IPv6Address):
-        return str(ipaddress.IPv6Network((ip, HOST_IPV6_PREFIX), strict=False))
+        return str(ipaddress.IPv6Network((ip, ipv6_prefix), strict=False))
     return str(ip)
 
 

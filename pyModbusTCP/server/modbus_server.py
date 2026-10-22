@@ -20,7 +20,7 @@ from ..constants import (
     WRITE_FUNCTION_CODES,
 )
 from . import _transport, _validators, errors, frames, session
-from ._common import logger
+from ._common import HOST_IPV6_PREFIX, logger
 from ._transport import CustomThreadingTCPServer
 from .device_id import DeviceIdentification
 from .errors import (
@@ -62,7 +62,8 @@ class ModbusServer:
                  device_id: DeviceIdentification | None = None,
                  request_timeout: float | None = 30.0, idle_timeout: float | None = 300,
                  max_connections: int | None = 64, max_connections_per_host: int | None = 16,
-                 read_only: bool = False, allowed_hosts: Iterable[str] | None = None) -> None:
+                 read_only: bool = False, allowed_hosts: Iterable[str] | None = None,
+                 ipv6_host_prefix: int = HOST_IPV6_PREFIX) -> None:
         """Initialize a Modbus TCP server.
 
         Sets up a Modbus TCP server with configurable network parameters, data handling,
@@ -72,8 +73,9 @@ class ModbusServer:
         The arguments after no_block are keyword-only (like ``ModbusServer('0.0.0.0', 5020, read_only=True)``).
 
         The access control and limit settings (allowed_hosts, read_only, max_connections, max_connections_per_host,
-        request_timeout and idle_timeout) are also properties: a new value is checked like in the constructor and
-        applies at once to a running server (see each property). host, port and ipv6 apply at the next start().
+        ipv6_host_prefix, request_timeout and idle_timeout) are also properties: a new value is checked like in the
+        constructor and applies at once to a running server (see each property). host, port and ipv6 apply at the
+        next start().
 
         :param host: hostname or IPv4/IPv6 address to listen on (default is 'localhost')
         :type host: str
@@ -112,10 +114,16 @@ class ModbusServer:
             every client (default), an empty list for no client at all, hostnames are not supported
         :type allowed_hosts: iterable of str or None
         :param max_connections_per_host: max number of simultaneous connections from the same client host (an IPv4\
-            address, or a /64 network for IPv6), the next ones are closed immediately: a single host can't take all\
-            the connections of max_connections. Clients behind a NAT share the same address. None for no limit\
-            (default is 16)
+            address, or an IPv6 network, see ipv6_host_prefix), the next ones are closed immediately: a single host\
+            can't take all the connections of max_connections. Clients behind a NAT share the same address. None for\
+            no limit (default is 16)
         :type max_connections_per_host: int or None
+        :param ipv6_host_prefix: prefix length of the IPv6 network counted as one host by max_connections_per_host,\
+            1 to 128 (default is 64: a host usually gets a whole /64 and can use any address of it, so a smaller\
+            group is easy to bypass). 128 counts each address apart: only for a network where a host can't choose\
+            its addresses (static addresses, no SLAAC, source address filtering on the switches), or with\
+            allowed_hosts. A larger group (like 56) counts a client with a whole /56 as one host
+        :type ipv6_host_prefix: int
         """
         # validate network parameters (a bad value would only be seen by start())
         host = _validators.validate_host(host)
@@ -146,6 +154,7 @@ class ModbusServer:
         self.idle_timeout = idle_timeout
         self.max_connections = max_connections
         self.max_connections_per_host = max_connections_per_host
+        self.ipv6_host_prefix = ipv6_host_prefix
         self.read_only = read_only
         self.allowed_hosts = allowed_hosts
 
@@ -245,6 +254,23 @@ class ModbusServer:
                 self._tcp_server.max_connections_per_host = value
 
     @property
+    def ipv6_host_prefix(self) -> int:
+        """Get or set the prefix length of the IPv6 network counted as one host by max_connections_per_host.
+
+        64 by default, 128 to count each address apart (see the constructor). On a running server, the active
+        sessions are counted again with the new value, which applies to the next connections (no session is closed).
+        """
+        return self._ipv6_host_prefix
+
+    @ipv6_host_prefix.setter
+    def ipv6_host_prefix(self, value: int) -> None:
+        value = _validators.validate_ipv6_host_prefix(value)
+        with self._start_stop_lock:
+            self._ipv6_host_prefix = value
+            if self._tcp_server is not None:
+                self._tcp_server.ipv6_host_prefix = value
+
+    @property
     def request_timeout(self) -> float | None:
         """Get or set the max time in seconds to receive a whole request (None: no limit).
 
@@ -313,10 +339,10 @@ class ModbusServer:
     def __repr__(self) -> str:
         r_str = ('ModbusServer(host=\'%s\', port=%d, no_block=%s, ipv6=%s, store=%r, functions=%s, fallback=%r, '
                  'device_id=%s, request_timeout=%s, idle_timeout=%s, max_connections=%s, max_connections_per_host=%s, '
-                 'read_only=%s, allowed_hosts=%s)')
+                 'ipv6_host_prefix=%d, read_only=%s, allowed_hosts=%s)')
         r_str %= (self.host, self.port, self.no_block, self.ipv6, self._stores.get(None, self.stores),
                   sorted(self.functions), self.fallback, self.device_id, self.request_timeout, self.idle_timeout,
-                  self.max_connections, self.max_connections_per_host, self.read_only,
+                  self.max_connections, self.max_connections_per_host, self.ipv6_host_prefix, self.read_only,
                   None if self.allowed_hosts is None else list(self.allowed_hosts))
         return r_str
 
@@ -438,6 +464,7 @@ class ModbusServer:
                 tcp_server.idle_timeout = self.idle_timeout
                 tcp_server.max_connections = self.max_connections
                 tcp_server.max_connections_per_host = self.max_connections_per_host
+                tcp_server.ipv6_host_prefix = self.ipv6_host_prefix
                 tcp_server.allowed_networks = self._allowed_networks
                 # set socket options
                 tcp_server.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)

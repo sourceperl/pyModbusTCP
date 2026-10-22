@@ -10,7 +10,14 @@ from socketserver import BaseRequestHandler, ThreadingTCPServer
 from threading import Lock
 from typing import Any, cast
 
-from ._common import LogThrottle, _IPNetwork, client_ip, host_key, logger
+from ._common import (
+    HOST_IPV6_PREFIX,
+    LogThrottle,
+    _IPNetwork,
+    client_ip,
+    host_key,
+    logger,
+)
 from .errors import Error, NetworkError
 from .session import SessionData
 
@@ -45,6 +52,10 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
         self._active_sessions: dict[socket.socket, Any] = {}
         # number of active sessions of each client host (see host_key()), protected by the sessions lock
         self._host_sessions: dict[str, int] = {}
+        # socket -> its host key, computed at its start (removed with the same key, even after a change of prefix)
+        self._session_keys: dict[socket.socket, str] = {}
+        # IPv6 clients are counted by network of this prefix length (see host_key())
+        self._ipv6_host_prefix = HOST_IPV6_PREFIX
         self._sessions_lock = Lock()
         # refused connections: the first one is logged at once, then one message per 10 s at most (a connection
         # flood must not flood the log)
@@ -115,18 +126,34 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
             return False
         return any(ip in network for network in networks)
 
+    @property
+    def ipv6_host_prefix(self) -> int:
+        """IPv6 clients are counted as one host by network of this prefix length (see host_key())."""
+        return self._ipv6_host_prefix
+
+    @ipv6_host_prefix.setter
+    def ipv6_host_prefix(self, value: int) -> None:
+        # the active sessions are counted again with the new prefix (and their key updated, for their removal)
+        with self._sessions_lock:
+            self._ipv6_host_prefix = value
+            self._host_sessions.clear()
+            for request, client_address in self._active_sessions.items():
+                key = host_key(client_address, value)
+                self._session_keys[request] = key
+                self._host_sessions[key] = self._host_sessions.get(key, 0) + 1
+
     def _add_session(self, request: Any, client_address: Any) -> None:
         with self._sessions_lock:
             self._active_sessions[request] = client_address
-            key = host_key(client_address)
+            key = host_key(client_address, self._ipv6_host_prefix)
+            self._session_keys[request] = key
             self._host_sessions[key] = self._host_sessions.get(key, 0) + 1
 
     def _remove_session(self, request: Any) -> None:
         with self._sessions_lock:
-            client_address = self._active_sessions.pop(request, None)
-            if client_address is None:
+            if self._active_sessions.pop(request, None) is None:
                 return
-            key = host_key(client_address)
+            key = self._session_keys.pop(request)
             remaining = self._host_sessions.get(key, 0) - 1
             if remaining > 0:
                 self._host_sessions[key] = remaining
@@ -149,8 +176,8 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
             return False
         max_per_host = self.max_connections_per_host
         if max_per_host is not None:
-            key = host_key(client_address)
             with self._sessions_lock:
+                key = host_key(client_address, self._ipv6_host_prefix)
                 host_sessions = self._host_sessions.get(key, 0)
             if host_sessions >= max_per_host:
                 self._host_rejected_log.event('Maximum number of connections per host reached: %d connection(s) '

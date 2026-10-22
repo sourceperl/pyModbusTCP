@@ -63,22 +63,63 @@ a firewall.
 | Option | Default | Effect |
 |---|---|---|
 | `max_connections` | `64` | Max number of simultaneous client connections, the next ones are closed at once (logged, one message per 10 s at most). |
-| `max_connections_per_host` | `16` | Max number of simultaneous connections of a client host (an IPv4 address, or a /64 network for IPv6): a single host can't take every connection of `max_connections`. The next ones are closed at once (logged, one message per 10 s at most). Clients behind a NAT share the same address. |
+| `max_connections_per_host` | `16` | Max number of simultaneous connections of a client host (an IPv4 address, or an IPv6 network, see `ipv6_host_prefix`): a single host can't take every connection of `max_connections`. The next ones are closed at once (logged, one message per 10 s at most). Clients behind a NAT share the same address. |
+| `ipv6_host_prefix` | `64` | Prefix length of the IPv6 network counted as one host by `max_connections_per_host` (and by the fair share of `mbtcp-tcp2rtu`). A host usually gets a whole /64 and can use any address of it (SLAAC, temporary addresses): a longer prefix is easy to bypass. `128` counts each address apart, only for a network where a host can't choose its addresses (static addresses, no SLAAC, source address filtering on the switches); a shorter one (like `56`) counts a client with a whole /56 as one host, but also groups distinct clients of this network. The clients of one IPv6 LAN share a /64, like the clients behind a NAT. |
 | `idle_timeout` | `300` s | A connection without any request for this time is closed. |
 | `request_timeout` | `30` s | A request that has started must be fully received in this time (protection against a client that sends a partial frame and then stays silent). |
 | `MemoryStore.notify_queue_size` | `10000` | Max number of change events waiting for the threaded listeners (`subscribe(..., threaded=True)`): clients that write faster than a slow listener can't make the memory grow without limit. The events over it are dropped (logged, one message per 10 s at most). |
 
 Each of these limits can be disabled with `None`: only do this on a trusted network.
 
-These limits make a denial of service harder, they don't prevent it: a few hosts can still take every connection
-(`max_connections` / `max_connections_per_host` hosts), and keep them with one request per `idle_timeout`. On a
-network where some hosts are not trusted, `allowed_hosts` and the firewall are the real protections.
+These limits make a denial of service harder, they don't prevent it:
+
+- a few hosts can still take every connection (`max_connections` / `max_connections_per_host` hosts, 4 with the
+  defaults), and keep them with one request per `idle_timeout`;
+- an IPv6 host is counted by /64 network (`ipv6_host_prefix`): a client with a larger prefix (a /56 or a /48, common
+  for a customer of an ISP or a cloud provider) counts as many hosts;
+- there is no limit on the rate of the requests in a connection (thousands of requests per second).
+
+No setting of the server can tell an attacker that behaves like a client from a real one. The protection is on the
+network: on a network where some hosts are not trusted, `allowed_hosts` and the firewall are the real protections.
+
+#### Firewall rules against a denial of service
+
+1. Allow only the known clients on the Modbus port: an attacker that can't reach it can't take its connections.
+   With ufw:
+
+   ```bash
+   ufw default deny incoming
+   ufw allow from 192.168.1.10 to any port 502 proto tcp      # the SCADA
+   ufw allow from 192.168.1.0/28 to any port 502 proto tcp    # the engineering stations
+   ```
+
+2. Limit the simultaneous connections of each client (an allowed client that is compromised or faulty), by address
+   for IPv4 and by prefix for IPv6 (`connlimit`, here 4 connections per address or per /56):
+
+   ```bash
+   iptables  -A INPUT -p tcp --syn --dport 502 -m connlimit --connlimit-above 4 --connlimit-mask 32 \
+             -j REJECT --reject-with tcp-reset
+   ip6tables -A INPUT -p tcp --syn --dport 502 -m connlimit --connlimit-above 4 --connlimit-mask 56 \
+             -j REJECT --reject-with tcp-reset
+   ```
+
+   ufw has no command for `connlimit`: add these rules to `/etc/ufw/before.rules` and `/etc/ufw/before6.rules`, or
+   write them with nftables (`ct count`).
+
+`ufw limit` (and the other rate limits of new connections) is not a protection against this denial of service: it
+counts the connections opened per 30 s, not the ones that stay open (an attacker takes its places in a few minutes,
+then keeps them), it doesn't see the requests sent in a connection, and it counts an IPv6 client by address. It also
+blocks a legitimate client that opens a connection per request (`ModbusClient(auto_close=True)` polling every 2 s
+opens 15 connections per 30 s, ufw refuses more than 5).
+
+The firewalls of Windows and macOS have no simple equivalent of `connlimit`: there, the whitelist (firewall rules or
+`allowed_hosts`) is the main protection.
 
 ### TCP to RTU gateway (`mbtcp-tcp2rtu`)
 
 The serial line serves one request at a time, and a request to a slave that doesn't answer holds it for the whole
 timeout. The waiting requests are served in turn by client host (round robin, a host is an IPv4 address or a /64
-network for IPv6): a request waits for at most one request of each other host, so a few hosts that flood the gateway
+network for IPv6, see `--ipv6-host-prefix`): a request waits for at most one request of each other host, so a few hosts that flood the gateway
 can't take every turn of the line. A client host has at most 2 requests waiting for the serial line: its next ones get
 the exception 0x0A (gateway path unavailable) at once, like any request once 16 requests are waiting. The gateway
 also has the `--max-connections` and `--max-connections-per-host` options of the server. Requests refused by its

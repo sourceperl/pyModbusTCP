@@ -49,6 +49,9 @@ Revision history for pyModbusTCP
       --broadcast-max-age (default 10 s) is dropped: a flood never builds a backlog of old writes.
     - tools: mbtcp-tcp2rtu --functions, the whitelist of the relayed functions ("1,2,3,4,6,16", 0x2B by MEI type like
       "0x2B/0x0E", or "all"); --read-only is a shortcut for the read functions, the two options are exclusive.
+    - server/tools: ipv6_host_prefix (default 64, --ipv6-host-prefix of mbtcp-server and mbtcp-tcp2rtu): the prefix
+      length of the IPv6 network counted as one host by max_connections_per_host and the fair share of mbtcp-tcp2rtu;
+      128 counts each address apart, for a network where a host can't choose its addresses.
     - client: broadcast_interval (default 0.15 s) spaces two broadcast requests: a loop can't flood a gateway.
     - client: connect_retries (default 0) and connect_retry_delay (default 0.5 s) retry a failed connect, with an
       exponential backoff and a jitter (open() and auto_open). A request is never sent twice.

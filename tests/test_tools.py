@@ -774,6 +774,9 @@ def test_tcp2rtu_cancelled_request_is_not_sent() -> None:
     ('tcp_to_rtu_gw', ['--functions', '3/1'], 'only the function 0x2B has a MEI type'),
     ('tcp_to_rtu_gw', ['--functions', ''], 'empty function code'),
     ('tcp_to_rtu_gw', ['--functions', '3', '--read-only'], 'not allowed with argument'),
+    ('tcp_to_rtu_gw', ['--ipv6-host-prefix', '0'], '--ipv6-host-prefix'),
+    ('tcp_to_rtu_gw', ['--ipv6-host-prefix', '129'], '--ipv6-host-prefix'),
+    ('tcp_to_rtu_gw', ['--ipv6-host-prefix', '/64'], '--ipv6-host-prefix'),
 ])
 def test_gateway_invalid_args(tool: str, args: list[str], error: str, capsys: pytest.CaptureFixture[str]) -> None:
     """Invalid serial settings are refused at startup (they made the gateway crash, or fail at each request)."""
@@ -816,6 +819,26 @@ def test_tcp2rtu_function_filter() -> None:
         ModbusSerialWorker(SilentSerial(), read_only=True, functions=DEFAULT_FUNCTIONS)  # type: ignore[arg-type]
     with pytest.raises(TypeError):
         ModbusSerialWorker(SilentSerial(), functions='1,2')  # type: ignore[arg-type]
+    # the client hosts that share the serial line: IPv6 clients by network of ipv6_host_prefix bits
+    assert ModbusSerialWorker(SilentSerial()).ipv6_host_prefix == 64  # type: ignore[arg-type]
+    assert ModbusSerialWorker(SilentSerial(), ipv6_host_prefix=128).ipv6_host_prefix == 128  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        ModbusSerialWorker(SilentSerial(), ipv6_host_prefix=0)  # type: ignore[arg-type]
+    # the host key of a request follows the prefix
+    from pyModbusTCP.server import Request, RequestContext
+    from pyModbusTCP.server.session import ClientInfo
+    for prefix, expected in ((64, '2001:db8:1:2::/64'), (128, '2001:db8:1:2::7/128')):
+        worker = ModbusSerialWorker(SilentSerial(), ipv6_host_prefix=prefix)  # type: ignore[arg-type]
+        hosts: list[str] = []
+
+        def relay(req: Request, host: str = '', hosts: list[str] = hosts) -> bytes:
+            hosts.append(host)
+            return b'\x03\x00'
+
+        worker._relay = relay  # type: ignore[method-assign]
+        ctx = RequestContext(client=ClientInfo('2001:db8:1:2::7', 50000), unit_id=1, function_code=3)
+        worker.relay_request(Request(pdu=b'\x03\x00\x00\x00\x01', ctx=ctx, store=MemoryStore(0)))
+        assert hosts == [expected]
 
 
 def test_gateway_api_checks() -> None:

@@ -111,6 +111,15 @@ def validate_max_connections(max_connections: int | None, name: str = 'max_conne
     return max_connections
 
 
+def validate_ipv6_host_prefix(prefix: int) -> int:
+    """Check the prefix length that groups the IPv6 clients as one host (1 to 128)."""
+    if isinstance(prefix, bool) or not isinstance(prefix, int):
+        raise TypeError('ipv6_host_prefix must be an int')
+    if not 1 <= prefix <= 128:
+        raise ValueError('ipv6_host_prefix must be between 1 and 128 (64: by /64 network, 128: by address)')
+    return prefix
+
+
 def validate_read_only(read_only: bool) -> bool:
     if not isinstance(read_only, bool):
         raise TypeError('read_only must be a bool')

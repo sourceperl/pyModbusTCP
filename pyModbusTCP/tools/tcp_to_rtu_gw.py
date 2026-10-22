@@ -114,8 +114,8 @@ The serial line serves one request at a time, and a request to a slave that
 doesn't answer holds it for the whole timeout (-t). So no client host can
 monopolize it, nor a few of them:
 - the waiting requests are served in turn by client host (an IPv4 address, or
-  a /64 network for IPv6, round robin): a request waits for at most one request
-  of each other host, however many requests they send;
+  a /64 network for IPv6, see --ipv6-host-prefix, round robin): a request waits
+  for at most one request of each other host, however many requests they send;
 - a client host has at most 2 requests waiting for the serial line, its next
   ones get exception 0x0A at once;
 - --max-connections-per-host limits its number of TCP connections (default
@@ -197,6 +197,7 @@ from threading import Condition, Event, Lock
 from ._common import (
     PORT_502_HELP,
     SERIAL_MISSING_MSG,
+    add_ipv6_host_prefix_arg,
     add_rs485_args,
     add_version_arg,
     check_rs485_args,
@@ -244,7 +245,8 @@ from ..server import (
     Request,
     SlaveDeviceBusy,
 )
-from ..server._common import LogThrottle, host_key
+from ..server._common import HOST_IPV6_PREFIX, LogThrottle, host_key
+from ..server._validators import validate_ipv6_host_prefix
 from ..utils import crc16
 
 # exceptions raised by the serial port when the device is lost (explicit type,
@@ -592,6 +594,7 @@ class ModbusSerialWorker:
 
     def __init__(self, port: Serial, timeout: float = 1.0, end_of_frame: float | None = None,
                  allow_broadcast: bool = False, read_only: bool = False, functions: FunctionFilter | None = None,
+                 ipv6_host_prefix: int = HOST_IPV6_PREFIX,
                  broadcast_delay: float = DEFAULT_BROADCAST_DELAY,
                  broadcast_buffer: int = DEFAULT_BROADCAST_BUFFER,
                  broadcast_max_age: float = DEFAULT_BROADCAST_MAX_AGE) -> None:
@@ -607,6 +610,8 @@ class ModbusSerialWorker:
         if functions is not None and not isinstance(functions, FunctionFilter):
             raise TypeError('functions must be a FunctionFilter (or None for the default one)')
         self.functions = READ_ONLY_FUNCTIONS if read_only else DEFAULT_FUNCTIONS if functions is None else functions
+        # the client hosts that share the serial line in turn: IPv6 clients by network of this prefix length
+        self.ipv6_host_prefix = validate_ipv6_host_prefix(ipv6_host_prefix)
         # silent delay of the bus after a broadcast
         if isinstance(broadcast_delay, bool) or not isinstance(broadcast_delay, (int, float)) \
                 or not 0 <= broadcast_delay <= MAX_BROADCAST_DELAY:
@@ -855,7 +860,7 @@ class ModbusSerialWorker:
                                     unit_id, req.pdu[0], exp_status, client.address)
             raise ModbusException(code=exp_status)
         # fair share of the serial line: a client host can't fill the queue
-        host = host_key((client.address, client.port))
+        host = host_key((client.address, client.port), self.ipv6_host_prefix)
         if not self._acquire_host_slot(host):
             self._host_busy_log.event('Too many pending requests from a host: %d request(s) rejected '
                                       '(limit %d, last from %s)', MAX_PENDING_PER_HOST, host)
@@ -1037,6 +1042,7 @@ def main(argv: list[str] | None = None) -> int:
                         help='max number of simultaneous clients (default: 64)')
     parser.add_argument('--max-connections-per-host', type=int, default=16,
                         help='max number of simultaneous connections of a client host (default: 16)')
+    add_ipv6_host_prefix_arg(parser)
     parser.add_argument('--allow-broadcast', action='store_true',
                         help='relay broadcast requests (unit id 0, write functions only) to every slave, answered '
                              'at once')
@@ -1085,7 +1091,7 @@ def main(argv: list[str] | None = None) -> int:
         # init serial worker
         serial_worker = ModbusSerialWorker(serial_port, args.timeout, args.eof,
                                            allow_broadcast=args.allow_broadcast, read_only=args.read_only,
-                                           functions=args.functions,
+                                           functions=args.functions, ipv6_host_prefix=args.ipv6_host_prefix,
                                            broadcast_delay=args.broadcast_delay,
                                            broadcast_buffer=args.broadcast_buffer,
                                            broadcast_max_age=args.broadcast_max_age)
@@ -1098,7 +1104,8 @@ def main(argv: list[str] | None = None) -> int:
         srv = ModbusServer(host=args.host, port=args.port, no_block=True, store=MemoryStore(size=0), functions={},
                            fallback=serial_worker.relay_request,
                            allowed_hosts=args.allow, max_connections=args.max_connections,
-                           max_connections_per_host=args.max_connections_per_host)
+                           max_connections_per_host=args.max_connections_per_host,
+                           ipv6_host_prefix=args.ipv6_host_prefix)
         log_access_settings(srv, serial_worker)
         srv.start()
 

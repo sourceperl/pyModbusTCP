@@ -14,6 +14,7 @@ from types import FrameType
 from typing import TYPE_CHECKING
 
 from ..constants import VERSION
+from ..server._common import HOST_IPV6_PREFIX
 from ..server._validators import parse_network
 
 if TYPE_CHECKING:
@@ -94,6 +95,25 @@ def positive_int(value: str) -> int:
     if i_value < 1:
         raise argparse.ArgumentTypeError('value must be greater than 0')
     return i_value
+
+
+def ipv6_host_prefix(value: str) -> int:
+    """argparse type: the prefix length of the IPv6 network counted as one client host (1 to 128)."""
+    try:
+        prefix = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f'{value!r} is not an integer') from None
+    if not 1 <= prefix <= 128:
+        raise argparse.ArgumentTypeError('prefix length must be between 1 and 128')
+    return prefix
+
+
+def add_ipv6_host_prefix_arg(parser: argparse.ArgumentParser) -> None:
+    """Add the --ipv6-host-prefix option (the IPv6 clients counted as one host by --max-connections-per-host)."""
+    parser.add_argument('--ipv6-host-prefix', type=ipv6_host_prefix, default=HOST_IPV6_PREFIX, metavar='BITS',
+                        help='IPv6 clients of the same network of this prefix length are one host for '
+                             f'--max-connections-per-host (default: {HOST_IPV6_PREFIX}); 128 counts each address '
+                             'apart: only if a host can\'t choose its addresses (no SLAAC, filtered sources)')
 
 
 # upper bound of the RS-485 delays around a transmission: the Linux kernel keeps them in ms and caps them at 100 ms

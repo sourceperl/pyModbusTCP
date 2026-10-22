@@ -391,6 +391,65 @@ class TestModbusServerLimits(_LiveServerTestCase):
         self.assertEqual(host_key(('2001:db8:1:2::1', 502, 0, 0)), '2001:db8:1:2::/64')
         self.assertNotEqual(host_key(('2001:db8:1:2::1', 502, 0, 0)), host_key(('2001:db8:1:3::1', 502, 0, 0)))
         self.assertEqual(host_key(('fe80::1%eth0', 502, 0, 2)), 'fe80::/64')
+        # another prefix length: by address (128), or by a larger network (56); never for IPv4
+        self.assertEqual(host_key(('2001:db8:1:2::1', 502, 0, 0), 128), '2001:db8:1:2::1/128')
+        self.assertNotEqual(host_key(('2001:db8:1:2::1', 1, 0, 0), 128), host_key(('2001:db8:1:2::2', 1, 0, 0), 128))
+        self.assertEqual(host_key(('2001:db8:1:2::1', 1, 0, 0), 56), host_key(('2001:db8:1:3::1', 1, 0, 0), 56))
+        self.assertEqual(host_key(('2001:db8:1:2::1', 1, 0, 0), 56), '2001:db8:1::/56')
+        self.assertEqual(host_key(('10.1.2.3', 502), 128), '10.1.2.3')
+        self.assertEqual(host_key(('::ffff:10.1.2.3', 502, 0, 0), 56), '10.1.2.3')
+
+    def test_ipv6_host_prefix(self) -> None:
+        """max_connections_per_host counts the IPv6 clients by network of ipv6_host_prefix bits (64 by default)."""
+        tcp_server = ModbusServer.CustomThreadingTCPServer(('127.0.0.1', 0), ModbusServer.ModbusRequestHandler,
+                                                           bind_and_activate=False)
+        self.addCleanup(tcp_server.server_close)
+        tcp_server.max_connections_per_host = 2
+        # sessions without a real socket: any hashable object is a key of the sessions
+        sessions = [object(), object()]
+        for i, session in enumerate(sessions, start=1):
+            tcp_server._add_session(session, (f'2001:db8:1:2::{i}', 50000, 0, 0))
+        third = ('2001:db8:1:2::3', 50000, 0, 0)
+        # /64: the same host, its 2 connections are taken
+        with self.assertLogs('pyModbusTCP.server', level='WARNING'):
+            self.assertFalse(tcp_server.verify_request(object(), third))
+        # /128: each address is a host (the active sessions are counted again)
+        tcp_server.ipv6_host_prefix = 128
+        self.assertTrue(tcp_server.verify_request(object(), third))
+        # /56: a larger network, other /64 of it are the same host
+        tcp_server.ipv6_host_prefix = 56
+        self.assertFalse(tcp_server.verify_request(object(), ('2001:db8:1:ff::1', 50000, 0, 0)))
+        self.assertTrue(tcp_server.verify_request(object(), ('2001:db8:2::1', 50000, 0, 0)))
+        # a session ends with the key of the prefix in effect, every counter goes back to 0
+        for session in sessions:
+            tcp_server._remove_session(session)
+        self.assertEqual(tcp_server._host_sessions, {})
+        self.assertEqual(tcp_server._session_keys, {})
+
+    def test_ipv6_host_prefix_option(self) -> None:
+        self.assertEqual(ModbusServer().ipv6_host_prefix, 64)
+        self.assertIn('ipv6_host_prefix=64', repr(ModbusServer()))
+        self.assertEqual(ModbusServer(ipv6_host_prefix=128).ipv6_host_prefix, 128)
+        bad_values: tuple[tuple[Any, type[Exception]], ...] = (
+            (0, ValueError), (129, ValueError), (-64, ValueError),
+            (True, TypeError), (64.0, TypeError), ('64', TypeError))
+        for value, exc in bad_values:
+            with self.subTest(value=value), self.assertRaises(exc):
+                ModbusServer(ipv6_host_prefix=value)
+        # a property, applied at once to a running server
+        server = self._start_server()
+        server.ipv6_host_prefix = 128
+        self.assertIsNotNone(server._tcp_server)
+        assert server._tcp_server is not None
+        self.assertEqual(server._tcp_server.ipv6_host_prefix, 128)
+        with self.assertRaises(ValueError):
+            server.ipv6_host_prefix = 0
+        self.assertEqual(server.ipv6_host_prefix, 128)
+        # kept by a restart
+        server.stop()
+        server.start()
+        assert server._tcp_server is not None
+        self.assertEqual(server._tcp_server.ipv6_host_prefix, 128)
 
     def _thief(self) -> socket.socket:
         """A socket with SO_REUSEADDR, like a local process that tries to take the port of the server."""

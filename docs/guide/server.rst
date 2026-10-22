@@ -317,6 +317,7 @@ The server has several protections, all set in the :class:`~pyModbusTCP.server.M
         read_only=True,                       # every write request gets an "illegal function" exception
         max_connections=16,                   # simultaneous clients (default: 64)
         max_connections_per_host=4,           # simultaneous connections of one client host (default: 16)
+        ipv6_host_prefix=64,                  # an IPv6 client host is a /64 network (default), 128: by address
         idle_timeout=60,                      # close a session without request for 60 s (default: 300)
     )
 
@@ -326,9 +327,15 @@ configuration is often a mistake).
 
 The arguments after ``no_block`` are keyword-only: ``ModbusServer('192.168.1.10', 502, read_only=True)``.
 
+An IPv6 client host is a /64 network by default: a host usually gets a whole /64 and can use any of its addresses,
+so counting by address (``ipv6_host_prefix=128``) only fits a network where a host can't choose its addresses (static
+addresses, no SLAAC, source address filtering on the switches). The clients of one IPv6 LAN share a /64, like the
+clients behind a NAT: raise ``max_connections_per_host`` for them.
+
 These settings can also be changed later, even while the server runs: ``allowed_hosts``, ``read_only``,
-``max_connections``, ``max_connections_per_host``, ``request_timeout`` and ``idle_timeout`` are properties, a new
-value is checked like the constructor argument (``ValueError`` or ``TypeError``, nothing changed) and applies at once.
+``max_connections``, ``max_connections_per_host``, ``ipv6_host_prefix``, ``request_timeout`` and ``idle_timeout``
+are properties, a new value is checked like the constructor argument (``ValueError`` or ``TypeError``, nothing
+changed) and applies at once.
 A new ``allowed_hosts`` filters the next connections and closes the sessions of the clients it no longer allows; a
 lower ``max_connections`` only refuses the next connections. ``allowed_hosts`` is a tuple: set a new value, never
 change it in place.

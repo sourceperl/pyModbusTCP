@@ -15,7 +15,7 @@ Modbus/TCP has no authentication: any client that can reach the server can read 
 - -A/--allow (repeatable) restricts the clients to some IP addresses or networks.
 - --read-only refuses every write request (functions 0x05, 0x06, 0x0F, 0x10, 0x15, 0x16 and 0x17).
 - --max-connections-per-host (default 16) keeps a single client host from taking every connection of
-  --max-connections (default 64).
+  --max-connections (default 64). An IPv6 client host is a /64 network (--ipv6-host-prefix).
 - The default port is 5020: port 502 is a privileged port on Unix systems. Never run this command as root (or
   with sudo) to listen on it, give the CAP_NET_BIND_SERVICE capability to the Python interpreter of a dedicated
   virtual environment instead (see the pyModbusTCP examples README).
@@ -36,6 +36,7 @@ from types import FrameType
 from ..server import ChangeEvent, MemoryStore, ModbusServer, Space
 from ._common import (
     PORT_502_HELP,
+    add_ipv6_host_prefix_arg,
     add_version_arg,
     ip_or_network,
     is_permission_error,
@@ -74,6 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help='max number of simultaneous clients (default: 64)')
     parser.add_argument('--max-connections-per-host', type=int, default=16,
                         help='max number of simultaneous connections of a client host (default: 16)')
+    add_ipv6_host_prefix_arg(parser)
     parser.add_argument('--idle-timeout', type=positive_float, default=300.0,
                         help='close a client session without request after this delay in s (default: 300)')
     parser.add_argument('--log-changes', action='store_true',
@@ -121,6 +123,7 @@ def main(argv: list[str] | None = None) -> int:
                               allowed_hosts=args.allow, read_only=args.read_only,
                               max_connections=args.max_connections,
                               max_connections_per_host=args.max_connections_per_host,
+                              ipv6_host_prefix=args.ipv6_host_prefix,
                               idle_timeout=args.idle_timeout)
     except (TypeError, ValueError) as e:
         logger.critical('Invalid parameter: %s', e)
