@@ -122,9 +122,20 @@ class TestModbusServer(unittest.TestCase):
         for host in ('', ' '):
             with self.subTest(host=host), self.assertRaisesRegex(ValueError, "use '0.0.0.0'"):
                 ModbusServer(host=host)
+        # a legacy IPv4 form that bind() reads as another address: refused (S-08), "0" would be every interface
+        for host in ('0', '00', '0x0', '0.0', '127.1', '0x7f.1', '2130706433', '192.168.010.1', '127.000.000.001',
+                     '999.1.1.1', 'wrong@host', 'bad\x00host', '::notip:1', 'fe80::1%', 'fe80::1%eth 0',
+                     '127.0.0.1%eth0'):
+            with self.subTest(host=host), self.assertRaisesRegex(ValueError, 'standard form'):
+                ModbusServer(host=host)
+        # the standard forms, the wildcard addresses written on purpose, the hostnames, a link-local IPv6 address
+        for host in ('127.0.0.1', '0.0.0.0', '::', '::1', 'localhost', 'plc-gw.local', 'fe80::1%eth0', 'fe80::1%2'):
+            with self.subTest(host=host):
+                self.assertEqual(ModbusServer(host=host).host, host)
         server = ModbusServer(host='127.0.0.1')
-        with self.assertRaises(ValueError):
-            server.host = ''
+        for host in ('', '0'):
+            with self.assertRaises(ValueError):
+                server.host = host
         self.assertEqual(server.host, '127.0.0.1')
         server.host = '0.0.0.0'
         self.assertEqual(server.host, '0.0.0.0')

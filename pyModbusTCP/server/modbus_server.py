@@ -78,7 +78,8 @@ class ModbusServer:
         next start().
 
         :param host: hostname or IPv4/IPv6 address to listen on (default is 'localhost'), '0.0.0.0' (or '::' with\
-            ipv6=True) for every interface; an empty host is refused (ValueError)
+            ipv6=True) for every interface; an empty host, or an IPv4 address in a legacy form that bind() reads as\
+            another address ('0' is 0.0.0.0, '192.168.010.1' is 192.168.8.1), is refused (ValueError)
         :type host: str
         :param port: TCP port number (default is 502), use 0 to let the OS choose a free port
         :type port: int
@@ -192,7 +193,8 @@ class ModbusServer:
         """Get or set the address to listen on (applied by the next start()).
 
         An empty host is refused (ValueError): for bind(), it is every interface. Use '0.0.0.0' (or '::' with
-        ipv6=True) for that.
+        ipv6=True) for that. So is an IPv4 address in a legacy form, read by bind() as another address ('0', '127.1',
+        '192.168.010.1'...).
         """
         return self._host
 

@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import ipaddress
 import math
+import re
+import socket
 from collections.abc import Callable, Iterable, Mapping
 from typing import TYPE_CHECKING, Any
 
+from ..utils import valid_host
 from ._common import _IPNetwork
 from .device_id import DeviceIdentification
 
@@ -14,14 +17,38 @@ if TYPE_CHECKING:
     from .store import DataStore
 
 
+# the zone id of a link-local IPv6 address (like "eth0" in "fe80::1%eth0"): an interface name or index
+_RE_ZONE_ID = re.compile('[a-z0-9_.-]{1,64}', re.IGNORECASE | re.ASCII)
+
+
 def validate_host(host: str) -> str:
-    # the address itself is checked by start() (name resolution, bind), like before
+    """Check the address to listen on: an IPv4 address in its standard form, an IPv6 address (with a zone id for a
+    link-local one, like "fe80::1%eth0") or a hostname (resolved by start()).
+
+    A legacy IPv4 form is refused: bind() would read it as another address, "0", "00" or "0x0" as 0.0.0.0 (every
+    interface), "192.168.010.1" as 192.168.8.1 (octal), "127.1" as 127.0.0.1 (see utils.valid_host()).
+    """
     if not isinstance(host, str):
         raise TypeError('host must be a str')
     # an empty host is the wildcard address for bind(): every interface, never by mistake (like an empty setting)
     if not host.strip():
         raise ValueError('host must not be empty: use \'0.0.0.0\' (or \'::\' with ipv6=True) to listen on every '
                          'interface')
+    address, sep, zone_id = host.partition('%')
+    if sep:
+        # a link-local IPv6 address with its interface: the address of an interface, bind() takes it
+        try:
+            socket.inet_pton(socket.AF_INET6, address)
+        except OSError:
+            valid = False
+        else:
+            valid = bool(_RE_ZONE_ID.fullmatch(zone_id))
+    else:
+        valid = valid_host(host)
+    if not valid:
+        raise ValueError(f'host {host!r} is not an IP address in its standard form or a hostname (a legacy IPv4 form '
+                         'like \'127.1\', \'0\' or \'192.168.010.1\' is refused: write \'127.0.0.1\', \'0.0.0.0\' '
+                         'or \'192.168.10.1\')')
     return host
 
 

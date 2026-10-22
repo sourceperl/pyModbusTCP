@@ -312,6 +312,14 @@ def test_server_empty_host() -> None:
     assert 'host must not be empty' in proc.stderr
 
 
+def test_server_legacy_ipv4_host() -> None:
+    """-H 0 would listen on every interface (0 is 0.0.0.0 for bind()): refused (S-08)."""
+    proc = subprocess.run([sys.executable, '-m', 'pyModbusTCP.tools.server', '-H', '0'], check=False,
+                          capture_output=True, text=True, timeout=30)
+    assert proc.returncode == 2
+    assert 'standard form' in proc.stderr
+
+
 def test_permission_error_detection() -> None:
     try:
         raise ModbusServer.NetworkError('bind') from PermissionError(13, 'Permission denied')
