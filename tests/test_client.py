@@ -402,6 +402,34 @@ class TestModbusClient(unittest.TestCase):
             self.fail('ModbusClient.read_device_identification() failed unexpectedly')
         self.assertEqual(resp.vendor_name, b'ab')
 
+    def test_read_reply_with_another_quantity(self) -> None:
+        """A read reply must have exactly the data requested: more (or less) is an error, never truncated (S-06)."""
+        replies = [
+            # 3 registers for 1 (and the same with a byte count that doesn't match the buffer)
+            ('read_holding_registers', (100, 1), b'\x03\x06\xde\xad\xbe\xef\xca\xfe'),
+            ('read_input_registers', (100, 2), b'\x04\x06\xde\xad\xbe\xef\xca\xfe'),
+            ('read_holding_registers', (0, 2), b'\x03\x02\x00\x01'),
+            # 24 bits for 4 (1 byte expected), 8 bits for 9 (2 bytes expected)
+            ('read_coils', (0, 4), b'\x01\x03\xff\xff\xff'),
+            ('read_discrete_inputs', (0, 9), b'\x02\x01\xff'),
+            # 0x17: 4 registers read for 2
+            ('write_read_multiple_registers', (0, [7], 0, 2), b'\x17\x08\x00\x01\x00\x02\x00\x03\x00\x04'),
+        ]
+        for method, args, rx_pdu in replies:
+            with self.subTest(method=method, args=args):
+                c = ModbusClient()
+                with mock.patch.object(c, '_req_pdu', return_value=rx_pdu):
+                    self.assertIsNone(getattr(c, method)(*args))
+                self.assertEqual(c.last_error, MB_RECV_ERR)
+        # the exact size is accepted
+        good = [('read_holding_registers', (100, 1), b'\x03\x02\xde\xad', [0xDEAD]),
+                ('read_coils', (0, 9), b'\x01\x02\xff\x01', [True] * 9),
+                ('write_read_multiple_registers', (0, [7], 0, 2), b'\x17\x04\x00\x01\x00\x02', [1, 2])]
+        for method, args, rx_pdu, expected in good:
+            c = ModbusClient()
+            with mock.patch.object(c, '_req_pdu', return_value=rx_pdu):
+                self.assertEqual(getattr(c, method)(*args), expected)
+
     def test_write_multiple_pdu(self) -> None:
         """The PDU sent by write_multiple_coils()/write_multiple_registers() must keep the modbus format."""
         rnd = random.Random(99)

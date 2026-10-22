@@ -184,7 +184,8 @@ the connections of the previous one are fully closed by the system.
 - `timeout` is a limit for the whole request (send and receive), not for each socket operation: a server that
   sends its reply byte by byte can't hold the client longer than `timeout`.
 - The reply is checked before use: MBAP header (transaction ID, protocol ID, length, unit ID), function code
-  of the request, byte counts, and the echo of the address and value/quantity for the write functions.
+  of the request, byte counts (exactly the data requested: a reply with more registers or bits, like the reply of
+  another request, is an error), and the echo of the address and value/quantity for the write functions.
   An invalid MBAP header closes the connection.
 - The transaction ID is a 16 bits counter (from a random start value): two consecutive requests never share
   the same ID, so a late reply to a previous request is never taken for the current one.

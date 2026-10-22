@@ -15,6 +15,9 @@ Revision history for pyModbusTCP
     - client/server: stricter argument checks (TypeError/ValueError instead of a silent conversion or truncation),
       numpy booleans are no longer accepted as coil values.
     - client: the function code of a reply must match the request (MB_RECV_ERR otherwise).
+    - client: a read reply must have exactly the data requested (2 bytes per register, 1 byte per 8 bits): a reply
+      with more data, truncated and accepted before, is now an error (MB_RECV_ERR). A device that pads its replies
+      with extra bytes (not compliant with the Modbus specification) is refused.
     - client (since 0.4.0a2): the arguments of ModbusClient after auto_close are keyword-only, no_delay is renamed
       tcp_no_delay (argument and property).
     - server: the typed shortcuts of the store (read_float32(), write_int32()...) take a byte_order (ByteOrder,

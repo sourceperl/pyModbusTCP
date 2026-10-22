@@ -107,8 +107,9 @@ class ClientFunctionsMixin:
             byte_count = rx_pdu[1]
             # bits PDU part
             rx_pdu_bits = rx_pdu[2:]
-            # check rx_byte_count: match nb of bits request and check buffer size
-            if byte_count < byte_length(bit_nb) or byte_count != len(rx_pdu_bits):
+            # check rx_byte_count: exactly the bytes of the bits requested (more is the reply of another request,
+            # like a late reply relayed by a gateway), and the size of the buffer
+            if byte_count != byte_length(bit_nb) or byte_count != len(rx_pdu_bits):
                 raise NetworkError(MB_RECV_ERR, 'rx byte count mismatch')
             # return bits list
             return _unpack_bits(rx_pdu_bits, bit_nb)
@@ -135,8 +136,9 @@ class ClientFunctionsMixin:
         byte_count = rx_pdu[1]
         # frame with regs value
         f_regs = rx_pdu[2:]
-        # check rx_byte_count: buffer size must be consistent and have at least the requested number of registers
-        if byte_count < 2 * reg_nb or byte_count != len(f_regs):
+        # check rx_byte_count: exactly the requested number of registers (more is the reply of another request, like a
+        # late reply relayed by a gateway), and a consistent buffer size
+        if byte_count != 2 * reg_nb or byte_count != len(f_regs):
             raise NetworkError(MB_RECV_ERR, 'rx byte count mismatch')
         # return registers list
         return _decode_regs(f_regs, reg_nb)
