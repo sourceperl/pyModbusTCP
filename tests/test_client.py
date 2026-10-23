@@ -944,6 +944,10 @@ class TestConnectionClosedByServer(unittest.TestCase):
             self.assertEqual(c.last_error, MB_RECV_ERR)
         else:
             self.assertEqual(result, [42])
+        # let the server close the connection: on Windows the request above was sent again on a new connection, that
+        # the server closes after its reply; without this wait, the next request could be sent before the close is
+        # seen (the race of this test, but outside the mock): it would fail like the one above
+        time.sleep(0.1)
         # the next request reconnects
         self.assertEqual(c.read_holding_registers(0), [42])
         # the server received exactly the requests that succeeded (2 or 3), never one more
