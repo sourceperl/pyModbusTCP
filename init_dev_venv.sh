@@ -71,8 +71,6 @@ fi
 
 if [[ ! -d "$VENV_DIR" ]]; then
     echo "==> Creating venv: $VENV_DIR"
-    # --copies: real interpreter files (not links to the system one), needed to give the CAP_NET_BIND_SERVICE
-    # capability to venv/bin/python3 (listen on port 502 without root, see examples/README.md)
     "$PYTHON" -m venv --copies "$VENV_DIR"
 fi
 

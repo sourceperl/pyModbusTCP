@@ -50,6 +50,9 @@ Use this exact file (`venv/bin/python3`): `venv/bin/python` is another copy, wit
 
 - Every script run with this interpreter can listen on a low port: keep this virtual environment for the Modbus server
   only, and don't let other users modify it.
+- Never give the capability to a development venv (like the one of `./init_dev_venv.sh`): pip, pytest, the build tools
+  and every package installed there would run with it. That venv uses links to the system interpreter, so `setcap`
+  refuses it; to test a server there, use a port above 1023 (`--port 5020`).
 - Never give the capability to the system interpreter (`/usr/bin/python3`), and never work around the error above with
   `setcap ... $(readlink -f venv/bin/python3)`: that is the system interpreter.
 - The capability is lost when the interpreter is replaced (Python update, `--upgrade`, venv recreated): run `setcap`
