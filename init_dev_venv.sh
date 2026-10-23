@@ -22,10 +22,8 @@ WITH_TOOLS=1
 # package pyModbusTCP-cli: the mbtcp-* commands of the tools of the library (pyModbusTCP.tools)
 TOOLS_DIR="pyModbusTCP-cli"
 
-# test and build tools (types-pyserial: type stubs of pyserial, for mypy on the gateways of pyModbusTCP.tools;
-# hatchling: the build backend, installed here only for mypy on hatch_metadata.py and
-# pyModbusTCP-cli/hatch_metadata_cli.py)
-DEV_PACKAGES=(build twine pytest flake8 mypy ruff types-pyserial hatchling schedule==1.2.2)
+# test and build tools, each at an exact version (the ones of the CI, and twine, ruff...): see this file
+DEV_REQUIREMENTS=".github/requirements-dev.txt"
 
 usage() {
     sed -n '3,13p' "$0" | sed 's/^# \{0,1\}//'
@@ -80,19 +78,23 @@ fi
 
 VENV_PY="$VENV_DIR/bin/python"
 
+# pip itself: always its latest release (not pinned); the tools below: their exact version
 echo "==> Upgrading pip"
 "$VENV_PY" -m pip install --upgrade pip
 
-echo "==> Installing dev tools: ${DEV_PACKAGES[*]}"
-"$VENV_PY" -m pip install --upgrade "${DEV_PACKAGES[@]}"
+echo "==> Installing dev tools: $DEV_REQUIREMENTS"
+"$VENV_PY" -m pip install --requirement "$DEV_REQUIREMENTS"
 
 if [[ "$WITH_TOOLS" -eq 1 ]]; then
     # both in one call: the requirement of the tools package on pyModbusTCP is satisfied by this checkout, not by PyPI
     echo "==> Installing the library (with pyserial) and the mbtcp-* commands in editable mode"
-    "$VENV_PY" -m pip install --editable ".[serial]" --editable "$TOOLS_DIR"
+    # no build isolation: built by the hatchling of the dev tools, not by the latest release
+    "$VENV_PY" -m pip install --no-build-isolation --editable ".[serial]" --editable "$TOOLS_DIR"
 else
     echo "==> Installing the library in editable mode"
-    "$VENV_PY" -m pip install --editable .
+    "$VENV_PY" -m pip install --no-build-isolation --editable .
+    # library only: without pyserial (pinned with the tools of the CI, where the gateways are always tested)
+    "$VENV_PY" -m pip uninstall --yes --quiet pyserial
 fi
 
 cat <<EOF
@@ -106,7 +108,7 @@ Environment ready.
     Code audit:       tools/code_audit.sh
     Type check:       mypy --strict pyModbusTCP
     Run a tool:       python -m pyModbusTCP.tools {server,client,tcp2rtu,rtu2tcp} --help
-    Build:            python -m build --outdir dist .
+    Build:            python -m build --no-isolation --outdir dist .
     Check the build:  twine check dist/*
 EOF
 
@@ -115,7 +117,7 @@ if [[ "$WITH_TOOLS" -eq 1 ]]; then
 
   Commands (package pyModbusTCP-cli, $TOOLS_DIR/):
     Commands:         mbtcp-server, mbtcp-client, mbtcp-tcp2rtu, mbtcp-rtu2tcp (--help for each)
-    Build:            python -m build --outdir dist $TOOLS_DIR
+    Build:            python -m build --no-isolation --outdir dist $TOOLS_DIR
     Check the build:  twine check dist/*
 EOF
 fi

@@ -1,0 +1,20 @@
+# Tools of the CI (.github/workflows/tests.yml), each pinned to an exact version: a new release (or a compromised one)
+# never runs in the CI before a pull request of Dependabot (.github/dependabot.yml) updates it here. The dev venv
+# (./init_dev_venv.sh) installs them too (.github/requirements-dev.txt).
+# Every version must support Python 3.10 to 3.14 (the matrix of the tests). pip itself is not here: the CI and the dev
+# venv upgrade it to its latest release before installing these tools.
+#
+# The package itself is installed without build isolation (pip install --no-build-isolation, python -m build
+# --no-isolation): its build backend is the hatchling pinned here, not the latest release.
+
+# lint and tests
+flake8==7.4.1
+pytest==9.1.1
+# type check (types-pyserial: type stubs of pyserial, for the gateways of pyModbusTCP.tools)
+mypy==2.4.0
+types-pyserial==3.5.0.20260712
+# build of the two packages (build backend: hatchling, as required by both pyproject.toml)
+build==1.6.1
+hatchling==1.32.4
+# serial line of the gateways (extra serial: pyserial>=3.5,<4)
+pyserial==3.5

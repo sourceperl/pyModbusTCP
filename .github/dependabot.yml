@@ -1,5 +1,7 @@
-# Updates of the actions used by the workflows (.github/workflows/): they are pinned by commit SHA, Dependabot opens
-# a pull request with the new SHA (and its version in the comment) for each new release.
+# Updates of what the CI and the docs use, each pinned (a new release never runs before a reviewed pull request):
+# - the actions of the workflows (.github/workflows/), pinned by commit SHA: the new SHA and its version in the comment
+# - the Python tools of the CI (.github/requirements-ci.txt), of the dev venv (.github/requirements-dev.txt) and of the
+#   docs (docs/requirements.txt, also used by Read the Docs), pinned by exact version
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -12,3 +14,23 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: ci
+
+  - package-ecosystem: pip
+    directory: /.github
+    schedule:
+      interval: weekly
+    groups:
+      ci-tools:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: pip
+    directory: /docs
+    schedule:
+      interval: weekly
+    groups:
+      docs-tools:
+        patterns: ["*"]
+    commit-message:
+      prefix: docs

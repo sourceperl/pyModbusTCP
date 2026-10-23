@@ -1,0 +1,15 @@
+# Tools of the dev venv (./init_dev_venv.sh), each pinned to an exact version like the ones of the CI: the local
+# checks give the results of the CI, and a release (tools/build_dist.sh, no build isolation) is built and checked by
+# known versions of build, hatchling and twine. Dependabot (.github/dependabot.yml) updates them.
+
+# the tools of the CI: flake8, pytest, mypy, types-pyserial, build, hatchling, pyserial
+-r requirements-ci.txt
+
+# check of the packages before an upload (tools/build_dist.sh)
+twine==7.0.0
+# linter of tools/code_audit.sh
+ruff==0.17.2
+# editable install without build isolation (pip install --no-build-isolation --editable ., backend hatchling)
+editables==0.6
+# examples/server_schedule.py (mypy of tools/code_audit.sh)
+schedule==1.2.2

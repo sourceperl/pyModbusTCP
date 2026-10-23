@@ -13,8 +13,9 @@ on:
 permissions:
   contents: read
 
-# The actions are pinned by commit SHA (a tag can be moved to another commit), with the version in a comment:
-# Dependabot (.github/dependabot.yml) proposes the updates in a pull request.
+# The actions are pinned by commit SHA (a tag can be moved to another commit), with the version in a comment, and the
+# Python tools by exact version (.github/requirements-ci.txt): Dependabot (.github/dependabot.yml) proposes the
+# updates in a pull request.
 
 jobs:
   test:
@@ -38,10 +39,12 @@ jobs:
 
     - name: Install dependencies
       run: |
+        # pip: always the latest release; the tools: their exact version (.github/requirements-ci.txt, Dependabot)
         python -m pip install --upgrade pip
-        python -m pip install flake8 pytest
-        # [serial]: pyserial, for the tests of the gateways of pyModbusTCP.tools (skipped without it)
-        python -m pip install ".[serial]"
+        python -m pip install -r .github/requirements-ci.txt
+        # [serial]: pyserial, for the tests of the gateways of pyModbusTCP.tools (skipped without it); no build
+        # isolation: the hatchling pinned in requirements-ci.txt builds the package
+        python -m pip install --no-build-isolation ".[serial]"
 
     - name: Lint with flake8
       run: |
@@ -79,15 +82,17 @@ jobs:
 
     - name: Type check with mypy
       run: |
+        # pip: always the latest release; the tools: their exact version (.github/requirements-ci.txt, Dependabot)
         python -m pip install --upgrade pip
-        python -m pip install mypy types-pyserial ".[serial]"
+        python -m pip install -r .github/requirements-ci.txt
+        python -m pip install --no-build-isolation ".[serial]"
         mypy --strict pyModbusTCP
 
     - name: Build the two packages
       run: |
-        python -m pip install build
-        python -m build --outdir dist .
-        python -m build --outdir dist pyModbusTCP-cli
+        # no isolation: the build and hatchling of requirements-ci.txt (installed above), not the latest releases
+        python -m build --no-isolation --outdir dist .
+        python -m build --no-isolation --outdir dist pyModbusTCP-cli
         ls dist
         # the two packages require each other in exactly the same version (hatch_metadata.py, pyModbusTCP-cli/hatch_build.py)
         python tools/check_dist_requires.py dist
@@ -109,7 +114,7 @@ jobs:
       run: |
         python -m venv "$RUNNER_TEMP/with-tools"
         BIN="$RUNNER_TEMP/with-tools/bin"; [ -d "$BIN" ] || BIN="$RUNNER_TEMP/with-tools/Scripts"
-        "$BIN/python" -m pip install dist/*.whl
+        "$BIN/python" -m pip install -c .github/requirements-ci.txt dist/*.whl
         for cmd in mbtcp-server mbtcp-client mbtcp-tcp2rtu mbtcp-rtu2tcp; do "$BIN/$cmd" --version; done
         # the tools package must have the version of the library
         lib_version=$("$BIN/python" -c "import pyModbusTCP; print(pyModbusTCP.__version__)")
