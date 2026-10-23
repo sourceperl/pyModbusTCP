@@ -13,6 +13,9 @@ on:
 permissions:
   contents: read
 
+# The actions are pinned by commit SHA (a tag can be moved to another commit), with the version in a comment:
+# Dependabot (.github/dependabot.yml) proposes the updates in a pull request.
+
 jobs:
   test:
     runs-on: ${{ matrix.os }}
@@ -24,9 +27,12 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      with:
+        # the GITHUB_TOKEN is not kept in .git/config: no step needs to push
+        persist-credentials: false
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v7
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
       with:
         python-version: ${{ matrix.python-version }}
 
@@ -62,9 +68,12 @@ jobs:
         shell: bash
 
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      with:
+        # the GITHUB_TOKEN is not kept in .git/config: no step needs to push
+        persist-credentials: false
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v7
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
       with:
         python-version: ${{ matrix.python-version }}
 
@@ -109,9 +118,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      with:
+        # the GITHUB_TOKEN is not kept in .git/config: no step needs to push
+        persist-credentials: false
     - name: Set up Python
-      uses: actions/setup-python@v7
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
       with:
         python-version: "3.13"
 

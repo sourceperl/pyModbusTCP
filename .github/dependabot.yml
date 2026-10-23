@@ -1,0 +1,14 @@
+# Updates of the actions used by the workflows (.github/workflows/): they are pinned by commit SHA, Dependabot opens
+# a pull request with the new SHA (and its version in the comment) for each new release.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # one pull request for all the actions
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
