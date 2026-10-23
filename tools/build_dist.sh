@@ -193,6 +193,8 @@ echo ""
 echo "Packages ready in $OUT_DIR/:"
 ls -1 "$OUT_DIR"
 echo ""
-echo "Upload them (see HOWTO-PyPi.md):"
-echo "  twine upload $OUT_DIR/* -r pypitest"
-echo "  twine upload $OUT_DIR/* -r pypi"
+echo "Upload them (see HOWTO-PyPi.md), the library first, twine asks for the API token of each project:"
+for repo in testpypi pypi; do
+    echo "  twine upload -r $repo $OUT_DIR/pymodbustcp-$VERSION*"
+    echo "  twine upload -r $repo $OUT_DIR/pymodbustcp_cli-$VERSION*"
+done

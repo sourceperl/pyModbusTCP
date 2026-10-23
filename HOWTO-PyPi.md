@@ -1,6 +1,7 @@
 ## How to upload on PyPI
 
-Here we use the twine tool to do the job, see [Twine setup](#twine-setup) to add and configure it.
+Here we use the twine tool to do the job (installed by `./init_dev_venv.sh`). There is no `~/.pypirc` and no stored
+credential: twine asks for an API token at each upload.
 
 
 ### build archive and wheel
@@ -48,60 +49,41 @@ the next number.
 
 ### upload archive and wheel to PyPI test server
 
+pyModbusTCP and pyModbusTCP-cli are two projects on PyPI, and a token scoped to a project can upload to this project
+only: upload the library first (pyModbusTCP-cli requires it), then the commands, each with its own token. twine asks
+for the token (hidden input, "Enter your API token"), the username is `__token__` by default.
+
 ```bash
-twine upload dist/pymodbustcp-x.x.x* dist/pymodbustcp_cli-x.x.x* -r pypitest
+VERSION=$(sed -n "s/^VERSION = '\(.*\)'/\1/p" pyModbusTCP/constants.py)
+# no stored credential is ever used: no keyring (a token saved there long ago would be taken silently)
+export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
+twine upload -r testpypi dist/pymodbustcp-"$VERSION"*       # token of pyModbusTCP on TestPyPI
+twine upload -r testpypi dist/pymodbustcp_cli-"$VERSION"*   # token of pyModbusTCP-cli on TestPyPI
 ```
 
 Check result at https://test.pypi.org/project/pyModbusTCP/ and https://test.pypi.org/project/pyModbusTCP-cli/,
-then test the install in a new venv (pyserial is not on TestPyPI: take it from PyPI):
+then test the install in a new venv: the two packages from TestPyPI only (`--no-deps`: never a dependency from
+TestPyPI, where anyone can upload any name), pyserial from PyPI:
 
 ```bash
-pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ \
-    "pyModbusTCP[cli]==x.x.x"
-mbtcp-client --version
+python -m venv /tmp/check-release
+/tmp/check-release/bin/pip install --index-url https://test.pypi.org/simple/ --no-deps \
+    "pyModbusTCP==$VERSION" "pyModbusTCP-cli==$VERSION"
+/tmp/check-release/bin/pip install "pyserial>=3.5,<4"
+/tmp/check-release/bin/pip check
+/tmp/check-release/bin/mbtcp-client --version
+rm -rf /tmp/check-release
 ```
+
+TestPyPI may take a minute to list a new release: retry the install if it is not found at once.
 
 ### upload archive and wheel to PyPI server
 
+The same files as on TestPyPI (never build again between the two uploads), with the tokens of PyPI:
+
 ```bash
-twine upload dist/pymodbustcp-x.x.x* dist/pymodbustcp_cli-x.x.x* -r pypi
+twine upload -r pypi dist/pymodbustcp-"$VERSION"*       # token of pyModbusTCP on PyPI
+twine upload -r pypi dist/pymodbustcp_cli-"$VERSION"*   # token of pyModbusTCP-cli on PyPI
 ```
 
 Check result at https://pypi.org/project/pyModbusTCP/ and https://pypi.org/project/pyModbusTCP-cli/.
-
-
-## Twine setup
-
-### install twine
-
-```bash
-pip install twine
-```
-
-### create its conf file
-
-Create ~/.pypirc with credentials for pypi and pypitest.
-
-```bash
-cat <<EOT >> ~/.pypirc
-[distutils]
-index-servers =
-  pypi
-  pypitest
-
-[pypi]
-repository: https://upload.pypi.org/legacy/
-username: __token__
-password: mytoken
-
-[pypitest]
-repository: https://test.pypi.org/legacy/
-username: __token__
-password: mytoken
-EOT
-```
-Update it with valid credentials.
-
-```bash
-nano ~/.pypirc
-```

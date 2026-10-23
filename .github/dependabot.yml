@@ -2,12 +2,16 @@
 # - the actions of the workflows (.github/workflows/), pinned by commit SHA: the new SHA and its version in the comment
 # - the Python tools of the CI (.github/requirements-ci.txt), of the dev venv (.github/requirements-dev.txt) and of the
 #   docs (docs/requirements.txt, also used by Read the Docs), pinned by exact version
+# A new release is proposed only 7 days after its publication (cooldown).
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    # a release is proposed 7 days after its publication: a compromised release is usually found and removed before
+    cooldown:
+      default-days: 7
     # one pull request for all the actions
     groups:
       actions:
@@ -19,6 +23,9 @@ updates:
     directory: /.github
     schedule:
       interval: weekly
+    # a release is proposed 7 days after its publication: a compromised release is usually found and removed before
+    cooldown:
+      default-days: 7
     groups:
       ci-tools:
         patterns: ["*"]
@@ -29,6 +36,9 @@ updates:
     directory: /docs
     schedule:
       interval: weekly
+    # a release is proposed 7 days after its publication: a compromised release is usually found and removed before
+    cooldown:
+      default-days: 7
     groups:
       docs-tools:
         patterns: ["*"]
