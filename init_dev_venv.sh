@@ -23,7 +23,8 @@ WITH_TOOLS=1
 TOOLS_DIR="pyModbusTCP-cli"
 
 # test and build tools (types-pyserial: type stubs of pyserial, for mypy on the gateways of pyModbusTCP.tools;
-# hatchling: the build backend, installed here only for mypy on pyModbusTCP-cli/hatch_build.py)
+# hatchling: the build backend, installed here only for mypy on hatch_metadata.py and
+# pyModbusTCP-cli/hatch_metadata_cli.py)
 DEV_PACKAGES=(build twine pytest flake8 mypy ruff types-pyserial hatchling schedule==1.2.2)
 
 usage() {

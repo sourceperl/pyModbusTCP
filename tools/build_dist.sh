@@ -14,9 +14,10 @@
 #
 # No isolated build environment: hatchling is taken from PYTHON (python -m build --no-isolation).
 # Checks: "twine check" on the 4 files (sdist and wheel of each package), the version of both packages is VERSION in
-# pyModbusTCP/constants.py, pyModbusTCP-cli requires exactly this release, and a warning if VERSION is already on
-# PyPI or TestPyPI (an uploaded version can never be uploaded again). With -t: the library alone (no mbtcp-*
-# command, no pyserial), then with pyModbusTCP-cli (the 4 commands), each in a fresh venv.
+# pyModbusTCP/constants.py, pyModbusTCP-cli requires exactly this release and the cli extra exactly this release of
+# pyModbusTCP-cli (tools/check_dist_requires.py), and a warning if VERSION is already on PyPI or TestPyPI (an
+# uploaded version can never be uploaded again). With -t: the library alone (no mbtcp-* command, no pyserial), then
+# with pyModbusTCP-cli (the 4 commands), each in a fresh venv.
 
 set -euo pipefail
 
@@ -25,7 +26,7 @@ OUT_DIR=""
 INSTALL_TEST=0
 
 usage() {
-    sed -n '3,19p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '3,20p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while getopts "p:o:th" opt; do
@@ -130,20 +131,9 @@ if [[ "$(ls "$OUT_DIR" | wc -l)" -ne ${#expected[@]} ]]; then
 fi
 "$PYTHON" -m twine check --strict "${expected[@]}"
 
-# pyModbusTCP-cli has no code: it must require exactly this release of the library (set by its hatch_build.py)
-requirement="$("$PYTHON" -c '
-import sys, zipfile
-with zipfile.ZipFile(sys.argv[1]) as whl:
-    metadata = next(name for name in whl.namelist() if name.endswith(".dist-info/METADATA"))
-    for line in whl.read(metadata).decode().splitlines():
-        if line.startswith("Requires-Dist:"):
-            print(line.split(":", 1)[1].strip())
-' "$CLI_WHL")"
-if [[ "${requirement,,}" != "pymodbustcp[serial]==${VERSION,,}" ]]; then
-    echo "Error: pyModbusTCP-cli requires '$requirement', expected pyModbusTCP[serial]==$VERSION" >&2
-    exit 1
-fi
-echo "pyModbusTCP-cli requires: $requirement"
+# pyModbusTCP-cli has no code: it requires exactly this release of the library, and the cli extra of the library
+# exactly this release of pyModbusTCP-cli (set by hatch_metadata.py and pyModbusTCP-cli/hatch_build.py)
+"$PYTHON" tools/check_dist_requires.py "$OUT_DIR"
 
 if [[ "$INSTALL_TEST" -eq 1 ]]; then
     # throwaway venvs: the dev venv has the editable installs of this checkout, it can't test the wheels

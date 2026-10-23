@@ -72,6 +72,7 @@ Revision history for pyModbusTCP
     - tools: command line tools (python -m pyModbusTCP.tools, or the mbtcp-* commands of pyModbusTCP-cli with
       "pip install pyModbusTCP[cli]"): mbtcp-server, mbtcp-client (table output, csv/json, write-read, typed
       values with -T/-b), mbtcp-tcp2rtu and mbtcp-rtu2tcp gateways (with RS-485 mode, needs pyserial).
+      pyModbusTCP[cli]==X installs exactly pyModbusTCP-cli X, which requires exactly pyModbusTCP X.
     - typing: type hints on the whole package (py.typed).
     - docs: Sphinx documentation rewritten (guides, tools, security, examples), SECURITY.md.
 

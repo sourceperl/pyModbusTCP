@@ -89,6 +89,8 @@ jobs:
         python -m build --outdir dist .
         python -m build --outdir dist pyModbusTCP-cli
         ls dist
+        # the two packages require each other in exactly the same version (hatch_metadata.py, pyModbusTCP-cli/hatch_build.py)
+        python tools/check_dist_requires.py dist
 
     - name: Library alone (no command, no pyserial, tools available with python -m)
       run: |

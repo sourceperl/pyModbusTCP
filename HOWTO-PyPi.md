@@ -22,7 +22,9 @@ Or all at once, with the release checks, in the dev venv of `./init_dev_venv.sh`
 tools/build_dist.sh -t
 ```
 
-It builds the 4 files in `dist/`, runs `twine check`, checks that pyModbusTCP-cli requires exactly this release,
+It builds the 4 files in `dist/`, runs `twine check`, checks that pyModbusTCP-cli requires exactly this release and
+that the `cli` extra of the library requires exactly this release of pyModbusTCP-cli (`tools/check_dist_requires.py`,
+the two requirements are set at build time by `hatch_metadata.py` and `pyModbusTCP-cli/hatch_build.py`),
 that the first entry of `CHANGES` is `VERSION YYYY-MM-DD` (a placeholder date can't be fixed after the upload: the
 changelog is in the sdist), warns about the docs that pin another pre-release and about a version already on PyPI or
 TestPyPI, then (`-t`) tests the install of the wheels in throwaway venvs.

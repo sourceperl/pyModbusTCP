@@ -4,7 +4,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pyModbusTCP"
-dynamic = ["version"]
+# optional-dependencies: the extras serial and cli, set by hatch_metadata.py (cli: exactly this release of
+# pyModbusTCP-cli, from the version)
+dynamic = ["version", "optional-dependencies"]
 description = "A simple Modbus/TCP library for Python"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -28,13 +30,6 @@ classifiers = [
     "Typing :: Typed",
 ]
 
-[project.optional-dependencies]
-# serial line of the gateways of pyModbusTCP.tools (python -m pyModbusTCP.tools tcp2rtu/rtu2tcp)
-serial = ["pyserial>=3.5,<4"]
-# commands mbtcp-* in the PATH: a separate package without code (console scripts can't depend on an extra, so a
-# plain install of the library puts no command in the PATH)
-cli = ["pyModbusTCP-cli"]
-
 [project.urls]
 Documentation = "https://pymodbustcp.readthedocs.io/"
 Source = "https://github.com/sourceperl/pyModbusTCP"
@@ -45,11 +40,16 @@ Changelog = "https://github.com/sourceperl/pyModbusTCP/blob/master/CHANGES"
 # VERSION in pyModbusTCP/constants.py (also the version of pyModbusTCP-cli, see its pyproject.toml)
 path = "pyModbusTCP/constants.py"
 
+[tool.hatch.metadata.hooks.custom]
+# the extras serial and cli (cli = exactly this release of pyModbusTCP-cli)
+path = "hatch_metadata.py"
+
 [tool.hatch.build.targets.sdist]
 # the library, its changelog and its tests (pyproject.toml, README.md and LICENSE are always included): the tests can
 # be run from an unpacked sdist (pytest, settings of [tool.pytest.ini_options]), like the downstream packagers do.
 # Without the examples, docs, tools/ and the pyModbusTCP-cli package. The wheel has the package only (see below).
-include = ["/pyModbusTCP", "/tests", "/CHANGES"]
+# hatch_metadata.py: the extras, needed by a build from the sdist.
+include = ["/pyModbusTCP", "/tests", "/CHANGES", "/hatch_metadata.py"]
 
 [tool.hatch.build.targets.wheel]
 # the package and all its subpackages (client, server, tools)

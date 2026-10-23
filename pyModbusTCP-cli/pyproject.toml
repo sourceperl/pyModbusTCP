@@ -40,7 +40,8 @@ Issues = "https://github.com/sourceperl/pyModbusTCP/issues"
 path = "../pyModbusTCP/constants.py"
 
 [tool.hatch.metadata.hooks.custom]
-# hatch_build.py: requirement on exactly this release of pyModbusTCP
+# requirement on exactly this release of pyModbusTCP
+path = "hatch_metadata_cli.py"
 
 [tool.hatch.build.targets.wheel]
 # no code in this package (see above): only the metadata and the commands
