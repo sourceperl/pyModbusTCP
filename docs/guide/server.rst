@@ -170,7 +170,8 @@ some values, after the transaction is committed, with a :class:`~pyModbusTCP.ser
   the events that don't fit are dropped, with a warning in the log (at most one per 10 s, with the count).
 - The listener runs without the lock: it can use the store (like writing an acknowledge). The value it writes is not in
   the response of the request that triggered it.
-- An exception raised by a listener is logged: the request is committed anyway, the client gets its response.
+- An exception raised by a listener is logged (with its traceback, one message per 10 s at most with the number of
+  errors): the request is committed anyway, the client gets its response.
 
 ``subscribe()`` returns a function that unsubscribes the listener.
 
@@ -285,6 +286,8 @@ exception:
 - ``ModbusServer(functions={})`` starts without any function, ``fallback=handler`` handles the function codes without
   handler (like a gateway that relays every request).
 - An unexpected exception of a handler is logged, the client gets a "slave device failure" and its session goes on.
+  The first error is logged at once with its traceback, then one message per 10 s at most, with the number of errors
+  and the traceback of the last one: a client that triggers the same bug in a loop can't fill the disk.
 - ``read_only=True`` only refuses the standard write functions: it doesn't know what a handler of the application does.
   A handler that writes data (a new function, or a standard one replaced) tests the mode itself, at each call (the
   mode can change while the server runs):

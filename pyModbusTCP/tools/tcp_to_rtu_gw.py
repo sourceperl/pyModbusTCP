@@ -645,6 +645,7 @@ class ModbusSerialWorker:
         self._broadcast_busy_log = LogThrottle(logger, level=logging.INFO)
         self._broadcast_dropped_log = LogThrottle(logger)
         self._stray_log = LogThrottle(logger)
+        self._error_log = LogThrottle(logger, level=logging.ERROR)
         # broadcasts in the queue (waiting for the bus), at most broadcast_buffer
         self._broadcast_lock = Lock()
         self._broadcasts_waiting = 0
@@ -730,9 +731,9 @@ class ModbusSerialWorker:
             response = find_response(rx_raw, request_frame)
             if response:
                 return response
-            self._stray_log.event('Frame on the serial line that is not the response of the request: %d frame(s) '
-                                  'ignored (a late reply of a slave? its timeout -t may be too short), last %s',
-                                  hexdump(rx_raw))
+            self._stray_log.event('Frame on the serial line that is not the response of the request: %(count)d '
+                                  'frame(s) ignored (a late reply of a slave? its timeout -t may be too short), '
+                                  'last %(frame)s', frame=hexdump(rx_raw))
         logger.debug('RTU Rx timeout, no valid answer')
         return b''
 
@@ -784,9 +785,9 @@ class ModbusSerialWorker:
                 logger.error('Serial I/O error: %r (port %s)', e, self.serial_port.port)
                 rtu_query.response.raw = b''
                 self._close_port()
-            except Exception:
+            except Exception:  # noqa: BLE001
                 # safety net: the worker must survive, or every client would hang
-                logger.exception('Unexpected error in serial worker')
+                self._error_log.event('Unexpected error in serial worker: %(count)d error(s)', exc_info=True)
                 rtu_query.response.raw = b''
             finally:
                 # mark all as done (always, or the TCP client thread would hang)
@@ -803,8 +804,9 @@ class ModbusSerialWorker:
         age = time.monotonic() - rtu_query.queued_at
         if age <= self.broadcast_max_age:
             return True
-        self._broadcast_dropped_log.event('Broadcast dropped, too old for the bus: %d request(s) (last waited '
-                                          '%.1f s, max %g s)', age, self.broadcast_max_age)
+        self._broadcast_dropped_log.event('Broadcast dropped, too old for the bus: %(count)d request(s) (last '
+                                          'waited %(age).1f s, max %(max_age)g s)', age=age,
+                                          max_age=self.broadcast_max_age)
         return False
 
     def _drain_queue(self) -> None:
@@ -855,15 +857,16 @@ class ModbusSerialWorker:
         client = req.ctx.client
         exp_status = self.is_allowed(unit_id, req.pdu)
         if exp_status:
-            self._refused_log.event('Request refused by the gateway filters: %d request(s) (last: unit %d, '
-                                    'function 0x%02X, exception 0x%02X, from %s)',
-                                    unit_id, req.pdu[0], exp_status, client.address)
+            self._refused_log.event('Request refused by the gateway filters: %(count)d request(s) (last: unit '
+                                    '%(unit_id)d, function 0x%(func_code)02X, exception 0x%(exp_status)02X, from '
+                                    '%(client)s)', unit_id=unit_id, func_code=req.pdu[0], exp_status=exp_status,
+                                    client=client.address)
             raise ModbusException(code=exp_status)
         # fair share of the serial line: a client host can't fill the queue
         host = host_key((client.address, client.port), self.ipv6_host_prefix)
         if not self._acquire_host_slot(host):
-            self._host_busy_log.event('Too many pending requests from a host: %d request(s) rejected '
-                                      '(limit %d, last from %s)', MAX_PENDING_PER_HOST, host)
+            self._host_busy_log.event('Too many pending requests from a host: %(count)d request(s) rejected '
+                                      '(limit %(limit)d, last from %(host)s)', limit=MAX_PENDING_PER_HOST, host=host)
             raise GatewayPathUnavailable()
         try:
             return self._relay(req, host)
@@ -920,9 +923,9 @@ class ModbusSerialWorker:
         response = req.pdu if size is None else req.pdu[:size]
         with self._broadcast_lock:
             if self._broadcasts_waiting >= self.broadcast_buffer:
-                self._broadcast_busy_log.event('Broadcast refused, the broadcast buffer is full: %d request(s) '
-                                               '(%d waiting, last from %s)', self.broadcast_buffer,
-                                               req.ctx.client.address)
+                self._broadcast_busy_log.event('Broadcast refused, the broadcast buffer is full: %(count)d '
+                                               'request(s) (%(waiting)d waiting, last from %(client)s)',
+                                               waiting=self.broadcast_buffer, client=req.ctx.client.address)
                 raise SlaveDeviceBusy()
             self._broadcasts_waiting += 1
         try:
@@ -946,8 +949,8 @@ class ModbusSerialWorker:
             self.rtu_queries_q.put(rtu_query)
         except queue.Full:
             # overloaded gateway
-            self._overloaded_log.event('Gateway overloaded: %d request(s) rejected (queue full, last from %s)',
-                                       req.ctx.client.address)
+            self._overloaded_log.event('Gateway overloaded: %(count)d request(s) rejected (queue full, last from '
+                                       '%(client)s)', client=req.ctx.client.address)
             raise GatewayPathUnavailable() from None
         return rtu_query
 

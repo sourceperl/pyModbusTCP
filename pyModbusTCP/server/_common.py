@@ -51,8 +51,13 @@ def host_key(client_address: Any, ipv6_prefix: int = HOST_IPV6_PREFIX) -> str:
 class LogThrottle:
     """Log a repeated event at most once per interval, with the number of events since the last message.
 
-    The first event is logged at once. The message format must start with a %d for the number of events, like
-    'Connection refused: %d connection(s) refused (last from %r)'. Thread-safe.
+    The first event is logged at once. The message is a %-style logging message with named fields only:
+    %(count)d for the number of events, at any position, and a keyword argument of event() for each other field,
+    like event('%(count)d connection(s) rejected (limit %(limit)d, last from %(host)s)', limit=16, host=host).
+    It is formatted lazily, by logging. Thread-safe.
+
+    With exc_info=True (in an except block), the message has the traceback of the current exception: the first
+    one, then the last one of each interval. A client that triggers the same error in a loop can't fill the disk.
     """
 
     def __init__(self, log: logging.Logger, level: int = logging.WARNING, interval: float = 10.0) -> None:
@@ -63,8 +68,17 @@ class LogThrottle:
         self._last_time: float | None = None
         self._lock = Lock()
 
-    def event(self, msg: str, *args: Any) -> None:
-        """Count an event, log msg (with the count of events, then args) if the last message is old enough."""
+    def event(self, msg: str, *, exc_info: bool = False, **fields: Any) -> None:
+        """Count an event, log msg if the last message is old enough.
+
+        :param msg: %-style logging message with named fields: %(count)d for the number of events since the last
+            message, the other ones from fields
+        :param exc_info: add the traceback of the current exception
+        :param fields: the values of the other fields of msg
+        :raises TypeError: if a field is named count (the number of events)
+        """
+        if 'count' in fields:
+            raise TypeError("'count' is the number of events of a LogThrottle, not a field of event()")
         with self._lock:
             self._count += 1
             now = time.monotonic()
@@ -73,4 +87,5 @@ class LogThrottle:
             count = self._count
             self._count = 0
             self._last_time = now
-        self.log.log(self.level, msg, count, *args)
+        # a mapping as the only argument: logging formats msg % mapping (named fields), lazily
+        self.log.log(self.level, msg, {'count': count, **fields}, exc_info=exc_info)

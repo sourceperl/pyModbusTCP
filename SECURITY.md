@@ -203,7 +203,10 @@ the connections of the previous one are fully closed by the system.
 - An unexpected exception raised by user code (function handler, fallback, store wrapper, mapped range) is
   logged and answered with a "slave device failure" exception, the session is kept. Every value written by the
   request is restored (the request runs in a transaction of the data store). An exception raised by a change
-  listener is logged only: the request is already committed.
+  listener is logged only: the request is already committed. These errors are logged once, then once per 10 s at
+  most (with the number of errors and the traceback of the last one), so a client that triggers the same bug in a
+  loop can't fill the disk. The safety nets of the gateways (an unexpected error of the serial worker or of the
+  Modbus/TCP client) are limited the same way.
 
 ## Client protections
 

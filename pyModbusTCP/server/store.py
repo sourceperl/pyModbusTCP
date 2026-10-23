@@ -15,6 +15,7 @@ The application accesses the store with store.app (no request context): store.ap
 
 from __future__ import annotations
 
+import logging
 import queue
 import threading
 from abc import ABC, abstractmethod
@@ -293,6 +294,8 @@ class MemoryStore(DataStore):
         self._notify_queue: queue.Queue[tuple[Listener, ChangeEvent]] | None = None
         # dropped events: the first one is logged at once, then one message per 10 s at most
         self._dropped_log = LogThrottle(logger)
+        # errors of the listeners (called on each write of a client): one message per 10 s at most
+        self._listener_error_log = LogThrottle(logger, level=logging.ERROR)
 
     def __repr__(self) -> str:
         sizes = ', '.join(f'{space.value}={len(data)}' for space, data in self._data.items())
@@ -393,7 +396,8 @@ class MemoryStore(DataStore):
             self._listeners.append(entry)
             if threaded and self._notify_queue is None:
                 self._notify_queue = queue.Queue(maxsize=self.notify_queue_size)
-                threading.Thread(target=self._notify_loop, args=(self._notify_queue,), daemon=True,
+                threading.Thread(target=self._notify_loop, args=(self._notify_queue, self._listener_error_log),
+                                 daemon=True,
                                  name='MemoryStore notifications').start()
 
         def unsubscribe() -> None:
@@ -420,27 +424,28 @@ class MemoryStore(DataStore):
                     self._notify_queue.put_nowait((entry.listener, event))
                 except queue.Full:
                     # never block the client: the listener is too slow, this event is lost
-                    self._dropped_log.event('Threaded listener too slow: %d change event(s) dropped (queue of %d '
-                                            'events full)', self.notify_queue_size)
+                    self._dropped_log.event('Threaded listener too slow: %(count)d change event(s) dropped (queue '
+                                            'of %(size)d events full)', size=self.notify_queue_size)
             else:
-                _call_listener(entry.listener, event)
+                _call_listener(entry.listener, event, self._listener_error_log)
 
     @staticmethod
-    def _notify_loop(notify_queue: queue.Queue[tuple[Listener, ChangeEvent]]) -> None:
+    def _notify_loop(notify_queue: queue.Queue[tuple[Listener, ChangeEvent]], error_log: LogThrottle) -> None:
         while True:
             listener, event = notify_queue.get()
             try:
-                _call_listener(listener, event)
+                _call_listener(listener, event, error_log)
             finally:
                 notify_queue.task_done()
 
 
-def _call_listener(listener: Listener, event: ChangeEvent) -> None:
+def _call_listener(listener: Listener, event: ChangeEvent, error_log: LogThrottle) -> None:
     """Call a listener: the transaction is committed, an error of the listener can't change it, it's logged."""
     try:
         listener(event)
     except Exception:  # noqa: BLE001
-        logger.exception('Error in the change listener %r', listener)
+        error_log.event('Error in a change listener: %(count)d error(s) (last: %(listener)r)', listener=listener,
+                        exc_info=True)
 
 
 # --- the access of the application ---

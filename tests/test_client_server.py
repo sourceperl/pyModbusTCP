@@ -24,7 +24,7 @@ from pyModbusTCP.constants import (
     MB_TIMEOUT_ERR,
     SUPPORTED_FUNCTION_CODES,
 )
-from pyModbusTCP.server import DeviceIdentification, ModbusServer
+from pyModbusTCP.server import DeviceIdentification, MemoryStore, ModbusServer
 
 # some const
 MAX_READABLE_REGS = 125
@@ -118,11 +118,16 @@ class TestClientServer(unittest.TestCase):
 
     def test_listener_exception(self) -> None:
         """An exception raised by a change listener is logged: the write is committed, the client gets its response."""
+        store = self.server.store
+        assert isinstance(store, MemoryStore)
         for value, exc in enumerate((RuntimeError('boom'), KeyError('key'), TypeError('type')), start=1):
-            unsubscribe = self.server.store.subscribe(Mock(side_effect=exc))
+            unsubscribe = store.subscribe(Mock(side_effect=exc))
+            # the errors are logged once per 10 s at most: a new interval for each error
+            store._listener_error_log._last_time = None
             # use a new value at each loop: the listener is only called when the value change
-            with self.assertLogs('pyModbusTCP.server', level='ERROR'):
+            with self.assertLogs('pyModbusTCP.server', level='ERROR') as logs:
                 self.assertTrue(self.client.write_single_register(0, value))
+            self.assertIn(type(exc).__name__, logs.output[0])  # with the traceback
             self.assertEqual(self.client.read_holding_registers(0), [value])
             self.assertTrue(self.client.is_open)
             unsubscribe()
@@ -138,6 +143,30 @@ class TestClientServer(unittest.TestCase):
         del self.server.functions[0x41]
         self.assertTrue(self.client.write_single_register(0, 10))
         self.assertEqual(self.client.read_holding_registers(0), [10])
+
+    def test_handler_exception_log_flood(self) -> None:
+        """A client that triggers the same bug in a loop can't flood the log: 1 message per 10 s at most (S-11)."""
+        self.server.functions[0x41] = Mock(side_effect=RuntimeError('boom'))
+        error_log = self.server._handler_error_log
+        error_log._last_time = None
+        try:
+            with self.assertLogs('pyModbusTCP.server', level='ERROR') as logs:
+                for _ in range(50):
+                    self.assertIsNone(self.client.custom_request(b'\x41\x00'))
+                    self.assertEqual(self.client.last_except, EXP_SLAVE_DEVICE_FAILURE)
+            # the first error at once, with its traceback; the 49 others are counted
+            self.assertEqual(len(logs.records), 1)
+            self.assertIn('1 error(s)', logs.records[0].getMessage())
+            self.assertIn('RuntimeError: boom', logs.output[0])
+            # the next message, after the interval, gives the number of errors since the previous one
+            assert error_log._last_time is not None
+            error_log._last_time -= error_log.interval
+            with self.assertLogs('pyModbusTCP.server', level='ERROR') as logs:
+                self.assertIsNone(self.client.custom_request(b'\x41\x00'))
+            self.assertIn('50 error(s)', logs.records[0].getMessage())
+            self.assertIn('function 0x41', logs.records[0].getMessage())
+        finally:
+            del self.server.functions[0x41]
 
     def test_unknown_function_still_illegal(self) -> None:
         """A function code without handler still gives an ILLEGAL_FUNCTION exception."""

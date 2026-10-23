@@ -125,6 +125,7 @@ from ..constants import (
     EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND,
     MB_EXCEPT_ERR,
 )
+from ..server._common import LogThrottle
 from ..utils import crc16
 
 # exceptions raised by the serial port when the device is lost (explicit type,
@@ -247,6 +248,8 @@ class SlaveSerialWorkerModel:
         self._last_reopen_try = 0.0
         # input buffer must be flushed at start and after each port reopen
         self._flush_pending = True
+        # unexpected errors (a bug): one message per 10 s at most, a request flood can't flood the log
+        self._error_log = LogThrottle(logger, level=logging.ERROR)
 
     def handle_request(self) -> None:
         """Template method to be implemented by subclasses for custom request logic."""
@@ -346,9 +349,9 @@ class SlaveSerialWorkerModel:
                 # Never stop: close the port, it is reopened automatically
                 logger.error('Serial I/O error: %r (port %s)', e, self.serial_port.port)
                 self._close_port()
-            except Exception:
+            except Exception:  # noqa: BLE001
                 # safety net: the worker must survive
-                logger.exception('Unexpected error in serial worker')
+                self._error_log.event('Unexpected error in serial worker: %(count)d error(s)', exc_info=True)
 
 
 class SerialModbusWorker(SlaveSerialWorkerModel):
@@ -372,9 +375,9 @@ class SerialModbusWorker(SlaveSerialWorkerModel):
         cli = self.mbus_cli
         try:
             resp_pdu = cli.custom_request(pdu)
-        except Exception:
+        except Exception:  # noqa: BLE001
             # not a serial error: never let it reach the serial error handler
-            logger.exception('Unexpected error with Modbus/TCP client')
+            self._error_log.event('Unexpected error with Modbus/TCP client: %(count)d error(s)', exc_info=True)
             return None, EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
         if resp_pdu:
             return resp_pdu, 0

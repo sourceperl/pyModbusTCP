@@ -1,6 +1,7 @@
 """ Test of pyModbusTCP.ModbusServer """
 
 import gc
+import logging
 import signal
 import socket
 import struct
@@ -23,6 +24,7 @@ from pyModbusTCP.server import (
     Request,
     Space,
 )
+from pyModbusTCP.server._common import LogThrottle
 
 
 class TestModbusServer(unittest.TestCase):
@@ -1419,6 +1421,45 @@ class TestAllowedHostsIPv6(unittest.TestCase):
     def test_unlisted_client_is_closed(self) -> None:
         with self.assertLogs('pyModbusTCP.server', level='WARNING'):
             self.assertEqual(self._connect(allowed_hosts=['fd00::/8', '127.0.0.1']), b'')
+
+
+class TestLogThrottle(unittest.TestCase):
+    """ LogThrottle: one message per interval, with the number of events. """
+
+    def setUp(self) -> None:
+        self.log = logging.getLogger('pyModbusTCP.test.throttle')
+
+    def test_named_fields(self) -> None:
+        """%(count)d at any position of the message, the other named fields from the keyword arguments."""
+        throttle = LogThrottle(self.log, interval=10.0)
+        with self.assertLogs(self.log, level='WARNING') as logs:
+            # the first event at once, with the count at the end; a % in a value is never a field
+            throttle.event('refused from %(host)s: %(count)d', host='100%')
+            for _ in range(4):
+                throttle.event('refused from %(host)s: %(count)d', host='x')
+            self.assertEqual([r.getMessage() for r in logs.records], ['refused from 100%: 1'])
+            # after the interval: the count of the events since the last message, here at the start
+            assert throttle._last_time is not None
+            throttle._last_time -= throttle.interval
+            throttle.event('%(count)d event(s) (limit %(limit)d, last from %(host)s)', limit=16, host='y')
+            # no field but the count
+            throttle._last_time -= throttle.interval
+            throttle.event('%(count)d event(s)')
+        self.assertEqual([r.getMessage() for r in logs.records[1:]],
+                         ['5 event(s) (limit 16, last from y)', '1 event(s)'])
+        # count is the number of events, never a field: refused at once, even when the message would not be logged
+        with self.assertRaisesRegex(TypeError, 'count'):
+            throttle.event('%(count)d event(s)', count=3)
+
+    def test_exc_info(self) -> None:
+        throttle = LogThrottle(self.log, level=logging.ERROR)
+        with self.assertLogs(self.log, level='ERROR') as logs:
+            try:
+                raise RuntimeError('boom')
+            except RuntimeError:
+                throttle.event('error in handler (%(count)d in total)', exc_info=True)
+        self.assertEqual(logs.records[0].getMessage(), 'error in handler (1 in total)')
+        self.assertIn('RuntimeError: boom', logs.output[0])
 
 
 if __name__ == '__main__':

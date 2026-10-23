@@ -182,14 +182,15 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
         # counters can only decrease meanwhile, when a session ends); the limits are read at each call, a change by
         # the ModbusServer setters applies to the next connection
         if not self.is_allowed(client_address):
-            self._denied_log.event('Connection refused, host not in allowed hosts: %d connection(s) refused '
-                                   '(last from %r)', client_address)
+            self._denied_log.event('Connection refused, host not in allowed hosts: %(count)d connection(s) refused '
+                                   '(last from %(client)r)', client=client_address)
             return False
         # each limit read once: another thread may change it (even to None) at any time
         max_connections = self.max_connections
         if max_connections is not None and self._sessions >= max_connections:
-            self._rejected_log.event('Maximum number of connections reached: %d connection(s) rejected '
-                                     '(limit %d, last from %r)', max_connections, client_address)
+            self._rejected_log.event('Maximum number of connections reached: %(count)d connection(s) rejected '
+                                     '(limit %(limit)d, last from %(client)r)', limit=max_connections,
+                                     client=client_address)
             return False
         max_per_host = self.max_connections_per_host
         if max_per_host is not None:
@@ -197,8 +198,9 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
                 key = host_key(client_address, self._ipv6_host_prefix)
                 host_sessions = self._host_sessions.get(key, 0)
             if host_sessions >= max_per_host:
-                self._host_rejected_log.event('Maximum number of connections per host reached: %d connection(s) '
-                                              'rejected (limit %d, last from %s)', max_per_host, key)
+                self._host_rejected_log.event('Maximum number of connections per host reached: %(count)d '
+                                              'connection(s) rejected (limit %(limit)d, last from %(host)s)',
+                                              limit=max_per_host, host=key)
                 return False
         return True
 

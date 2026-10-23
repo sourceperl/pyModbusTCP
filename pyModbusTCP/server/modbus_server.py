@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import socket
 import warnings
 from collections.abc import Callable, Iterable, Mapping
@@ -20,7 +21,7 @@ from ..constants import (
     WRITE_FUNCTION_CODES,
 )
 from . import _transport, _validators, errors, frames, session
-from ._common import HOST_IPV6_PREFIX, logger
+from ._common import HOST_IPV6_PREFIX, LogThrottle, logger
 from ._transport import CustomThreadingTCPServer
 from .device_id import DeviceIdentification
 from .errors import (
@@ -145,6 +146,9 @@ class ModbusServer:
         # ensure atomic start and stop operations, and a setting change never lost by a concurrent start()
         # (reentrant: stop() may be called from a signal handler running in the thread that is inside start())
         self._start_stop_lock = RLock()
+        # errors of user code (function handler, fallback, store wrapper): one message per 10 s at most, a client
+        # that triggers the same bug in a loop can't flood the log
+        self._handler_error_log = LogThrottle(logger, level=logging.ERROR)
         # the TCP server of a running server (None when stopped): the settings below are passed to it by start(), and
         # their setters update it at once (set first, the setters read it)
         self._tcp_server: CustomThreadingTCPServer | None = None
@@ -434,7 +438,9 @@ class ModbusServer:
             raise
         except Exception:  # noqa: BLE001
             # unexpected error (like an exception raised by user code): log it and keep the session alive
-            logger.exception('Unexpected error during processing of function 0x%02X from %s', func_code, client)
+            self._handler_error_log.event('Unexpected error during processing of a request: %(count)d error(s) '
+                                          '(last: function 0x%(func_code)02X from %(client)s)',
+                                          func_code=func_code, client=client, exc_info=True)
             send_pdu.build_except(func_code, EXP_SLAVE_DEVICE_FAILURE)
 
     def _route(self, pdu: bytes, unit_id: int, client: session.ClientInfo) -> tuple[FunctionHandler, DataStore] | int:

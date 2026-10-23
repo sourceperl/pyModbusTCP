@@ -84,6 +84,9 @@ Revision history for pyModbusTCP
     - tools: mbtcp-tcp2rtu no longer returns a late reply of a slave as the response of the next request (a client
       could read the value of another address): the content of an answer is checked against its request (size of
       the data read, echo of a write), and other frames are ignored until the timeout.
+    - server/tools: an unexpected error of user code (function handler, fallback, store wrapper, change listener)
+      and of the gateways' safety nets is logged once, then once per 10 s at most with the number of errors and the
+      last traceback: a client that triggers the same bug in a loop could fill the disk with tracebacks.
     - tools: mbtcp-client device-id -f csv: a text of the server that starts with =, +, - or @ gets a leading "'"
       (formula injection in a spreadsheet, CWE-1236).
     - utils: valid_host() edge cases (empty host, NUL and non-ASCII chars).
