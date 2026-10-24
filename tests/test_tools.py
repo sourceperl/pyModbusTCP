@@ -1150,34 +1150,66 @@ def test_rtu2tcp_broadcast_does_not_block(server: tuple[ModbusServer, int]) -> N
         # a broadcast write, then (while the server writes it) a frame for another slave, then a read for the
         # gateway: before, the 2 frames waited in the buffer of the line during the broadcast and were read as one
         # frame, dropped (CRC error), the master got no answer
+        # (0.15 s between the frames, all within the 0.5 s of the server: a busy host, like a CI runner, may wake the
+        # worker late, the frames must not come so close that the worker reads 2 of them as one)
         os.write(master_fd, rtu_frame(0, bytes.fromhex('0600020007')))
-        time.sleep(0.05)
+        time.sleep(0.15)
         os.write(master_fd, rtu_frame(31, bytes.fromhex('0300000001')))
-        time.sleep(0.05)
+        time.sleep(0.15)
         os.write(master_fd, rtu_frame(30, bytes.fromhex('0300020001')))
         # the read is sent after the broadcast (the order of the bus): it sees its value
         assert read_answer(master_fd, 3.0) == rtu_frame(30, bytes.fromhex('03020007'))
 
 
-@pytest.mark.skipif(os.name == 'nt', reason='needs a pseudo-terminal (POSIX only)')
-def test_rtu2tcp_broadcast_backlog(server: tuple[ModbusServer, int], caplog: pytest.LogCaptureFixture) -> None:
+def test_rtu2tcp_broadcast_backlog(caplog: pytest.LogCaptureFixture) -> None:
     """Broadcasts faster than the server: BROADCAST_BACKLOG wait for it (plus the one in progress), the next ones are
-    dropped (logged), never queued without limit."""
+    dropped (logged), never queued without limit; the waiting ones are sent in the order of the bus.
+
+    No serial line here: the frames are given to the worker one by one (on a pseudo-terminal, the timers of a busy
+    host can merge 2 frames sent close together into one, dropped for its CRC), and the server answers only when the
+    test releases it.
+    """
+    pytest.importorskip('serial')
     from pyModbusTCP.tools import rtu_to_tcp_gw
-    srv, tcp_port = server
-    calls = slow_function(srv, 0x06, 0.3)
     backlog = rtu_to_tcp_gw.BROADCAST_BACKLOG
-    with caplog.at_level(logging.WARNING, logger='mbtcp-rtu2tcp'), \
-            rtu2tcp_gateway(tcp_port, allow_bcast=True) as (master_fd, _worker):
-        for n in range(backlog + 4):
-            os.write(master_fd, rtu_frame(0, bytes.fromhex('06%04x0001' % (10 + n))))
-            time.sleep(0.06)
-        time.sleep(0.3 * (backlog + 2))
-    written = srv.store.app.holding_registers.read(10, backlog + 4)
-    # the first one at once, then backlog waiting: in the order of the bus
-    assert written[:backlog + 1] == [1] * (backlog + 1)
-    assert sum(written) == len(calls) <= backlog + 2
-    assert any('Broadcast dropped' in r.getMessage() for r in caplog.records)
+    started, release = threading.Event(), threading.Event()
+    sent: list[bytes] = []
+
+    class BlockedClient:
+        """A Modbus/TCP client whose server answers only once released."""
+        timeout = 2.0
+
+        def custom_request(self, pdu: bytes) -> bytes:
+            sent.append(pdu)
+            started.set()
+            release.wait(5.0)
+            return pdu
+
+    worker = rtu_to_tcp_gw.SerialModbusWorker(
+        SilentSerial(), BlockedClient(), slave_addr=30, allow_bcast=True)  # type: ignore[arg-type]
+    pdus = [bytes.fromhex('06%04x0001' % (10 + n)) for n in range(backlog + 4)]
+
+    def receive(pdu: bytes) -> None:
+        worker.request = rtu_to_tcp_gw.ModbusRTUFrame(rtu_frame(0, pdu))
+        worker.handle_request()
+
+    try:
+        with caplog.at_level(logging.WARNING, logger='mbtcp-rtu2tcp'):
+            # the first one is taken by the relay thread at once (in progress, the server doesn't answer yet)
+            receive(pdus[0])
+            assert started.wait(5.0)
+            # the next ones wait for the server: backlog of them, the others are dropped
+            for pdu in pdus[1:]:
+                receive(pdu)
+        assert worker._jobs.qsize() == backlog
+        assert any('Broadcast dropped' in r.getMessage() for r in caplog.records)
+    finally:
+        release.set()
+        worker.stop()
+        assert worker._relay_thread is not None
+        worker._relay_thread.join(5.0)
+    # the one in progress, then the waiting ones, in the order of the bus; never the dropped ones
+    assert sent == pdus[:backlog + 1]
 
 
 @pytest.mark.skipif(os.name == 'nt', reason='needs a pseudo-terminal (POSIX only)')
