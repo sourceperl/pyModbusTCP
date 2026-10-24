@@ -1087,6 +1087,117 @@ def test_rtu2tcp_relay(server: tuple[ModbusServer, int]) -> None:
         os.close(slave_fd)
 
 
+@contextlib.contextmanager
+def rtu2tcp_gateway(tcp_port: int, **kwargs: Any) -> Generator[tuple[int, Any], None, None]:
+    """A rtu2tcp gateway (slave 30) on a pseudo-terminal, relaying to tcp_port: yields (master fd, worker)."""
+    serial = pytest.importorskip('serial')
+    from pyModbusTCP.tools import rtu_to_tcp_gw
+    master_fd, slave_fd = os.openpty()
+    os.set_blocking(master_fd, False)
+    port = serial.Serial(os.ttyname(slave_fd), baudrate=19200)
+    tcp_cli = ModbusClient(host='127.0.0.1', port=tcp_port, timeout=2.0)
+    worker = rtu_to_tcp_gw.SerialModbusWorker(port=port, mbus_cli=tcp_cli, slave_addr=30, **kwargs)
+    thread = threading.Thread(target=worker.run, daemon=True)
+    thread.start()
+    try:
+        time.sleep(0.3)  # let the worker flush its input buffer
+        yield master_fd, worker
+    finally:
+        worker.stop()
+        thread.join(5.0)
+        port.close()
+        tcp_cli.close()
+        os.close(master_fd)
+        os.close(slave_fd)
+
+
+def read_answer(master_fd: int, timeout: float) -> bytes:
+    """The bytes written by the gateway on the line within timeout (stops at the first complete frame)."""
+    answer = b''
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            answer += os.read(master_fd, 256)
+        except BlockingIOError:
+            pass
+        if len(answer) >= 5 and crc16(answer) == 0:
+            break
+        time.sleep(0.02)
+    return answer
+
+
+def slow_function(srv: ModbusServer, func_code: int, delay: float) -> list[float]:
+    """Make a function of srv answer after delay: returns the list of the times of its calls."""
+    handler = srv.functions[func_code]
+    calls: list[float] = []
+
+    def slow(req: Any) -> bytes:
+        calls.append(time.monotonic())
+        time.sleep(delay)
+        return handler(req)
+
+    srv.functions[func_code] = slow
+    return calls
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='needs a pseudo-terminal (POSIX only)')
+def test_rtu2tcp_broadcast_does_not_block(server: tuple[ModbusServer, int]) -> None:
+    """A broadcast to a slow server doesn't block the serial line: the next frames are received on time, one by one."""
+    srv, tcp_port = server
+    srv.store.app.holding_registers.write(0, [0x1234])
+    slow_function(srv, 0x06, 0.5)
+    with rtu2tcp_gateway(tcp_port, allow_bcast=True) as (master_fd, _worker):
+        # a broadcast write, then (while the server writes it) a frame for another slave, then a read for the
+        # gateway: before, the 2 frames waited in the buffer of the line during the broadcast and were read as one
+        # frame, dropped (CRC error), the master got no answer
+        os.write(master_fd, rtu_frame(0, bytes.fromhex('0600020007')))
+        time.sleep(0.05)
+        os.write(master_fd, rtu_frame(31, bytes.fromhex('0300000001')))
+        time.sleep(0.05)
+        os.write(master_fd, rtu_frame(30, bytes.fromhex('0300020001')))
+        # the read is sent after the broadcast (the order of the bus): it sees its value
+        assert read_answer(master_fd, 3.0) == rtu_frame(30, bytes.fromhex('03020007'))
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='needs a pseudo-terminal (POSIX only)')
+def test_rtu2tcp_broadcast_backlog(server: tuple[ModbusServer, int], caplog: pytest.LogCaptureFixture) -> None:
+    """Broadcasts faster than the server: BROADCAST_BACKLOG wait for it (plus the one in progress), the next ones are
+    dropped (logged), never queued without limit."""
+    from pyModbusTCP.tools import rtu_to_tcp_gw
+    srv, tcp_port = server
+    calls = slow_function(srv, 0x06, 0.3)
+    backlog = rtu_to_tcp_gw.BROADCAST_BACKLOG
+    with caplog.at_level(logging.WARNING, logger='mbtcp-rtu2tcp'), \
+            rtu2tcp_gateway(tcp_port, allow_bcast=True) as (master_fd, _worker):
+        for n in range(backlog + 4):
+            os.write(master_fd, rtu_frame(0, bytes.fromhex('06%04x0001' % (10 + n))))
+            time.sleep(0.06)
+        time.sleep(0.3 * (backlog + 2))
+    written = srv.store.app.holding_registers.read(10, backlog + 4)
+    # the first one at once, then backlog waiting: in the order of the bus
+    assert written[:backlog + 1] == [1] * (backlog + 1)
+    assert sum(written) == len(calls) <= backlog + 2
+    assert any('Broadcast dropped' in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='needs a pseudo-terminal (POSIX only)')
+def test_rtu2tcp_late_response_dropped(server: tuple[ModbusServer, int], caplog: pytest.LogCaptureFixture) -> None:
+    """A response ready after the master has sent another frame is not written (it would collide on the bus)."""
+    srv, tcp_port = server
+    srv.store.app.holding_registers.write(0, [0x1234])
+    slow_function(srv, 0x03, 0.5)
+    with caplog.at_level(logging.WARNING, logger='mbtcp-rtu2tcp'), rtu2tcp_gateway(tcp_port) as (master_fd, _worker):
+        os.write(master_fd, rtu_frame(30, bytes.fromhex('0300000001')))
+        # the master gives up before the server answers, it talks to another slave
+        time.sleep(0.2)
+        os.write(master_fd, rtu_frame(31, bytes.fromhex('0300000001')))
+        assert read_answer(master_fd, 1.0) == b''
+        # the next request, the master waits for it: answered
+        os.write(master_fd, rtu_frame(30, bytes.fromhex('0300000001')))
+        assert read_answer(master_fd, 3.0) == rtu_frame(30, bytes.fromhex('03021234'))
+    assert any('Response dropped' in r.getMessage() for r in caplog.records)
+
+
 # --- common ---
 
 @pytest.mark.parametrize('command', ['server', 'client', 'tcp2rtu', 'rtu2tcp'])

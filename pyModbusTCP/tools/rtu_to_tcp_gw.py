@@ -36,6 +36,15 @@ HOW A REQUEST IS PROCESSED
    CRC16 at the end) and written on the serial line.
    A broadcast request is relayed to the server but never answered.
 
+The requests to the server are sent by a relay thread, one at a time and in
+the order of the bus: the gateway goes on listening to the serial line while
+a broadcast is sent to the server (the master doesn't wait for it, its next
+frames are received on time, never merged into one). Up to 4 broadcasts wait
+for the server, the next ones are dropped (logged). A request to the gateway
+waits for the broadcasts received before it, then for its own response.
+A response that comes after the master has sent another frame (its timeout
+has elapsed) is not written: it would collide with this frame on the bus.
+
 ERRORS SEEN BY THE RTU MASTER
 -----------------------------
 - The Modbus/TCP server answers with a Modbus exception: the same exception
@@ -94,10 +103,12 @@ See --help for all options.
 
 import argparse
 import logging
+import queue
 import struct
 import sys
 import time
-from threading import Event
+from dataclasses import dataclass, field
+from threading import Event, Thread
 
 from ._common import (
     SERIAL_MISSING_MSG,
@@ -150,6 +161,9 @@ IDLE_POLL_DELAY = 0.5
 # lower bound for the end-of-frame delay: USB-serial adapters add latency
 # (e.g. FTDI latency timer), so the theoretical 3.5 char time is too short
 MIN_EOF_DELAY = 0.02
+# max number of broadcasts waiting for the server (the next ones are dropped): a master that sends broadcasts faster
+# than the server answers never builds a long backlog, and a request to the gateway never waits behind it for long
+BROADCAST_BACKLOG = 4
 
 
 def hexdump(data: bytes) -> str:
@@ -250,6 +264,7 @@ class SlaveSerialWorkerModel:
         self._flush_pending = True
         # unexpected errors (a bug): one message per 10 s at most, a request flood can't flood the log
         self._error_log = LogThrottle(logger, level=logging.ERROR)
+        self._late_log = LogThrottle(logger)
 
     def handle_request(self) -> None:
         """Template method to be implemented by subclasses for custom request logic."""
@@ -311,6 +326,22 @@ class SlaveSerialWorkerModel:
                 rx_raw += rx_chunk
         return rx_raw
 
+    def _send_response(self) -> None:
+        """Write the response frame (if set) on the serial line, unless the master has not waited for it."""
+        if not self.response.is_set:
+            return
+        if self.serial_port.in_waiting:
+            # the master has sent another frame while the response was prepared (its timeout is shorter than the one
+            # of the server): written now, the response would collide with it on the bus, it is dropped
+            self._late_log.event('Response dropped, the master has sent another frame before it: %(count)d '
+                                 'response(s) (timeout of the master shorter than -t?), last %(frame)s',
+                                 frame=hexdump(self.response.raw))
+            return
+        self.serial_port.write(self.response.raw)
+        self.serial_port.flush()
+        # log sent items for debugging purposes
+        logger.debug('RTU Tx %s', hexdump(self.response.raw))
+
     def run(self) -> None:
         """Serial worker process loop (returns after stop() is called)."""
         while not self._stop.is_set():
@@ -338,12 +369,8 @@ class SlaveSerialWorkerModel:
                     continue
                 # relay PDU of request to modbus server
                 self.handle_request()
-                # if a response frame is set sent it
-                if self.response.is_set:
-                    self.serial_port.write(self.response.raw)
-                    self.serial_port.flush()
-                    # log sent items for debugging purposes
-                    logger.debug('RTU Tx %s', hexdump(self.response.raw))
+                # if a response frame is set, send it
+                self._send_response()
             except SERIAL_IO_ERRORS as e:
                 # typically the USB adapter was unplugged (errno 5, Input/output error).
                 # Never stop: close the port, it is reopened automatically
@@ -354,8 +381,20 @@ class SlaveSerialWorkerModel:
                 self._error_log.event('Unexpected error in serial worker: %(count)d error(s)', exc_info=True)
 
 
+@dataclass
+class _RelayJob:
+    """A PDU for the relay thread: done is set once result is known (None for a broadcast: nobody waits)."""
+    pdu: bytes
+    done: Event | None = None
+    result: tuple[bytes | None, int] = field(default=(None, EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND))
+
+
 class SerialModbusWorker(SlaveSerialWorkerModel):
-    """A specialized serial worker that maps RTU requests to a Modbus TCP client."""
+    """A specialized serial worker that maps RTU requests to a Modbus TCP client.
+
+    The Modbus/TCP client is used by a relay thread only, one request at a time, in the order of the bus: the serial
+    loop is never blocked by a broadcast (the master doesn't wait for it, its next frames must be received on time).
+    """
 
     def __init__(self, port: Serial, mbus_cli: ModbusClient, slave_addr: int = 1, allow_bcast: bool = False,
                  end_of_frame: float | None = None) -> None:
@@ -366,6 +405,64 @@ class SerialModbusWorker(SlaveSerialWorkerModel):
         self.mbus_cli = mbus_cli
         self.slave_addr = slave_addr
         self.allow_bcast = allow_bcast
+        # requests for the relay thread (None: stop), in the order of the bus; only the serial loop puts in it
+        self._jobs: queue.Queue[_RelayJob | None] = queue.Queue()
+        self._relay_thread: Thread | None = None
+        self._bcast_dropped_log = LogThrottle(logger)
+
+    def stop(self) -> None:
+        """Ask the worker loop and the relay thread to exit."""
+        super().stop()
+        self._jobs.put(None)
+
+    def run(self) -> None:
+        """Serial worker process loop (returns after stop() is called), with its relay thread."""
+        try:
+            super().run()
+        finally:
+            self._jobs.put(None)
+            if self._relay_thread is not None:
+                # the broadcasts still waiting are sent before the stop, each one ends within the timeout of the client
+                self._relay_thread.join((BROADCAST_BACKLOG + 1) * self.mbus_cli.timeout + 1.0)
+
+    def _relay_loop(self) -> None:
+        """The relay thread: send the queued PDUs to the server, one at a time."""
+        while True:
+            job = self._jobs.get()
+            if job is None:
+                return
+            try:
+                job.result = self._relay_to_server(job.pdu)
+            finally:
+                if job.done is not None:
+                    job.done.set()
+
+    def _submit(self, job: _RelayJob) -> None:
+        """Queue a job for the relay thread (started at the first one)."""
+        if self._relay_thread is None or not self._relay_thread.is_alive():
+            self._relay_thread = Thread(target=self._relay_loop, name='mbtcp-rtu2tcp relay', daemon=True)
+            self._relay_thread.start()
+        self._jobs.put(job)
+
+    def _relay_broadcast(self, pdu: bytes) -> None:
+        """Queue a broadcast for the server, don't wait for it (dropped if BROADCAST_BACKLOG are waiting)."""
+        # only this thread puts jobs: the size can only decrease between the test and the put
+        if self._jobs.qsize() >= BROADCAST_BACKLOG:
+            self._bcast_dropped_log.event('Broadcast dropped, the server is too slow: %(count)d broadcast(s) '
+                                          '(%(backlog)d waiting)', backlog=BROADCAST_BACKLOG)
+            return
+        self._submit(_RelayJob(pdu))
+
+    def _relay_and_wait(self, pdu: bytes) -> tuple[bytes | None, int]:
+        """Queue a request for the server (after the broadcasts received before it), wait for its result."""
+        job = _RelayJob(pdu, done=Event())
+        self._submit(job)
+        assert job.done is not None
+        # each request waiting before it ends within the timeout of the client: check the stop flag meanwhile
+        while not job.done.wait(IDLE_POLL_DELAY):
+            if self._stop.is_set():
+                return None, EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
+        return job.result
 
     def _relay_to_server(self, pdu: bytes) -> tuple[bytes | None, int]:
         """Send a PDU to the Modbus/TCP server.
@@ -394,13 +491,14 @@ class SerialModbusWorker(SlaveSerialWorkerModel):
         if req.slave_addr == 0:
             # broadcast frame
             if self.allow_bcast:
-                # if config allow it, process a broadcast request (=> process it, but don't respond)
-                self._relay_to_server(req.pdu)
+                # if config allow it, process a broadcast request (=> process it, but don't respond), without blocking
+                # the serial loop: the master doesn't wait, its next frames must be received on time
+                self._relay_broadcast(req.pdu)
             else:
                 logger.debug('Broadcast frame ignored (see --allow-broadcast)')
         elif req.slave_addr == self.slave_addr:
             # process unicast request
-            resp_pdu, exp_status = self._relay_to_server(req.pdu)
+            resp_pdu, exp_status = self._relay_and_wait(req.pdu)
             if resp_pdu:
                 # regular response from Modbus/TCP client
                 self.response.build(raw_pdu=resp_pdu, slave_addr=req.slave_addr)

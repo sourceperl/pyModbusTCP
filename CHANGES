@@ -88,6 +88,10 @@ Revision history for pyModbusTCP
     - server/tools: an unexpected error of user code (function handler, fallback, store wrapper, change listener)
       and of the gateways' safety nets is logged once, then once per 10 s at most with the number of errors and the
       last traceback: a client that triggers the same bug in a loop could fill the disk with tracebacks.
+    - tools: mbtcp-rtu2tcp no longer blocks the serial line while a broadcast is relayed to the server (the master
+      doesn't wait for it): its next frames were read as one, dropped (CRC error). The requests are sent by a relay
+      thread in the order of the bus, up to 4 broadcasts wait for the server (the next ones are dropped, logged), and a
+      response ready after the master has sent another frame is no longer written (it collided on the bus).
     - tools: mbtcp-client device-id -f csv: a text of the server that starts with =, +, - or @ gets a leading "'"
       (formula injection in a spreadsheet, CWE-1236).
     - utils: valid_host() edge cases (empty host, NUL and non-ASCII chars).
