@@ -23,6 +23,11 @@ Revision history for pyModbusTCP
       with extra bytes (not compliant with the Modbus specification) is refused.
     - client (since 0.4.0a2): the arguments of ModbusClient after auto_close are keyword-only, no_delay is renamed
       tcp_no_delay (argument and property).
+    - client: the arguments of the request methods have the same names everywhere: address, count, value, values
+      (read_coils(address, count), write_single_register(address, value), write_multiple_registers(address,
+      values)...) and write_address, write_values, read_address, read_count for write_read_multiple_registers().
+      A call with the old names as keyword arguments (bit_addr=, reg_nb=, regs_value=...) raises TypeError: give the
+      values by position, or with the new names. The error messages use the new names.
     - server: the typed shortcuts of the store (read_float32(), write_int32()...) take a byte_order (ByteOrder,
       default ABCD) instead of big_endian: big_endian=False is now ByteOrder.CDAB, BADC and DCBA are available.
       New shortcuts read/write_uint16() and read/write_int16() (1 register, no byte order), read/write_uint64() and

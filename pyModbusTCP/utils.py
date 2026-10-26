@@ -415,20 +415,20 @@ def _pack_bits(bits: Sequence[Any]) -> bytes:
     return int(digits, 2).to_bytes(byte_length(len(digits)), 'little') if digits else b''
 
 
-def _unpack_bits(data: bytes, bit_nb: int) -> list[bool]:
-    """Unpack the first bit_nb bits of bytes (modbus order: LSB first in each byte) as a list of bool.
+def _unpack_bits(data: bytes, count: int) -> list[bool]:
+    """Unpack the first count bits of bytes (modbus order: LSB first in each byte) as a list of bool.
 
     :param data: bytes with the bits (can be longer than needed)
     :type data: bytes
-    :param bit_nb: number of bits to unpack
-    :type bit_nb: int
-    :returns: list of bit_nb bool
+    :param count: number of bits to unpack
+    :type count: int
+    :returns: list of count bool
     :rtype: list
     """
     bits: list[bool] = []
-    for byte in data[:byte_length(bit_nb)]:
+    for byte in data[:byte_length(count)]:
         bits.extend(_BYTE_TO_BITS[byte])
-    return bits[:bit_nb]
+    return bits[:count]
 
 
 def _to_bool(value: Any, name: str) -> bool:

@@ -830,6 +830,44 @@ class TestConnectRetry(unittest.TestCase):
         self.assertEqual(len(requests), 1)
 
 
+class TestArgumentNames(unittest.TestCase):
+    """ The request methods name their arguments the same way: address, count, value(s) (C-14). """
+
+    def setUp(self) -> None:
+        self.c = ModbusClient()
+
+    def test_new_names(self) -> None:
+        """Keyword calls with the new names: checked before any network I/O (no server here, the check fails first)."""
+        calls: list[tuple[Any, dict[str, Any], str]] = [
+            (self.c.read_coils, {'address': 0, 'count': 0}, 'count'),
+            (self.c.read_discrete_inputs, {'address': -1, 'count': 1}, 'address'),
+            (self.c.read_holding_registers, {'address': 0, 'count': 126}, 'count'),
+            (self.c.read_input_registers, {'address': 70000}, 'address'),
+            (self.c.write_single_coil, {'address': -1, 'value': True}, 'address'),
+            (self.c.write_single_register, {'address': 0, 'value': 70000}, 'value'),
+            (self.c.write_multiple_coils, {'address': 0, 'values': []}, 'number of values'),
+            (self.c.write_multiple_registers, {'address': 0, 'values': [70000]}, 'values'),
+            (self.c.write_read_multiple_registers,
+             {'write_address': 0, 'write_values': [1], 'read_address': 0, 'read_count': 0}, 'read_count'),
+        ]
+        for method, kwargs, name in calls:
+            with self.subTest(method=method.__name__), self.assertRaisesRegex(ValueError, name):
+                method(**kwargs)
+
+    def test_old_names_refused(self) -> None:
+        old: list[tuple[Any, dict[str, Any]]] = [
+            (self.c.read_coils, {'bit_addr': 0, 'bit_nb': 1}),
+            (self.c.read_holding_registers, {'reg_addr': 0, 'reg_nb': 1}),
+            (self.c.write_single_register, {'reg_addr': 0, 'reg_value': 1}),
+            (self.c.write_multiple_coils, {'bits_addr': 0, 'bits_value': [True]}),
+            (self.c.write_multiple_registers, {'regs_addr': 0, 'regs_value': [1]}),
+            (self.c.write_read_multiple_registers, {'write_addr': 0, 'write_values': [1], 'read_addr': 0}),
+        ]
+        for method, kwargs in old:
+            with self.subTest(method=method.__name__), self.assertRaises(TypeError):
+                method(**kwargs)
+
+
 class TestConnectionClosedByServer(unittest.TestCase):
     """ auto_open: a connection closed by the server is reopened by the request itself, not by the next one. """
 
