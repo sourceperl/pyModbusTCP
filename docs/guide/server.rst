@@ -279,8 +279,11 @@ exception:
         (address,) = req.unpack('>H', 1, 3)             # a short request: "illegal data value"
         with req.transaction() as tx:                   # the store of the unit id, with the request context
             values = tx.read(Space.HOLDING_REGISTERS, address, 2)
-        return req.reply('I', sum(values))              # function code + a 32 bits unsigned int
+        return req.reply('>I', sum(values))             # function code + a 32 bits unsigned int
 
+- ``req.unpack()`` and ``req.reply()`` use the byte order prefix of their :mod:`struct` format (``'<HH'`` for the
+  little endian data of a private function...). Without prefix, a format is big endian, the byte order of Modbus
+  (not the native order of :mod:`struct`). The function code of ``reply()`` is a single byte, before the fields.
 - A standard function can be replaced, and called from the new handler (``STANDARD_FUNCTIONS[0x06](req)``).
 - ``del server.functions[code]`` removes a function ("illegal function" exception).
 - ``ModbusServer(functions={})`` starts without any function, ``fallback=handler`` handles the function codes without
@@ -303,7 +306,7 @@ exception:
           (address, value) = req.unpack('>HH', 1, 5)
           with req.transaction() as tx:
               tx.write(Space.HOLDING_REGISTERS, address, [value])
-          return req.reply('HH', address, value)
+          return req.reply('>HH', address, value)
 
   A store wrapped in :class:`~pyModbusTCP.server.ReadOnly` refuses every write of the clients instead, whatever the
   function (see `Access rules`_).

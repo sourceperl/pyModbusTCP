@@ -380,7 +380,7 @@ class ModbusServer:
 
             @server.function(0x41)
             def my_function(req: Request) -> bytes:
-                return req.reply('B', 42)
+                return req.reply('>B', 42)
 
         A handler takes a Request and returns the response PDU (bytes, function code first). It raises a
         ModbusException (like IllegalDataAddress) for an exception response. Delete server.functions[code] to remove

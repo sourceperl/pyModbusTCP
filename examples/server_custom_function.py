@@ -53,7 +53,7 @@ def server_status(req: Request) -> bytes:
     """Function 0x41: uptime (s) and requests served, 2 x uint32."""
     global served
     served += 1
-    return req.reply('II', int(time.monotonic() - START), served)
+    return req.reply('>II', int(time.monotonic() - START), served)
 
 
 def write_setpoint(req: Request) -> bytes:

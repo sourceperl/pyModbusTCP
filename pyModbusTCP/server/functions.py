@@ -71,8 +71,11 @@ class Request:
     def unpack(self, fmt: str, from_byte: int | None = None, to_byte: int | None = None) -> tuple[Any, ...]:
         """Decode a part of the PDU with struct.
 
+        :param fmt: struct format; its byte order prefix is used as is ('<' for little endian data...), a format
+            without prefix is big endian (the byte order of Modbus), not the native order of struct
         :raises PDUDecodeError: if this part is too short (the client gets an "illegal data value" exception)
         """
+        fmt = _with_byte_order(fmt)
         raw_section = self.pdu[from_byte:to_byte]
         try:
             return struct.unpack(fmt, raw_section)
@@ -82,16 +85,26 @@ class Request:
     def reply(self, fmt: str = '', *args: Any) -> bytes:
         """Build a response PDU: the function code of the request, then args packed with struct.
 
+        :param fmt: struct format of the fields after the function code; its byte order prefix is used as is ('<'
+            for little endian data...), a format without prefix is big endian (the byte order of Modbus), not the
+            native order of struct
         :raises DataFormatError: if a value doesn't fit its field (the client gets a "slave device failure")
         """
+        fmt = _with_byte_order(fmt)
         try:
-            return struct.pack('>B' + fmt.lstrip('<>=!@'), self.function_code, *args)
+            return bytes([self.function_code]) + struct.pack(fmt, *args)
         except struct.error as e:
             raise DataFormatError(f'unable to build the response PDU (fmt: {fmt}, values: {args}): {e}') from None
 
     def transaction(self) -> AbstractContextManager[Transaction]:
         """A transaction of the store, with the context of this request."""
         return self.store.transaction(self.ctx)
+
+
+def _with_byte_order(fmt: str) -> str:
+    """A struct format with a byte order: its own prefix if any ('<', '>', '!', '=', '@'), else big endian ('>', the
+    byte order of Modbus) instead of the native order of struct."""
+    return fmt if fmt[:1] in ('<', '>', '!', '=', '@') else '>' + fmt
 
 
 # a function handler: returns the response PDU, raises a ModbusException for an exception response
@@ -107,7 +120,7 @@ def read_bits(req: Request) -> bytes:
     with req.transaction() as tx:
         bits = tx.read(space, address, quantity)
     data = _pack_bits(bits)
-    return req.reply(f'B{len(data)}s', len(data), data)
+    return req.reply(f'>B{len(data)}s', len(data), data)
 
 
 def read_words(req: Request) -> bytes:
@@ -118,7 +131,7 @@ def read_words(req: Request) -> bytes:
     space = Space.HOLDING_REGISTERS if req.function_code == READ_HOLDING_REGISTERS else Space.INPUT_REGISTERS
     with req.transaction() as tx:
         words = tx.read(space, address, quantity)
-    return req.reply(f'B{quantity}H', quantity * 2, *words)
+    return req.reply(f'>B{quantity}H', quantity * 2, *words)
 
 
 def write_single_coil(req: Request) -> bytes:
@@ -128,7 +141,7 @@ def write_single_coil(req: Request) -> bytes:
         raise IllegalDataValue()
     with req.transaction() as tx:
         tx.write(Space.COILS, address, [value == 0xFF00])
-    return req.reply('HH', address, value)
+    return req.reply('>HH', address, value)
 
 
 def write_single_register(req: Request) -> bytes:
@@ -136,7 +149,7 @@ def write_single_register(req: Request) -> bytes:
     (address, value) = req.unpack('>HH', 1, 5)
     with req.transaction() as tx:
         tx.write(Space.HOLDING_REGISTERS, address, [value])
-    return req.reply('HH', address, value)
+    return req.reply('>HH', address, value)
 
 
 def write_multiple_coils(req: Request) -> bytes:
@@ -148,7 +161,7 @@ def write_multiple_coils(req: Request) -> bytes:
     bits = _unpack_bits(req.pdu[6:6 + byte_count], quantity)
     with req.transaction() as tx:
         tx.write(Space.COILS, address, bits)
-    return req.reply('HH', address, quantity)
+    return req.reply('>HH', address, quantity)
 
 
 def write_multiple_registers(req: Request) -> bytes:
@@ -159,7 +172,7 @@ def write_multiple_registers(req: Request) -> bytes:
     words = list(req.unpack(f'>{quantity}H', 6, 6 + byte_count))
     with req.transaction() as tx:
         tx.write(Space.HOLDING_REGISTERS, address, words)
-    return req.reply('HH', address, quantity)
+    return req.reply('>HH', address, quantity)
 
 
 def write_read_multiple_registers(req: Request) -> bytes:
@@ -176,7 +189,7 @@ def write_read_multiple_registers(req: Request) -> bytes:
     with req.transaction() as tx:
         tx.write(Space.HOLDING_REGISTERS, write_address, words)
         read_words_l = tx.read(Space.HOLDING_REGISTERS, read_address, read_quantity)
-    return req.reply(f'B{read_quantity}H', read_quantity * 2, *read_words_l)
+    return req.reply(f'>B{read_quantity}H', read_quantity * 2, *read_words_l)
 
 
 # read device identification, stream access: ReadDevId code -> (first, last) object id of its category
@@ -222,7 +235,7 @@ def encapsulated_interface_transport(req: Request) -> bytes:
             break
         data += block
         number_of_objs += 1
-    return req.reply('BBBBBB', mei_type, device_id_code, conformity_level, more_follow, next_obj_id,
+    return req.reply('>BBBBBB', mei_type, device_id_code, conformity_level, more_follow, next_obj_id,
                      number_of_objs) + data
 
 

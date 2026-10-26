@@ -22,6 +22,7 @@ from pyModbusTCP.server import (
     MemoryStore,
     ModbusServer,
     Request,
+    RequestContext,
     Space,
 )
 from pyModbusTCP.server._common import LogThrottle
@@ -890,7 +891,7 @@ class TestModbusServerSpecFrames(unittest.TestCase):
     def test_handler_bad_response(self) -> None:
         """A function handler that returns no response, or a response that can't be encoded: SLAVE DEVICE FAILURE."""
         self.server.functions[0x41] = lambda req: b''
-        self.server.functions[0x42] = lambda req: req.reply('B', 300)
+        self.server.functions[0x42] = lambda req: req.reply('>B', 300)
         self.server.functions[0x43] = lambda req: cast(bytes, None)
         for pdu in ('41 00', '42 00', '43 00'):
             with self.subTest(pdu), self.assertLogs('pyModbusTCP.server', level='ERROR'):
@@ -1234,7 +1235,7 @@ class TestReadOnlyOption(unittest.TestCase):
     def test_custom_function_not_refused(self) -> None:
         """A custom function of the server is not a fallback: it decides what read_only means for it."""
         server = self._start_server(read_only=True)
-        server.function(0x41)(lambda req: req.reply('B', 7))
+        server.function(0x41)(lambda req: req.reply('>B', 7))
         self.assertEqual(self.exchange('41'), '4107')
 
     def test_with_allowed_hosts(self) -> None:
@@ -1243,11 +1244,39 @@ class TestReadOnlyOption(unittest.TestCase):
         self.assertEqual(self.exchange('03 0000 0001'), '03020000')
 
 
+class TestRequestByteOrder(unittest.TestCase):
+    """ Request.unpack() and Request.reply(): the byte order of the format, big endian without prefix. """
+
+    def setUp(self) -> None:
+        self.req = Request(pdu=bytes.fromhex('41 0102 0304'), ctx=RequestContext(function_code=0x41),
+                           store=MemoryStore(0))
+
+    def test_big_endian(self) -> None:
+        for prefix in ('', '>', '!'):
+            with self.subTest(prefix=prefix):
+                self.assertEqual(self.req.reply(prefix + 'H', 0x0102), bytes.fromhex('41 0102'))
+                self.assertEqual(self.req.unpack(prefix + 'HH', 1, 5), (0x0102, 0x0304))
+        # no field: the function code only
+        self.assertEqual(self.req.reply(), b'\x41')
+
+    def test_little_endian(self) -> None:
+        """'<' is used as is (it was removed in silence by reply(): '<H' gave a big endian value)."""
+        self.assertEqual(self.req.reply('<H', 0x0102), bytes.fromhex('41 0201'))
+        self.assertEqual(self.req.unpack('<HH', 1, 5), (0x0201, 0x0403))
+        # the function code is never part of the format: a single byte, whatever the order of the fields
+        self.assertEqual(self.req.reply('<BH', 1, 0x0102), bytes.fromhex('41 01 0201'))
+
+    def test_native_order_on_request(self) -> None:
+        """'=' and '@' (the native order of the host) only when asked for: never the default of unpack()."""
+        self.assertEqual(self.req.reply('=H', 0x0102), b'\x41' + struct.pack('=H', 0x0102))
+        self.assertEqual(self.req.unpack('@H', 1, 3), struct.unpack('@H', bytes.fromhex('0102')))
+
+
 def test_response_pdu_too_long() -> None:
     """A handler that returns a PDU over 253 bytes: "slave device failure", never an invalid frame."""
     server = ModbusServer(host='127.0.0.1', port=0, no_block=True)
-    server.function(0x41)(lambda req: req.reply('253s', b'x' * 253))
-    server.function(0x42)(lambda req: req.reply('252s', b'x' * 252))
+    server.function(0x41)(lambda req: req.reply('>253s', b'x' * 253))
+    server.function(0x42)(lambda req: req.reply('>252s', b'x' * 252))
     _, port = server.start()
     try:
         c = ModbusClient(host='127.0.0.1', port=port, timeout=2.0)
