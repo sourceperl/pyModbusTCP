@@ -266,7 +266,7 @@ The server and the TCP to RTU gateway are designed to be safe by default:
   for the write functions);
 - ``--max-connections-per-host`` (default 16) keeps a single client host from taking every connection, and the
   TCP to RTU gateway shares the serial line between the client hosts: their requests are served in turn (round
-  robin), with at most 2 pending requests per host;
+  robin), with at most 2 requests per host waiting for the line or in progress;
 - the TCP to RTU gateway never writes a request with an invalid function code (0, or 0x80 to 0xFF) on the bus;
 - the delays (``-t``, ``-e``, ``-i``...) must be greater than 0 and at most one day, the serial rate greater than 0.
 

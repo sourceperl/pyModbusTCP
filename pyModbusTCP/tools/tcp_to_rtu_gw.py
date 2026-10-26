@@ -65,9 +65,9 @@ ERRORS SEEN BY THE TCP CLIENT
   248 to 255).
 - No valid answer from the slave before the timeout (-t): Modbus exception
   0x0B "Gateway Target Device Failed To Respond".
-- More than 16 requests waiting, more than 2 requests waiting from the same
-  client host, or serial worker unavailable: Modbus exception 0x0A "Gateway
-  Path Unavailable".
+- More than 16 requests waiting, more than 2 requests of the same client host
+  waiting or in progress, or serial worker unavailable: Modbus exception 0x0A
+  "Gateway Path Unavailable".
 - A broadcast while --broadcast-buffer broadcasts already wait for the bus:
   Modbus exception 0x06 "Slave Device Busy".
 
@@ -116,8 +116,8 @@ monopolize it, nor a few of them:
 - the waiting requests are served in turn by client host (an IPv4 address, or
   a /64 network for IPv6, see --ipv6-host-prefix, round robin): a request waits
   for at most one request of each other host, however many requests they send;
-- a client host has at most 2 requests waiting for the serial line, its next
-  ones get exception 0x0A at once;
+- a client host has at most 2 requests waiting for the serial line or in
+  progress on it, its next ones get exception 0x0A at once;
 - --max-connections-per-host limits its number of TCP connections (default
   16), --max-connections the total (default 64).
 With N hosts that send requests at the same time, each one gets 1/N of the
