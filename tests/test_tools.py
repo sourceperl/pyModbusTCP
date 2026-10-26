@@ -164,6 +164,11 @@ def test_client_coils(server: tuple[ModbusServer, int], capsys: pytest.CaptureFi
     assert srv.store.app.coils.read(5, 4) == [True, True, False, True]
     assert run_client(capsys, base + ['read-coils', '5', '-n', '4'])[1].split() == \
         ['5', '1', '6', '1', '7', '0', '8', '1']
+    # yes/no too, any case; the help and the error list every accepted word
+    assert run_client(capsys, base + ['write-coils', '5', 'NO', 'Yes'])[0] == 0
+    assert srv.store.app.coils.read(5, 2) == [False, True]
+    status, _, err = run_client(capsys, base + ['write-coil', '0', 'maybe'])
+    assert status == 2 and '1/0, on/off, true/false or yes/no' in err
 
 
 def test_client_device_id_is_sanitized(server: tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:

@@ -22,7 +22,7 @@ $ mbtcp-client -H 192.168.1.10 write-registers 0 3.14 -T float32 -b CDAB   # a f
 $ mbtcp-client -H 192.168.1.10 device-id
 
 Values accept the decimal, hexadecimal (0x...), octal (0o...) and binary (0b...) notations. Coil values accept
-1/0, on/off and true/false.
+1/0, on/off, true/false and yes/no (any case).
 
 VALUES ON SEVERAL REGISTERS (-T/--type, -b/--byte-order)
 --------------------------------------------------------
@@ -88,6 +88,9 @@ logger = logging.getLogger('mbtcp-client')
 
 _TRUE_WORDS = ('1', 'on', 'true', 'yes')
 _FALSE_WORDS = ('0', 'off', 'false', 'no')
+# the coil values for the help and the errors, from the lists above: "1/0, on/off, true/false or yes/no"
+_COIL_WORDS_TXT = ', '.join(f'{t}/{f}' for t, f in zip(_TRUE_WORDS[:-1], _FALSE_WORDS[:-1])) + \
+    f' or {_TRUE_WORDS[-1]}/{_FALSE_WORDS[-1]}'
 
 FORMATS = ('auto', 'table', 'plain', 'csv', 'json')
 
@@ -132,7 +135,7 @@ def bool_value(value: str) -> bool:
         return True
     if value.lower() in _FALSE_WORDS:
         return False
-    raise argparse.ArgumentTypeError(f'{value!r} is not a coil value (use 1/0, on/off or true/false)')
+    raise argparse.ArgumentTypeError(f'{value!r} is not a coil value (use {_COIL_WORDS_TXT})')
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -189,11 +192,11 @@ def build_parser() -> argparse.ArgumentParser:
     txt = 'write a single coil (function 0x05)'
     p = sub.add_parser('write-coil', help=txt, description=txt)
     p.add_argument('address', type=int_value, help='coil address (0 to 65535)')
-    p.add_argument('value', type=bool_value, help='1/0, on/off or true/false')
+    p.add_argument('value', type=bool_value, help=_COIL_WORDS_TXT)
     txt = 'write multiple coils (function 0x0F)'
     p = sub.add_parser('write-coils', help=txt, description=txt)
     p.add_argument('address', type=int_value, help='first coil address (0 to 65535)')
-    p.add_argument('values', type=bool_value, nargs='+', help='1/0, on/off or true/false (1 to 1968 values)')
+    p.add_argument('values', type=bool_value, nargs='+', help=f'{_COIL_WORDS_TXT} (1 to 1968 values)')
     txt = 'write a single holding register (function 0x06)'
     p = sub.add_parser('write-register', help=txt, description=txt)
     p.add_argument('address', type=int_value, help='register address (0 to 65535)')
