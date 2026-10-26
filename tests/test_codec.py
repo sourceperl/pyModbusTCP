@@ -147,3 +147,19 @@ def test_byte_order64_rules() -> None:
         with pytest.raises(ValueError, match='ByteOrder64 is for a 64 bits type'):
             Codec(data_type, ByteOrder64.CDABGHEF)
     assert Codec(DataType.FLOAT64, ByteOrder64.CDABGHEF).byte_order is ByteOrder64.CDABGHEF
+
+
+def test_store_byte_order64() -> None:
+    """The 64 bits shortcuts of the store take a ByteOrder64 (typed and documented), the 32 bits ones refuse it."""
+    regs = MemoryStore().app.holding_registers
+    regs.write_uint64(0, 0x0102030405060708, ByteOrder64.CDABGHEF)
+    assert regs.read(0, 4) == [0x0304, 0x0102, 0x0708, 0x0506]
+    assert regs.read_uint64(0, ByteOrder64.CDABGHEF) == 0x0102030405060708
+    regs.write_int64(4, -2, ByteOrder64.EFGHABCD)
+    assert regs.read_int64(4, ByteOrder64.EFGHABCD) == -2
+    regs.write_float64(8, 1.5, ByteOrder64.HGFEDCBA)
+    assert regs.read_float64(8, ByteOrder64.HGFEDCBA) == regs.read_float64(8, ByteOrder.DCBA) == 1.5
+    # a 32 bits type has no ByteOrder64: refused, nothing written
+    with pytest.raises(ValueError, match='ByteOrder64 is for a 64 bits type'):
+        regs.write_uint32(12, 1, ByteOrder64.CDABGHEF)  # type: ignore[arg-type]
+    assert regs.read(12, 2) == [0, 0]

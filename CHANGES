@@ -55,7 +55,8 @@ Revision history for pyModbusTCP
       Guard), one store per unit id, read_only, allowed_hosts (None: every host, []: no host).
     - codec: Codec(DataType, ByteOrder) converts 16/32/64 bits integers and IEEE floats to registers and back, in
       the ABCD, CDAB, BADC or DCBA byte order, for the client and the server store (read_values/write_values).
-      ByteOrder64 gives the 8 orders of a 64 bits value (like CDABGHEF), for a Codec only (rare devices).
+      ByteOrder64 gives the 8 orders of a 64 bits value (like CDABGHEF), for a Codec and the 64 bits shortcuts of
+      the store (rare devices).
     - client: context manager, TCP_NODELAY (tcp_no_delay), timeout for the whole request.
     - client: broadcast=True on the write functions (and custom_request()) sends the request to the unit id 0
       (broadcast of a TCP to RTU gateway) without waiting for a reply; a late reply of the gateway is ignored.

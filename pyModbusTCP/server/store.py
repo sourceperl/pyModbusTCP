@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, NamedTuple
 
-from ..codec import ByteOrder, Codec, DataType, Number
+from ..codec import ByteOrder, ByteOrder64, Codec, DataType, Number
 from ..utils import _to_bool_list, _to_int_list
 from ._common import LogThrottle, logger
 from .errors import IllegalDataAddress, SlaveDeviceFailure
@@ -484,7 +484,8 @@ class RegistersAccess(SpaceAccess):
     read_values() and write_values() take a :class:`~pyModbusTCP.codec.Codec` (any type and byte order). The
     shortcuts have one method per type: read_uint16(), write_int16()... on 1 register, read_uint32(),
     write_float64()... on 2 or 4 registers, with a :class:`~pyModbusTCP.codec.ByteOrder` (default ``ABCD``: the first
-    register holds the most significant word).
+    register holds the most significant word). The 64 bits shortcuts also take a
+    :class:`~pyModbusTCP.codec.ByteOrder64`, for the rare orders of 8 bytes; the 32 bits ones refuse it (ValueError).
     """
 
     def read_values(self, address: int, codec: Codec, count: int = 1) -> list[Number]:
@@ -542,27 +543,27 @@ class RegistersAccess(SpaceAccess):
         """Write an IEEE 754 single precision float on 2 registers."""
         self.write_values(address, [value], Codec(DataType.FLOAT32, byte_order))
 
-    def read_uint64(self, address: int, byte_order: ByteOrder = ByteOrder.ABCD) -> int:
+    def read_uint64(self, address: int, byte_order: ByteOrder | ByteOrder64 = ByteOrder.ABCD) -> int:
         """Read an unsigned 64 bits int on 4 registers."""
         return int(self.read_values(address, Codec(DataType.UINT64, byte_order))[0])
 
-    def write_uint64(self, address: int, value: int, byte_order: ByteOrder = ByteOrder.ABCD) -> None:
+    def write_uint64(self, address: int, value: int, byte_order: ByteOrder | ByteOrder64 = ByteOrder.ABCD) -> None:
         """Write an unsigned 64 bits int on 4 registers (ValueError out of 0 to 2**64 - 1)."""
         self.write_values(address, [value], Codec(DataType.UINT64, byte_order))
 
-    def read_int64(self, address: int, byte_order: ByteOrder = ByteOrder.ABCD) -> int:
+    def read_int64(self, address: int, byte_order: ByteOrder | ByteOrder64 = ByteOrder.ABCD) -> int:
         """Read a signed 64 bits int (2's complement) on 4 registers."""
         return int(self.read_values(address, Codec(DataType.INT64, byte_order))[0])
 
-    def write_int64(self, address: int, value: int, byte_order: ByteOrder = ByteOrder.ABCD) -> None:
+    def write_int64(self, address: int, value: int, byte_order: ByteOrder | ByteOrder64 = ByteOrder.ABCD) -> None:
         """Write a signed 64 bits int (2's complement) on 4 registers (ValueError out of -2**63 to 2**63 - 1)."""
         self.write_values(address, [value], Codec(DataType.INT64, byte_order))
 
-    def read_float64(self, address: int, byte_order: ByteOrder = ByteOrder.ABCD) -> float:
+    def read_float64(self, address: int, byte_order: ByteOrder | ByteOrder64 = ByteOrder.ABCD) -> float:
         """Read an IEEE 754 double precision float on 4 registers."""
         return float(self.read_values(address, Codec(DataType.FLOAT64, byte_order))[0])
 
-    def write_float64(self, address: int, value: float, byte_order: ByteOrder = ByteOrder.ABCD) -> None:
+    def write_float64(self, address: int, value: float, byte_order: ByteOrder | ByteOrder64 = ByteOrder.ABCD) -> None:
         """Write an IEEE 754 double precision float on 4 registers."""
         self.write_values(address, [value], Codec(DataType.FLOAT64, byte_order))
 

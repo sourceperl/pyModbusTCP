@@ -72,8 +72,8 @@ ByteOrder64         Registers                 Like
     energy = Codec(DataType.UINT64, ByteOrder64.CDABGHEF)
     energy.encode([0x0102030405060708])           # [0x0304, 0x0102, 0x0708, 0x0506]
 
-A ``ByteOrder64`` is only for a ``Codec``: the shortcuts of the server store and ``mbtcp-client`` take a
-``ByteOrder`` (use ``read_values()`` and ``write_values()`` with the codec in the store).
+The 64 bits shortcuts of the server store take a ``ByteOrder64`` too (``regs.read_uint64(0, ByteOrder64.CDABGHEF)``),
+the 32 bits ones refuse it (``ValueError``). ``mbtcp-client`` only takes a ``ByteOrder``.
 
 Read and write floats with a client:
 

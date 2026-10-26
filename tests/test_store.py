@@ -343,9 +343,9 @@ class TestTypedAccess(unittest.TestCase):
         self.assertEqual(regs.read(6, 2), [0x1234, 0x5678])
         regs.write_float64(8, 1e300)
         self.assertEqual(regs.read_float64(8), 1e300)
-        for method, value in ((regs.write_int32, 2 ** 31), (regs.write_uint32, -1)):
+        for method32, value in ((regs.write_int32, 2 ** 31), (regs.write_uint32, -1)):
             with self.assertRaises(ValueError):
-                method(0, value)
+                method32(0, value)
         with self.assertRaises(IllegalDataAddress):
             regs.read_float32(15)
 
