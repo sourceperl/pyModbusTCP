@@ -73,6 +73,16 @@ def test_errors() -> None:
     for registers in ([0x0001], [0x10000, 0], [-1, 0]):
         with pytest.raises(ValueError):
             Codec(DataType.UINT32).decode(registers)
+    # a register out of range is refused with every byte order: a byte swap (BADC, DCBA) kept its 16 low bits only,
+    # 0x12345 was decoded as 0x4523; and never a bool or a float
+    orders: list[ByteOrder | ByteOrder64] = [*ByteOrder, *ByteOrder64]
+    for order in orders:
+        codec = Codec(DataType.UINT64 if isinstance(order, ByteOrder64) else DataType.UINT32, order)
+        for bad in (0x12345, -1, True, 1.0):
+            bad_registers: list[Any] = [bad] + [0] * (codec.words - 1)
+            with pytest.raises(ValueError, match='between 0 and 65535'):
+                codec.decode(bad_registers)
+        assert codec.decode([0xFFFF] * codec.words) == [2 ** (16 * codec.words) - 1]
 
 
 def test_text() -> None:

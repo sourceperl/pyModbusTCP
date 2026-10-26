@@ -91,6 +91,8 @@ Revision history for pyModbusTCP
     - server: Request.reply() and Request.unpack() use the byte order prefix of their format ('<HH' for little endian
       data), and a format without prefix is big endian for both: reply() removed the prefix in silence ('<H' gave a
       big endian value), unpack() without prefix used the native order of the host (little endian on most hosts).
+    - codec: Codec.decode() refuses a register out of 0 to 65535 (or a bool, a float) with every byte order: with a
+      byte swap (BADC, DCBA), only its 16 low bits were kept (0x12345 was decoded as 0x4523).
     - server: a handler response of less than 2 bytes (like req.reply() without field: the function code alone) or of
       another function is no longer sent, the client gets a "slave device failure": the client of pyModbusTCP
       refused it ("socket recv error").

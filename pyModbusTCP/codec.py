@@ -195,17 +195,18 @@ class Codec:
 
         :param registers: register values (0 to 65535), :attr:`words` per value
         :returns: the values (int, or float for a float type)
-        :raises ValueError: if the number of registers is not a multiple of :attr:`words`, or for a register out of
-            0 to 65535
+        :raises ValueError: if the number of registers is not a multiple of :attr:`words`, or for a register that is
+            not an int between 0 and 65535
         """
         words = self.words
         if len(registers) % words:
             raise ValueError(f'{len(registers)} registers: a {self.data_type.value} value takes {words} registers')
-        try:
-            raw = b''.join(r.to_bytes(2, 'big') for i in range(0, len(registers), words)
-                           for r in self._reorder(registers[i:i + words]))
-        except (OverflowError, AttributeError, TypeError):
-            raise ValueError('a register value must be an int between 0 and 65535') from None
+        # checked before the reorder: a byte swap (BADC, DCBA) keeps the 16 low bits only, 0x12345 would pass as 0x4523
+        for r in registers:
+            if isinstance(r, bool) or not isinstance(r, int) or not 0 <= r <= 0xFFFF:
+                raise ValueError(f'a register value must be an int between 0 and 65535, not {r!r}')
+        raw = b''.join(r.to_bytes(2, 'big') for i in range(0, len(registers), words)
+                       for r in self._reorder(registers[i:i + words]))
         return [v[0] for v in struct.iter_unpack(self._fmt, raw)]
 
     def encode(self, values: Sequence[Number]) -> list[int]:
