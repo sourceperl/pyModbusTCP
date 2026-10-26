@@ -272,7 +272,8 @@ class ModbusRequestHandler(BaseRequestHandler):
         :param request_timeout: if set, the deadline is replaced by "now + request_timeout" as soon as the first
             data is received (used to wait for a new request, without limit or with an idle deadline, then limit
             the time taken to receive it)
-        :raises NetworkError: on deadline, on connection closed or if the main server is stopped
+        :raises NetworkError: on deadline, or on connection closed (by the client, or by stop(): the sessions are
+            shut down, their recv() returns an end of stream)
         """
         data = b''
         sock_timeout_changed = False
@@ -286,7 +287,7 @@ class ModbusRequestHandler(BaseRequestHandler):
                         sock_timeout_changed = True
                     data += data_chunk
                 except TimeoutError:
-                    # just redo main server run test, deadline test and recv operations on timeout
+                    # socket timeout (at most _SOCKET_TIMEOUT): check the deadline again, then recv again
                     pass
         finally:
             # restore the default timeout used by the other socket operations
@@ -297,8 +298,9 @@ class ModbusRequestHandler(BaseRequestHandler):
         return data
 
     def setup(self) -> None:
-        # set a socket timeout of 1s on blocking operations (like send/recv)
-        # this avoids hang thread deletion when main server exit (see _recv_all method)
+        # a socket timeout of _SOCKET_TIMEOUT on blocking operations (like send/recv): a recv() without data returns
+        # at least once per second, _recv_all() checks its deadline then (idle or request timeout); stop() ends a
+        # session waiting in recv() by a shutdown of its socket
         self.request.settimeout(self._SOCKET_TIMEOUT)
 
     def handle(self) -> None:

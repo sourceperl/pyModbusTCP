@@ -64,7 +64,7 @@ def generate_frame(config: FuzzerConfig) -> bytearray:
     # Modbus TCP MBAP header structure (7 bytes):
     # Bytes 0-1: Transaction ID
     # Bytes 2-3: Protocol ID (should be 0x0000 for Modbus)
-    # Bytes 4-5: Length field (payload size, max 252)
+    # Bytes 4-5: Length field (unit id + PDU: 2 to 254 bytes)
     # Byte 6: Unit ID
 
     if len(frame) >= 7:

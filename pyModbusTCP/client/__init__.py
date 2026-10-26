@@ -11,7 +11,6 @@ The client is split in modules, but everything is imported from here (``from pyM
 """
 
 from ._common import logger
-from ._functions import _decode_regs  # noqa: F401 (kept for compatibility: private helper used by tests)
 from .device_id import DeviceIdentificationResponse
 from .modbus_client import ModbusClient
 
