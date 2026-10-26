@@ -29,9 +29,7 @@ $ mbtcp-server -p 502                                # needs the CAP_NET_BIND_SE
 
 import argparse
 import logging
-import signal
 import sys
-from types import FrameType
 
 from ..server import ChangeEvent, MemoryStore, ModbusServer, Space
 from ._common import (
@@ -42,6 +40,7 @@ from ._common import (
     is_permission_error,
     positive_float,
     setup_logging,
+    stop_on_sigterm,
     tcp_port,
 )
 
@@ -86,25 +85,23 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def serve(server: ModbusServer, args: argparse.Namespace) -> int:
-    """Run the server until Ctrl-C or SIGTERM, return the exit status."""
+    """Run the server until Ctrl-C or SIGTERM, return the exit status.
 
-    # SIGTERM (systemd, docker stop, kill...): stop the server cleanly, like Ctrl-C
-    def on_sigterm(_signum: int, _frame: FrameType | None) -> None:
-        logger.info('SIGTERM received, shutting down')
-        server.stop()
-
-    signal.signal(signal.SIGTERM, on_sigterm)
-    try:
-        # blocking call, returns when the server is stopped
-        server.start()
-    except ModbusServer.NetworkError as e:
-        logger.critical('Unable to listen on %s port %d: %s', args.host, args.port, e)
-        if is_permission_error(e) and args.port < 1024:
-            logger.critical('Port %d is privileged: %s', args.port, PORT_502_HELP)
-        return 2
-    except KeyboardInterrupt:
-        logger.info('Interrupted, shutting down')
-        server.stop()
+    SIGTERM (systemd, docker stop, kill...) stops the server cleanly, like Ctrl-C, like for the gateways: its previous
+    handler is restored on return, and serve() can run in another thread than the main one (no handler set there).
+    """
+    with stop_on_sigterm(server.stop, logger):
+        try:
+            # blocking call, returns when the server is stopped
+            server.start()
+        except ModbusServer.NetworkError as e:
+            logger.critical('Unable to listen on %s port %d: %s', args.host, args.port, e)
+            if is_permission_error(e) and args.port < 1024:
+                logger.critical('Port %d is privileged: %s', args.port, PORT_502_HELP)
+            return 2
+        except KeyboardInterrupt:
+            logger.info('Interrupted, shutting down')
+            server.stop()
     return 0
 
 

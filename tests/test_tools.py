@@ -323,6 +323,35 @@ def test_server_command() -> None:
         assert 'Read-only mode' in out
 
 
+def test_server_serve_sigterm_handler() -> None:
+    """serve() sets its SIGTERM handler like the gateways (stop_on_sigterm): restored on return, and none outside
+    the main thread (signal.signal() raised ValueError there, the server never started)."""
+    from pyModbusTCP.tools import server as server_tool
+    args = server_tool.build_parser().parse_args([])
+    previous = signal.getsignal(signal.SIGTERM)
+
+    def stop_when_running(srv: ModbusServer) -> None:
+        deadline = time.monotonic() + 5.0
+        while not srv.is_running and time.monotonic() < deadline:
+            time.sleep(0.01)
+        srv.stop()
+
+    def run(srv: ModbusServer) -> int:
+        threading.Thread(target=stop_when_running, args=(srv,), daemon=True).start()
+        return server_tool.serve(srv, args)
+
+    # in the main thread: the handler of serve() while it runs, the previous one after
+    assert run(ModbusServer('127.0.0.1', 0)) == 0
+    assert signal.getsignal(signal.SIGTERM) == previous
+    # in another thread: no handler set, no error
+    status: list[int] = []
+    thread = threading.Thread(target=lambda: status.append(run(ModbusServer('127.0.0.1', 0))))
+    thread.start()
+    thread.join(10.0)
+    assert status == [0]
+    assert signal.getsignal(signal.SIGTERM) == previous
+
+
 def test_server_link_local_allow() -> None:
     """-A fe80::/10 is refused (an allow list can't tell the interface of a client), with the way to do it."""
     proc = subprocess.run([sys.executable, '-m', 'pyModbusTCP.tools.server', '-A', 'fe80::/10'], check=False,
