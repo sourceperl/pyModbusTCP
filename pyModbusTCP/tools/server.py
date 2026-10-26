@@ -39,6 +39,7 @@ from ._common import (
     ip_or_network,
     is_permission_error,
     positive_float,
+    positive_int,
     setup_logging,
     stop_on_sigterm,
     tcp_port,
@@ -70,9 +71,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help='allowed client IP address or network (like 10.0.0.0/24), repeatable '
                              '(default: every client)')
     parser.add_argument('--read-only', action='store_true', help='refuse every write request')
-    parser.add_argument('--max-connections', type=int, default=64,
+    parser.add_argument('--max-connections', type=positive_int, default=64,
                         help='max number of simultaneous clients (default: 64)')
-    parser.add_argument('--max-connections-per-host', type=int, default=16,
+    parser.add_argument('--max-connections-per-host', type=positive_int, default=16,
                         help='max number of simultaneous connections of a client host (default: 16)')
     add_ipv6_host_prefix_arg(parser)
     parser.add_argument('--idle-timeout', type=positive_float, default=300.0,

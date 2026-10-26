@@ -82,7 +82,7 @@ from typing import TextIO
 from ..client import ModbusClient
 from ..codec import ByteOrder, Codec, DataType
 from ..constants import MODBUS_PORT
-from ._common import add_version_arg, positive_float, tcp_port
+from ._common import add_version_arg, positive_float, tcp_port, unit_id
 
 logger = logging.getLogger('mbtcp-client')
 
@@ -142,7 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('-H', '--host', default='localhost', help='server host (default: localhost)')
     parser.add_argument('-p', '--port', type=tcp_port, default=MODBUS_PORT,
                         help=f'server TCP port (default: {MODBUS_PORT})')
-    parser.add_argument('-u', '--unit-id', type=int_value, default=1, help='unit id (default: 1)')
+    parser.add_argument('-u', '--unit-id', type=unit_id, default=1, help='unit id, 0 to 255 (default: 1)')
     parser.add_argument('-t', '--timeout', type=positive_float, default=5.0,
                         help='request timeout in s (default: 5.0)')
     parser.add_argument('-d', '--debug', action='store_true', help='debug mode (dump every frame)')
@@ -239,7 +239,7 @@ def build_parser() -> argparse.ArgumentParser:
     # device identification
     txt = 'read device identification (function 0x2B/0x0E)'
     p = sub.add_parser('device-id', help=txt, description=txt, parents=[output])
-    p.add_argument('-c', '--code', type=int, choices=(1, 2, 3, 4), default=1,
+    p.add_argument('-c', '--code', type=int_value, choices=(1, 2, 3, 4), default=1,
                    help='1 basic, 2 regular, 3 extended (stream access), 4 one object (default: 1)')
     p.add_argument('-o', '--object-id', type=int_value, default=0, help='first (or only) object id (default: 0)')
     return parser

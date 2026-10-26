@@ -97,6 +97,17 @@ def positive_int(value: str) -> int:
     return i_value
 
 
+def unit_id(value: str) -> int:
+    """argparse type: a Modbus unit id, 0 to 255, in any Python notation (1, 0x01)."""
+    try:
+        i_value = int(value, 0)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f'{value!r} is not an integer') from None
+    if not 0 <= i_value <= 255:
+        raise argparse.ArgumentTypeError('unit id must be between 0 and 255')
+    return i_value
+
+
 def ipv6_host_prefix(value: str) -> int:
     """argparse type: the prefix length of the IPv6 network counted as one client host (1 to 128)."""
     try:

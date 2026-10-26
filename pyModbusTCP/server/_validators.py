@@ -139,10 +139,15 @@ def validate_ipv6_host_prefix(prefix: int) -> int:
     return prefix
 
 
+def validate_bool(value: bool, name: str) -> bool:
+    """A flag: a bool only (not 0/1, a string or None, that would be taken for True or False in silence)."""
+    if not isinstance(value, bool):
+        raise TypeError(f'{name} must be a bool')
+    return value
+
+
 def validate_read_only(read_only: bool) -> bool:
-    if not isinstance(read_only, bool):
-        raise TypeError('read_only must be a bool')
-    return read_only
+    return validate_bool(read_only, 'read_only')
 
 
 # IPv4 clients of a dual-stack IPv6 socket (::ffff:a.b.c.d), seen as IPv4 by the server (see client_ip())

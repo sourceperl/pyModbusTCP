@@ -1312,6 +1312,19 @@ def test_response_pdu_refused() -> None:
         server.stop()
 
 
+def test_flag_arguments() -> None:
+    """no_block, ipv6 and read_only are bools only: 0/1, a string or None were taken for True or False in silence."""
+    for name in ('no_block', 'ipv6', 'read_only'):
+        for value in (1, 0, 'false', None):
+            try:
+                kwargs: dict[str, Any] = {name: value}
+                ModbusServer('127.0.0.1', 0, **kwargs)
+            except TypeError as e:
+                assert name in str(e)
+            else:
+                raise AssertionError(f'{name}={value!r} accepted')
+
+
 def test_function_code_tuples() -> None:
     """The tuples of constants describe the functions of the server (docs/package/module_constants.rst)."""
     from pyModbusTCP.constants import (

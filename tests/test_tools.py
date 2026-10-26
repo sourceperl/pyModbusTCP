@@ -352,6 +352,28 @@ def test_server_serve_sigterm_handler() -> None:
     assert signal.getsignal(signal.SIGTERM) == previous
 
 
+@pytest.mark.parametrize('args, error', [
+    (['--max-connections', '0'], '--max-connections'),
+    (['--max-connections', '-1'], '--max-connections'),
+    (['--max-connections-per-host', '1.5'], '--max-connections-per-host'),
+])
+def test_server_invalid_args(args: list[str], error: str, capsys: pytest.CaptureFixture[str]) -> None:
+    """mbtcp-server refuses an invalid limit at the parse of its arguments, like the other tools."""
+    from pyModbusTCP.tools import server as server_tool
+    with pytest.raises(SystemExit) as exc:
+        server_tool.main(args)
+    assert exc.value.code == 2
+    assert error in capsys.readouterr().err
+
+
+def test_client_unit_id_and_code(capsys: pytest.CaptureFixture[str]) -> None:
+    """mbtcp-client: -u is a unit id (0 to 255), -c a read code in any notation, like the other numbers."""
+    for args in (['-u', '256', 'read-coils', '0'], ['-u', '-1', 'read-coils', '0'], ['device-id', '-c', '5']):
+        assert run_client(capsys, args)[0] == 2, args
+    parsed = cli_tool.build_parser().parse_args(['-u', '0x10', 'device-id', '-c', '0x2'])
+    assert (parsed.unit_id, parsed.code) == (16, 2)
+
+
 def test_server_link_local_allow() -> None:
     """-A fe80::/10 is refused (an allow list can't tell the interface of a client), with the way to do it."""
     proc = subprocess.run([sys.executable, '-m', 'pyModbusTCP.tools.server', '-A', 'fe80::/10'], check=False,
@@ -856,6 +878,10 @@ def test_tcp2rtu_cancelled_request_is_not_sent() -> None:
     ('tcp_to_rtu_gw', ['--ipv6-host-prefix', '0'], '--ipv6-host-prefix'),
     ('tcp_to_rtu_gw', ['--ipv6-host-prefix', '129'], '--ipv6-host-prefix'),
     ('tcp_to_rtu_gw', ['--ipv6-host-prefix', '/64'], '--ipv6-host-prefix'),
+    ('tcp_to_rtu_gw', ['--max-connections', '0'], '--max-connections'),
+    ('tcp_to_rtu_gw', ['--max-connections-per-host', 'x'], '--max-connections-per-host'),
+    ('rtu_to_tcp_gw', ['-u', '256'], '-u/--unit-id'),
+    ('rtu_to_tcp_gw', ['-u', 'one'], '-u/--unit-id'),
 ])
 def test_gateway_invalid_args(tool: str, args: list[str], error: str, capsys: pytest.CaptureFixture[str]) -> None:
     """Invalid serial settings are refused at startup (they made the gateway crash, or fail at each request)."""

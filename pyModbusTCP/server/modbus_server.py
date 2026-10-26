@@ -137,6 +137,8 @@ class ModbusServer:
         # validate network parameters (a bad value would only be seen by start())
         host = _validators.validate_host(host)
         port = _validators.validate_port(port)
+        no_block = _validators.validate_bool(no_block, 'no_block')
+        ipv6 = _validators.validate_bool(ipv6, 'ipv6')
 
         # validate complex objects (data storage and function handlers)
         stores = _validators.validate_store(store)

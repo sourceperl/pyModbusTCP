@@ -120,6 +120,7 @@ from ._common import (
     slave_address,
     stop_on_sigterm,
     tcp_port,
+    unit_id,
 )
 
 try:
@@ -411,7 +412,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('-H', '--host', type=str, default='localhost', help='server host (default: localhost)')
     parser.add_argument('-p', '--port', type=tcp_port, default=MODBUS_PORT,
                         help=f'server TCP port (default: {MODBUS_PORT})')
-    parser.add_argument('-u', '--unit-id', type=int, default=1, help='server unit id (default: 1)')
+    parser.add_argument('-u', '--unit-id', type=unit_id, default=1, help='server unit id, 0 to 255 (default: 1)')
     parser.add_argument('-t', '--timeout', type=positive_float, default=1.0,
                         help='server timeout delay in s (default: 1.0)')
     parser.add_argument('-d', '--debug', action='store_true', help='debug mode')
