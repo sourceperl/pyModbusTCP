@@ -420,7 +420,7 @@ class ModbusServer:
         ctx = RequestContext(client=client, unit_id=unit_id, function_code=func_code)
         try:
             response = handler(Request(pdu=request.pdu.raw, ctx=ctx, store=store, device_id=self.device_id))
-            send_pdu.raw = _checked_response(response)
+            send_pdu.raw = _checked_response(response, func_code)
         except ModbusException as e:
             logger.debug('Function 0x%02X from %s: exception 0x%02X (%s)', func_code, client, e.code, e)
             send_pdu.build_except(func_code, e.code)
@@ -563,13 +563,25 @@ class ModbusServer:
             tcp_server.server_close()
 
 
-def _checked_response(response: object) -> bytes:
-    """The response PDU of a handler: non empty bytes, at most MAX_PDU_SIZE (253) bytes.
+# min size of a response PDU: the function code and at least one byte (data, or the code of an exception), like
+# every response of the Modbus specification; a client refuses a shorter one (the PDU of a request can be 1 byte)
+MIN_RESPONSE_PDU_SIZE = 2
+
+
+def _checked_response(response: object, func_code: int) -> bytes:
+    """The response PDU of a handler: bytes of 2 to MAX_PDU_SIZE (253) bytes, the function code of the request first
+    (or this code with the exception flag, 0x80).
+
+    A response that a client would refuse (like req.reply() without field: the function code alone) is never sent.
 
     :raises DataFormatError: for another response (the client gets a "slave device failure")
     """
-    if not isinstance(response, (bytes, bytearray)) or not response:
-        raise DataFormatError(f'the handler returned {type(response).__name__}, a non empty bytes expected')
-    if len(response) > MAX_PDU_SIZE:
-        raise DataFormatError(f'the handler returned a PDU of {len(response)} bytes (max {MAX_PDU_SIZE})')
+    if not isinstance(response, (bytes, bytearray)):
+        raise DataFormatError(f'the handler returned {type(response).__name__}, bytes expected')
+    if not MIN_RESPONSE_PDU_SIZE <= len(response) <= MAX_PDU_SIZE:
+        raise DataFormatError(f'the handler returned a PDU of {len(response)} byte(s) (from {MIN_RESPONSE_PDU_SIZE} '
+                              f'to {MAX_PDU_SIZE}: the function code, then the data)')
+    if response[0] & 0x7F != func_code:
+        raise DataFormatError(f'the handler returned a PDU of function 0x{response[0]:02X} for a request of function '
+                              f'0x{func_code:02X}')
     return bytes(response)

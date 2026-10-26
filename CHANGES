@@ -91,6 +91,9 @@ Revision history for pyModbusTCP
     - server: Request.reply() and Request.unpack() use the byte order prefix of their format ('<HH' for little endian
       data), and a format without prefix is big endian for both: reply() removed the prefix in silence ('<H' gave a
       big endian value), unpack() without prefix used the native order of the host (little endian on most hosts).
+    - server: a handler response of less than 2 bytes (like req.reply() without field: the function code alone) or of
+      another function is no longer sent, the client gets a "slave device failure": the client of pyModbusTCP
+      refused it ("socket recv error").
     - tools: mbtcp-rtu2tcp no longer blocks the serial line while a broadcast is relayed to the server (the master
       doesn't wait for it): its next frames were read as one, dropped (CRC error). The requests are sent by a relay
       thread in the order of the bus, up to 4 broadcasts wait for the server (the next ones are dropped, logged), and a

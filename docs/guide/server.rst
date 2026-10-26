@@ -284,6 +284,9 @@ exception:
 - ``req.unpack()`` and ``req.reply()`` use the byte order prefix of their :mod:`struct` format (``'<HH'`` for the
   little endian data of a private function...). Without prefix, a format is big endian, the byte order of Modbus
   (not the native order of :mod:`struct`). The function code of ``reply()`` is a single byte, before the fields.
+- The response of a handler has 2 to 253 bytes and starts with the function code of the request (or this code + 0x80,
+  an exception): a response with the function code alone (``req.reply()`` without field), or the one of another
+  function, would be refused by the client. It is never sent, the client gets a "slave device failure" instead.
 - A standard function can be replaced, and called from the new handler (``STANDARD_FUNCTIONS[0x06](req)``).
 - ``del server.functions[code]`` removes a function ("illegal function" exception).
 - ``ModbusServer(functions={})`` starts without any function, ``fallback=handler`` handles the function codes without

@@ -1287,6 +1287,31 @@ def test_response_pdu_too_long() -> None:
         server.stop()
 
 
+def test_response_pdu_refused() -> None:
+    """A response that the client would refuse is never sent: "slave device failure" instead, the session goes on.
+
+    req.reply() without field (the function code alone) was sent, and the client of pyModbusTCP refused it with a
+    "socket recv error"; a PDU of another function too ("function code mismatch").
+    """
+    server = ModbusServer(host='127.0.0.1', port=0, no_block=True)
+    server.function(0x41)(lambda req: req.reply())
+    server.function(0x42)(lambda req: b'\x43\x00')
+    server.function(0x44)(lambda req: req.reply('>B', 1))
+    # an exception response built by hand (instead of raising a ModbusException): the code of the request + 0x80
+    server.function(0x45)(lambda req: bytes([0x45 | 0x80, 0x03]))
+    _, port = server.start()
+    try:
+        c = ModbusClient(host='127.0.0.1', port=port, timeout=2.0)
+        for pdu in (b'\x41', b'\x42'):
+            assert c.custom_request(pdu) is None and c.last_except == 0x04, pdu
+        assert c.custom_request(b'\x44') == b'\x44\x01'
+        assert c.custom_request(b'\x45') is None and c.last_except == 0x03
+        assert c.is_open
+        c.close()
+    finally:
+        server.stop()
+
+
 """Tests for the ModbusServer `allowed_hosts` option."""
 
 
