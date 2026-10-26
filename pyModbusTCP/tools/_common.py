@@ -263,14 +263,19 @@ def setup_rs485(port: 'Serial', args: argparse.Namespace) -> RS485Setup | None:
     return setup
 
 
+# slave address 0 is the broadcast address of a serial line, 248 to 255 are reserved
+BROADCAST_ADDRESS = 0
+MAX_SLAVE_ADDRESS = 247
+
+
 def slave_address(value: str) -> int:
     """argparse type: the address of a Modbus/RTU slave (1 to 247: 0 is the broadcast, 248 to 255 are reserved)."""
     try:
         address = int(value, 0)
     except ValueError:
         raise argparse.ArgumentTypeError(f'{value!r} is not an integer') from None
-    if not 1 <= address <= 247:
-        raise argparse.ArgumentTypeError('slave address must be between 1 and 247')
+    if not 1 <= address <= MAX_SLAVE_ADDRESS:
+        raise argparse.ArgumentTypeError(f'slave address must be between 1 and {MAX_SLAVE_ADDRESS}')
     return address
 
 

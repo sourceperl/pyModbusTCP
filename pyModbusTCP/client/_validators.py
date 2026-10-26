@@ -75,7 +75,8 @@ def validate_broadcast_interval(value: object) -> float:
     return float(value)
 
 
-# max number of connect retries and max delay before a retry (s)
+# max number of connect retries, and max delay before a retry (s): the max of connect_retry_delay, and the cap of the
+# exponential backoff of the retries (the base delay stops growing there)
 MAX_CONNECT_RETRIES = 1000
 MAX_CONNECT_RETRY_DELAY = 60.0
 

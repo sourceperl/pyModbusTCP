@@ -106,7 +106,6 @@ import logging
 import queue
 import struct
 import sys
-import time
 from dataclasses import dataclass, field
 from threading import Event, Thread
 
@@ -138,129 +137,37 @@ from ..constants import (
     MODBUS_PORT,
 )
 from ..server._common import LogThrottle
-from ..utils import crc16
-
-# exceptions raised by the serial port when the device is lost (explicit type,
-# so both branches below have the same type for mypy)
-SERIAL_IO_ERRORS: tuple[type[BaseException], ...] = (serialutil.SerialException, OSError)
-# a sys.platform test (not a try/except ImportError) so that mypy knows termios is POSIX only
-if sys.platform != 'win32':
-    import termios
-
-    # termios.error is neither a SerialException nor an OSError: pyserial lets it
-    # escape from reset_input_buffer()/flush() when the adapter is unplugged
-    SERIAL_IO_ERRORS += (termios.error,)
+from ._rtu import (
+    BROADCAST_ADDRESS,
+    MAX_RTU_FRAME,
+    MAX_SLAVE_ADDRESS,
+    MIN_EOF_DELAY,
+    RECONNECT_DELAY,
+    SERIAL_IO_ERRORS,
+    ModbusRTUFrame,
+    SerialLink,
+    hexdump,
+)
 
 logger = logging.getLogger("mbtcp-rtu2tcp")
 
-# delay between two attempts to reopen a lost serial port (seconds)
-RECONNECT_DELAY = 1.0
-# max size of a modbus RTU frame (spec)
-MAX_RTU_FRAME = 256
 # how long to wait for the start of a frame before checking the stop flag (seconds)
 IDLE_POLL_DELAY = 0.5
-# lower bound for the end-of-frame delay: USB-serial adapters add latency
-# (e.g. FTDI latency timer), so the theoretical 3.5 char time is too short
-MIN_EOF_DELAY = 0.02
 # max number of broadcasts waiting for the server (the next ones are dropped): a master that sends broadcasts faster
 # than the server answers never builds a long backlog, and a request to the gateway never waits behind it for long
 BROADCAST_BACKLOG = 4
 
 
-def hexdump(data: bytes) -> str:
-    """Format a raw frame for logs, like "[8 bytes] 01 03 00 00 00 01 84 0a"."""
-    return f"[{len(data)} bytes] {data.hex(' ')}"
-
-
-def t35(baudrate: int, bytesize: int, parity: str, stopbits: float) -> float:
-    """Return the modbus RTU inter-frame silent interval (3.5 chars) in seconds."""
-    if baudrate <= 0:
-        raise ValueError(f'invalid baud rate: {baudrate}')
-    if baudrate > 19200:
-        # fixed value recommended by the modbus serial line spec
-        return 0.00175
-    bits_per_char = 1 + bytesize + (0 if parity == PARITY_NONE else 1) + stopbits
-    return 3.5 * bits_per_char / baudrate
-
-
-class ModbusRTUFrame:
-    """Modbus RTU frame container class."""
-
-    def __init__(self, raw: bytes = b'') -> None:
-        # public
-        self.raw = raw
-
-    def __repr__(self) -> str:
-        return hexdump(self.raw)
-
-    @property
-    def pdu(self) -> bytes:
-        """Return PDU part of frame."""
-        return self.raw[1:-2]
-
-    @property
-    def slave_addr(self) -> int:
-        """Return slave address part of frame."""
-        return self.raw[0]
-
-    @property
-    def function_code(self) -> int:
-        """Return function code part of frame."""
-        return self.raw[1]
-
-    @property
-    def is_set(self) -> bool:
-        """Check if frame is set
-
-        :return: True if frame is set
-        :rtype: bool
-        """
-        return bool(self.raw)
-
-    @property
-    def is_valid(self) -> bool:
-        """Check if frame is valid (minimum length and CRC).
-
-        A request frame can be as short as 4 bytes (address, function code, CRC16),
-        like "read exception status" (function 0x07).
-
-        :return: True if frame is valid
-        :rtype: bool
-        """
-        return len(self.raw) >= 4 and crc16(self.raw) == 0
-
-    def build(self, raw_pdu: bytes, slave_addr: int) -> None:
-        """Build a full modbus RTU message from PDU and slave address.
-
-        :param raw_pdu: modbus as raw value
-        :type raw_pdu: bytes
-        :param slave_addr: address of the slave
-        :type slave_addr: int
-        """
-        # [address] + PDU
-        tmp_raw = struct.pack('B', slave_addr) + raw_pdu
-        # [address] + PDU + [CRC 16]
-        tmp_raw += struct.pack('<H', crc16(tmp_raw))
-        self.raw = tmp_raw
-
-
-class SlaveSerialWorkerModel:
+class SlaveSerialWorkerModel(SerialLink):
     """A base serial worker to manage I/O loop with RTU master device."""
 
     def __init__(self, port: Serial, end_of_frame: float | None = None) -> None:
-        # public
-        self.serial_port = port
-        # silent interval between two frames on the bus
-        self.interframe_delay = t35(port.baudrate, port.bytesize, port.parity, port.stopbits)
-        # end of frame delay: auto-computed from baudrate if not set
-        if end_of_frame is None:
-            end_of_frame = max(self.interframe_delay, MIN_EOF_DELAY)
-        self.end_of_frame = end_of_frame
+        # the serial port, the interframe and end of frame delays
+        super().__init__(port, end_of_frame, logger)
         self.request = ModbusRTUFrame()
         self.response = ModbusRTUFrame()
         # worker stop flag
         self._stop = Event()
-        self._last_reopen_try = 0.0
         # input buffer must be flushed at start and after each port reopen
         self._flush_pending = True
         # unexpected errors (a bug): one message per 10 s at most, a request flood can't flood the log
@@ -275,35 +182,9 @@ class SlaveSerialWorkerModel:
         """Ask the worker loop to exit."""
         self._stop.set()
 
-    def _close_port(self) -> None:
-        """Close the serial port after an I/O error (never raises)."""
-        try:
-            self.serial_port.close()
-        except SERIAL_IO_ERRORS as e:
-            logger.debug('Error while closing serial port: %r', e)
-        # first reopen attempt after RECONNECT_DELAY
-        self._last_reopen_try = time.monotonic()
-
-    def _ensure_port_open(self) -> bool:
-        """Reopen the serial port if it was lost (rate limited).
-
-        :return: True if the port is usable
-        """
-        port = self.serial_port
-        if port.is_open:
-            return True
-        now = time.monotonic()
-        if now - self._last_reopen_try < RECONNECT_DELAY:
-            return False
-        self._last_reopen_try = now
-        try:
-            port.open()
-        except SERIAL_IO_ERRORS as e:
-            logger.warning('Unable to reopen serial port %s: %r', port.port, e)
-            return False
-        logger.info('Serial port %s reopened', port.port)
+    def _port_reopened(self) -> None:
+        # the input buffer is flushed after each reopen (and at start)
         self._flush_pending = True
-        return True
 
     def _receive_frame(self) -> bytes:
         """Wait for a frame on the serial line.
@@ -397,15 +278,15 @@ class SerialModbusWorker(SlaveSerialWorkerModel):
     loop is never blocked by a broadcast (the master doesn't wait for it, its next frames must be received on time).
     """
 
-    def __init__(self, port: Serial, mbus_cli: ModbusClient, slave_addr: int = 1, allow_bcast: bool = False,
+    def __init__(self, port: Serial, mbus_cli: ModbusClient, slave_address: int = 1, allow_broadcast: bool = False,
                  end_of_frame: float | None = None) -> None:
         # 0 is the broadcast address, 248 to 255 are reserved: the gateway would never answer
-        if not 1 <= slave_addr <= 247:
-            raise ValueError('slave address must be between 1 and 247')
+        if not 1 <= slave_address <= MAX_SLAVE_ADDRESS:
+            raise ValueError(f'slave address must be between 1 and {MAX_SLAVE_ADDRESS}')
         super().__init__(port, end_of_frame=end_of_frame)
         self.mbus_cli = mbus_cli
-        self.slave_addr = slave_addr
-        self.allow_bcast = allow_bcast
+        self.slave_address = slave_address
+        self.allow_broadcast = allow_broadcast
         # requests for the relay thread (None: stop), in the order of the bus; only the serial loop puts in it
         self._jobs: queue.Queue[_RelayJob | None] = queue.Queue()
         self._relay_thread: Thread | None = None
@@ -489,27 +370,27 @@ class SerialModbusWorker(SlaveSerialWorkerModel):
     def handle_request(self) -> None:
         """Request handler implementing the TCP relay logic."""
         req = self.request
-        if req.slave_addr == 0:
+        if req.slave_address == BROADCAST_ADDRESS:
             # broadcast frame
-            if self.allow_bcast:
+            if self.allow_broadcast:
                 # if config allow it, process a broadcast request (=> process it, but don't respond), without blocking
                 # the serial loop: the master doesn't wait, its next frames must be received on time
                 self._relay_broadcast(req.pdu)
             else:
                 logger.debug('Broadcast frame ignored (see --allow-broadcast)')
-        elif req.slave_addr == self.slave_addr:
+        elif req.slave_address == self.slave_address:
             # process unicast request
             resp_pdu, exp_status = self._relay_and_wait(req.pdu)
             if resp_pdu:
                 # regular response from Modbus/TCP client
-                self.response.build(raw_pdu=resp_pdu, slave_addr=req.slave_addr)
+                self.response.build(raw_pdu=resp_pdu, slave_address=req.slave_address)
             else:
                 # exception response
                 exp_pdu = struct.pack('BB', (req.function_code | 0x80) & 0xFF, exp_status)
-                self.response.build(raw_pdu=exp_pdu, slave_addr=req.slave_addr)
+                self.response.build(raw_pdu=exp_pdu, slave_address=req.slave_address)
         else:
             # request for another slave of the bus
-            logger.debug('Frame for slave %d ignored (gateway is slave %d)', req.slave_addr, self.slave_addr)
+            logger.debug('Frame for slave %d ignored (gateway is slave %d)', req.slave_address, self.slave_address)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -564,8 +445,8 @@ def main(argv: list[str] | None = None) -> int:
         mbus_cli = ModbusClient(host=args.host, port=args.port, unit_id=args.unit_id, timeout=args.timeout)
 
         # init specialized serial worker
-        serial_worker = SerialModbusWorker(port=serial_port, mbus_cli=mbus_cli, slave_addr=args.address,
-                                           allow_bcast=args.allow_broadcast, end_of_frame=args.eof)
+        serial_worker = SerialModbusWorker(port=serial_port, mbus_cli=mbus_cli, slave_address=args.address,
+                                           allow_broadcast=args.allow_broadcast, end_of_frame=args.eof)
         logger.debug('Interframe delay %.4f s, end of frame delay %.4f s',
                      serial_worker.interframe_delay, serial_worker.end_of_frame)
 

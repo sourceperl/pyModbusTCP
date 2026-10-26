@@ -24,12 +24,11 @@ from ..constants import (
 )
 from ._common import logger
 from ._errors import ModbusExcept, NetworkError
+from ._validators import MAX_CONNECT_RETRY_DELAY
 
 # broadcast requests whose late reply is ignored (see _recv_pdu()): the last ones sent, for a limited time
 BROADCAST_IDS_MAX = 128
 BROADCAST_REPLY_DELAY = 10.0
-# max base delay between two connect attempts (s): the exponential backoff stops growing there
-CONNECT_RETRY_MAX_DELAY = 60.0
 # errors of a send/recv on a connection that the server has reset or no longer knows (it didn't read the request)
 # (exception classes, not errno values: they also match the WSAExxx codes of Windows)
 CONN_LOST_ERRORS = (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)
@@ -122,11 +121,12 @@ class ClientTransportMixin:
     def _connect_retry_wait(self, attempt: int) -> float:
         """Delay in seconds before the connect retry number attempt + 1 (exponential backoff with jitter).
 
-        The base delay doubles at each retry (capped at CONNECT_RETRY_MAX_DELAY), the wait is a random value
-        between half and all of it: many clients disconnected at once by a server restart don't retry in sync.
+        The base delay doubles at each retry (capped at MAX_CONNECT_RETRY_DELAY, the max of connect_retry_delay), the
+        wait is a random value between half and all of it: many clients disconnected at once by a server restart don't
+        retry in sync.
         """
         # (exponent capped: 2.0 ** 32 already exceeds any cap, a large one would be a float overflow)
-        base = min(self.connect_retry_delay * 2.0 ** min(attempt, 32), CONNECT_RETRY_MAX_DELAY)
+        base = min(self.connect_retry_delay * 2.0 ** min(attempt, 32), MAX_CONNECT_RETRY_DELAY)
         return base / 2 + random.uniform(0.0, base / 2)
 
     def _open_once(self) -> None:

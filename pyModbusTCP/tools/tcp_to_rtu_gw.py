@@ -187,7 +187,6 @@ See --help for all options.
 import argparse
 import logging
 import queue
-import struct
 import sys
 import time
 from collections import deque
@@ -226,6 +225,7 @@ from ..constants import (
     MEI_TYPE_READ_DEVICE_ID,
     READ_COILS,
     READ_DISCRETE_INPUTS,
+    READ_FUNCTION_CODES,
     READ_HOLDING_REGISTERS,
     READ_INPUT_REGISTERS,
     WRITE_FILE_RECORD,
@@ -247,35 +247,22 @@ from ..server import (
 )
 from ..server._common import HOST_IPV6_PREFIX, LogThrottle, host_key
 from ..server._validators import validate_ipv6_host_prefix
-from ..utils import crc16
-
-# exceptions raised by the serial port when the device is lost (explicit type,
-# so both branches below have the same type for mypy)
-SERIAL_IO_ERRORS: tuple[type[BaseException], ...] = (serialutil.SerialException, OSError)
-# a sys.platform test (not a try/except ImportError) so that mypy knows termios is POSIX only
-if sys.platform != 'win32':
-    import termios
-
-    # termios.error is neither a SerialException nor an OSError: pyserial lets it
-    # escape from reset_input_buffer()/flush() when the adapter is unplugged
-    SERIAL_IO_ERRORS += (termios.error,)
+from . import _rtu
+from ._rtu import (
+    BROADCAST_ADDRESS,
+    MAX_RTU_FRAME,
+    MAX_SLAVE_ADDRESS,
+    MIN_EOF_DELAY,
+    SERIAL_IO_ERRORS,
+    hexdump,
+)
 
 logger = logging.getLogger("mbtcp-tcp2rtu")
 
-# delay between two attempts to reopen a lost serial port (seconds)
-RECONNECT_DELAY = 1.0
-# max size of a modbus RTU frame (spec)
-MAX_RTU_FRAME = 256
 # requests waiting for the serial line, of all the client hosts, before the "gateway overloaded" exception is returned
 QUEUE_SIZE = 16
 # pending requests (waiting for the serial line or in progress) of a single client host: a host can't fill the queue
 MAX_PENDING_PER_HOST = 2
-# lower bound for the end-of-frame delay: USB-serial adapters add latency
-# (e.g. FTDI latency timer), so the theoretical 3.5 char time is too short
-MIN_EOF_DELAY = 0.02
-# unit id 0 is the broadcast address of a serial line, 248 to 255 are reserved
-BROADCAST_ADDRESS = 0
-MAX_SLAVE_ADDRESS = 247
 # functions that can be broadcast (writes, no answer from the slaves) -> size of their normal response, the start of
 # the request (None: the whole request, an echo)
 BROADCAST_FUNCTIONS: dict[int, int | None] = {
@@ -374,25 +361,9 @@ DEFAULT_FUNCTIONS = FunctionFilter(frozenset({
     WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER, WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS,
     MASK_WRITE_REGISTER, WRITE_READ_MULTIPLE_REGISTERS}), frozenset({MEI_TYPE_READ_DEVICE_ID}))
 # the functions relayed in read-only mode (--read-only, a shortcut for this filter, broadcast refused)
-READ_ONLY_FUNCTIONS = FunctionFilter(frozenset({
-    READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS}),
-    frozenset({MEI_TYPE_READ_DEVICE_ID}))
-
-
-def hexdump(data: bytes) -> str:
-    """Format a raw frame for logs, like "[8 bytes] 01 03 00 00 00 01 84 0a"."""
-    return f"[{len(data)} bytes] {data.hex(' ')}"
-
-
-def t35(baudrate: int, bytesize: int, parity: str, stopbits: float) -> float:
-    """Return the modbus RTU inter-frame silent interval (3.5 chars) in seconds."""
-    if baudrate <= 0:
-        raise ValueError(f'invalid baud rate: {baudrate}')
-    if baudrate > 19200:
-        # fixed value recommended by the modbus serial line spec
-        return 0.00175
-    bits_per_char = 1 + bytesize + (0 if parity == PARITY_NONE else 1) + stopbits
-    return 3.5 * bits_per_char / baudrate
+# (READ_FUNCTION_CODES, the reads of a read-only ModbusServer: its 0x2B is the read device identification only)
+READ_ONLY_FUNCTIONS = FunctionFilter(frozenset(READ_FUNCTION_CODES) - {ENCAPSULATED_INTERFACE_TRANSPORT},
+                                     frozenset({MEI_TYPE_READ_DEVICE_ID}))
 
 
 def response_matches(req_pdu: bytes, resp_pdu: bytes) -> bool:
@@ -457,36 +428,8 @@ def find_response(raw: bytes, request: 'ModbusRTUFrame') -> bytes:
     return b''
 
 
-class ModbusRTUFrame:
-    """Modbus RTU frame container class."""
-
-    def __init__(self, raw: bytes = b'') -> None:
-        # public
-        self.raw = raw
-
-    @property
-    def pdu(self) -> bytes:
-        """Return PDU part of frame."""
-        return self.raw[1:-2]
-
-    @property
-    def slave_address(self) -> int:
-        """Return slave address part of frame."""
-        return self.raw[0]
-
-    @property
-    def function_code(self) -> int:
-        """Return function code part of frame."""
-        return self.raw[1]
-
-    @property
-    def is_valid(self) -> bool:
-        """Check if frame is valid (minimum length and CRC).
-
-        :return: True if frame is valid
-        :rtype: bool
-        """
-        return len(self.raw) > 4 and crc16(self.raw) == 0
+class ModbusRTUFrame(_rtu.ModbusRTUFrame):
+    """A Modbus/RTU frame, that can be checked against a request."""
 
     def is_response_to(self, request: 'ModbusRTUFrame') -> bool:
         """Check that frame is a valid response matching the given request.
@@ -497,24 +440,12 @@ class ModbusRTUFrame:
         the request (see response_matches()).
         """
         return (self.is_valid
+                # a response has at least one byte after the function code (data, or the code of an exception)
+                and len(self.raw) > _rtu.MIN_RTU_FRAME
                 and self.slave_address == request.slave_address
                 # exception responses set the MSB of the function code
                 and (self.function_code & 0x7F) == request.function_code
                 and response_matches(request.pdu, self.pdu))
-
-    def build(self, raw_pdu: bytes, slave_ad: int) -> None:
-        """Build a full modbus RTU message from PDU and slave address.
-
-        :param raw_pdu: modbus as raw value
-        :type raw_pdu: bytes
-        :param slave_ad: address of the slave
-        :type slave_ad: int
-        """
-        # [address] + PDU
-        tmp_raw = struct.pack('B', slave_ad) + raw_pdu
-        # [address] + PDU + [CRC 16]
-        tmp_raw += struct.pack('<H', crc16(tmp_raw))
-        self.raw = tmp_raw
 
 
 class RtuQuery:
@@ -589,7 +520,7 @@ class FairQueue:
         return self.get(timeout=0)
 
 
-class ModbusSerialWorker:
+class ModbusSerialWorker(_rtu.SerialLink):
     """A serial worker to manage I/O with RTU devices."""
 
     def __init__(self, port: Serial, timeout: float = 1.0, end_of_frame: float | None = None,
@@ -599,7 +530,6 @@ class ModbusSerialWorker:
                  broadcast_buffer: int = DEFAULT_BROADCAST_BUFFER,
                  broadcast_max_age: float = DEFAULT_BROADCAST_MAX_AGE) -> None:
         # public
-        self.serial_port = port
         self.timeout = timeout
         # request filters (see is_allowed())
         self.allow_broadcast = allow_broadcast
@@ -626,12 +556,8 @@ class ModbusSerialWorker:
                 or not 0 < broadcast_max_age <= MAX_BROADCAST_MAX_AGE:
             raise ValueError(f'broadcast max age must be more than 0 and at most {MAX_BROADCAST_MAX_AGE:g} s')
         self.broadcast_max_age = float(broadcast_max_age)
-        # silent interval between two frames on the bus
-        self.interframe_delay = t35(port.baudrate, port.bytesize, port.parity, port.stopbits)
-        # end of frame delay: auto-computed from baudrate if not set
-        if end_of_frame is None:
-            end_of_frame = max(self.interframe_delay, MIN_EOF_DELAY)
-        self.end_of_frame = end_of_frame
+        # the serial port, the interframe and end of frame delays
+        super().__init__(port, end_of_frame, logger)
         # internal request queue: the hosts are served in turn (round robin), QUEUE_SIZE waiting requests at most
         # before the overloaded exception is returned
         self.rtu_queries_q = FairQueue(maxsize=QUEUE_SIZE)
@@ -652,36 +578,6 @@ class ModbusSerialWorker:
         # worker stop flag
         self._stop = Event()
         self._last_bus_activity = 0.0
-        self._last_reopen_try = 0.0
-
-    def _close_port(self) -> None:
-        """Close the serial port after an I/O error (never raises)."""
-        try:
-            self.serial_port.close()
-        except SERIAL_IO_ERRORS as e:
-            logger.debug('Error while closing serial port: %r', e)
-        # first reopen attempt after RECONNECT_DELAY
-        self._last_reopen_try = time.monotonic()
-
-    def _ensure_port_open(self) -> bool:
-        """Reopen the serial port if it was lost (rate limited).
-
-        :return: True if the port is usable
-        """
-        port = self.serial_port
-        if port.is_open:
-            return True
-        now = time.monotonic()
-        if now - self._last_reopen_try < RECONNECT_DELAY:
-            return False
-        self._last_reopen_try = now
-        try:
-            port.open()
-        except SERIAL_IO_ERRORS as e:
-            logger.warning('Unable to reopen serial port %s: %r', port.port, e)
-            return False
-        logger.info('Serial port %s reopened', port.port)
-        return True
 
     def stop(self) -> None:
         """Ask the worker loop to exit."""
@@ -943,7 +839,7 @@ class ModbusSerialWorker:
         """
         # init a serial exchange from the request
         rtu_query = RtuQuery(host)
-        rtu_query.request.build(raw_pdu=req.pdu, slave_ad=req.ctx.unit_id)
+        rtu_query.request.build(raw_pdu=req.pdu, slave_address=req.ctx.unit_id)
         try:
             # add a request in the serial worker queue, can raise queue.Full
             self.rtu_queries_q.put(rtu_query)

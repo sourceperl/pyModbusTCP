@@ -791,7 +791,7 @@ def test_tcp2rtu_cancelled_request_is_not_sent() -> None:
     serial_port = RecordingSerial()
     worker = tcp_to_rtu_gw.ModbusSerialWorker(serial_port, timeout=0.1)  # type: ignore[arg-type]
     query = tcp_to_rtu_gw.RtuQuery(host='h')
-    query.request.build(raw_pdu=b'\x03\x00\x00\x00\x01', slave_ad=1)
+    query.request.build(raw_pdu=b'\x03\x00\x00\x00\x01', slave_address=1)
     query.cancelled = True
     worker.rtu_queries_q.put(query)
     thread = threading.Thread(target=worker.loop, daemon=True)
@@ -893,13 +893,12 @@ def test_tcp2rtu_function_filter() -> None:
 
 def test_gateway_api_checks() -> None:
     pytest.importorskip('serial')
-    from pyModbusTCP.tools import rtu_to_tcp_gw, tcp_to_rtu_gw
-    for t35 in (rtu_to_tcp_gw.t35, tcp_to_rtu_gw.t35):
-        with pytest.raises(ValueError):
-            t35(0, 8, 'N', 1)
+    from pyModbusTCP.tools import _rtu, rtu_to_tcp_gw
+    with pytest.raises(ValueError):
+        _rtu.t35(0, 8, 'N', 1)
     for address in (0, 248, 255):
         with pytest.raises(ValueError):
-            rtu_to_tcp_gw.SerialModbusWorker(SilentSerial(), ModbusClient(), slave_addr=address)  # type: ignore
+            rtu_to_tcp_gw.SerialModbusWorker(SilentSerial(), ModbusClient(), slave_address=address)  # type: ignore
 
 
 def test_gateway_rs485_settings() -> None:
@@ -1047,7 +1046,7 @@ def test_rtu2tcp_relay(server: tuple[ModbusServer, int]) -> None:
     master_fd, slave_fd = os.openpty()
     port = serial.Serial(os.ttyname(slave_fd), baudrate=19200)
     tcp_cli = ModbusClient(host='127.0.0.1', port=tcp_port, timeout=2.0)
-    worker = rtu_to_tcp_gw.SerialModbusWorker(port=port, mbus_cli=tcp_cli, slave_addr=30)
+    worker = rtu_to_tcp_gw.SerialModbusWorker(port=port, mbus_cli=tcp_cli, slave_address=30)
     thread = threading.Thread(target=worker.run, daemon=True)
     thread.start()
 
@@ -1096,7 +1095,7 @@ def rtu2tcp_gateway(tcp_port: int, **kwargs: Any) -> Generator[tuple[int, Any], 
     os.set_blocking(master_fd, False)
     port = serial.Serial(os.ttyname(slave_fd), baudrate=19200)
     tcp_cli = ModbusClient(host='127.0.0.1', port=tcp_port, timeout=2.0)
-    worker = rtu_to_tcp_gw.SerialModbusWorker(port=port, mbus_cli=tcp_cli, slave_addr=30, **kwargs)
+    worker = rtu_to_tcp_gw.SerialModbusWorker(port=port, mbus_cli=tcp_cli, slave_address=30, **kwargs)
     thread = threading.Thread(target=worker.run, daemon=True)
     thread.start()
     try:
@@ -1146,7 +1145,7 @@ def test_rtu2tcp_broadcast_does_not_block(server: tuple[ModbusServer, int]) -> N
     srv, tcp_port = server
     srv.store.app.holding_registers.write(0, [0x1234])
     slow_function(srv, 0x06, 0.5)
-    with rtu2tcp_gateway(tcp_port, allow_bcast=True) as (master_fd, _worker):
+    with rtu2tcp_gateway(tcp_port, allow_broadcast=True) as (master_fd, _worker):
         # a broadcast write, then (while the server writes it) a frame for another slave, then a read for the
         # gateway: before, the 2 frames waited in the buffer of the line during the broadcast and were read as one
         # frame, dropped (CRC error), the master got no answer
@@ -1170,7 +1169,7 @@ def test_rtu2tcp_broadcast_backlog(caplog: pytest.LogCaptureFixture) -> None:
     test releases it.
     """
     pytest.importorskip('serial')
-    from pyModbusTCP.tools import rtu_to_tcp_gw
+    from pyModbusTCP.tools import _rtu, rtu_to_tcp_gw
     backlog = rtu_to_tcp_gw.BROADCAST_BACKLOG
     started, release = threading.Event(), threading.Event()
     sent: list[bytes] = []
@@ -1186,11 +1185,11 @@ def test_rtu2tcp_broadcast_backlog(caplog: pytest.LogCaptureFixture) -> None:
             return pdu
 
     worker = rtu_to_tcp_gw.SerialModbusWorker(
-        SilentSerial(), BlockedClient(), slave_addr=30, allow_bcast=True)  # type: ignore[arg-type]
+        SilentSerial(), BlockedClient(), slave_address=30, allow_broadcast=True)  # type: ignore[arg-type]
     pdus = [bytes.fromhex('06%04x0001' % (10 + n)) for n in range(backlog + 4)]
 
     def receive(pdu: bytes) -> None:
-        worker.request = rtu_to_tcp_gw.ModbusRTUFrame(rtu_frame(0, pdu))
+        worker.request = _rtu.ModbusRTUFrame(rtu_frame(0, pdu))
         worker.handle_request()
 
     try:
