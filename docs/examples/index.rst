@@ -45,6 +45,8 @@ Server
      - A change listener that logs every coil and holding register changed by a client.
    * - :doc:`server_custom_function`
      - Add a function 0x41, replace the standard function 0x06, log the unsupported functions with a fallback.
+   * - :doc:`server_device_id`
+     - Answer the read device identification (0x2B/0x0E): basic, regular, extended and private objects.
    * - :doc:`server_dynamic_port`
      - Let the operating system choose a free port (port=0) and read it back.
    * - :doc:`server_schedule`
@@ -70,6 +72,7 @@ Server
    server_allow
    server_change_log
    server_custom_function
+   server_device_id
    server_dynamic_port
    server_schedule
    server_mailbox

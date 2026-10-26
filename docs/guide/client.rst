@@ -190,8 +190,6 @@ and floats:
     if regs:
         value = f32.decode(regs)[0]
 
-.. _client-errors:
-
 Broadcast through a TCP to RTU gateway
 --------------------------------------
 
@@ -227,6 +225,8 @@ Without ``broadcast``, the unit id 0 is a usual address: many Modbus/TCP devices
 
 ``mbtcp-tcp2rtu --allow-broadcast`` answers a broadcast at once with the normal response of the function (see
 :doc:`tools`): a client without ``broadcast=True`` (or another Modbus/TCP software) doesn't wait either.
+
+.. _client-errors:
 
 Handle errors
 -------------

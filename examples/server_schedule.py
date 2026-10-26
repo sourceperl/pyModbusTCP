@@ -13,7 +13,7 @@ See "Listen on the standard Modbus port 502 without root" in examples/README.md.
 The server listens on localhost by default. Add "--host" with the address of a
 network interface to accept remote clients (or 0.0.0.0 for all IPv4 interfaces,
 only if every network of the host is trusted).
-$ ./server.py --host 192.168.1.10 --port 5020
+$ ./server_schedule.py --host localhost --port 5020
 """
 
 import argparse
@@ -26,10 +26,7 @@ from pyModbusTCP.server import ModbusServer
 
 
 def alive_word_job() -> None:
-    """Update holding register @0 with day second (since 00:00).
-
-    Job called every 10s by scheduler.
-    """
+    """Update holding register @0 with the tens of seconds since 00:00 UTC."""
     server.store.app.holding_registers.write(0, [int(time.time()) % (24*3600) // 10])
 
 
