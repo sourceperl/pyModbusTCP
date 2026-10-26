@@ -43,6 +43,12 @@ Function codes
    * - ``WRITE_MULTIPLE_REGISTERS``
      - 0x10
      - Write Multiple Registers
+   * - ``WRITE_FILE_RECORD``
+     - 0x15
+     - Write File Record (not implemented: see below)
+   * - ``MASK_WRITE_REGISTER``
+     - 0x16
+     - Mask Write Register (not implemented: see below)
    * - ``WRITE_READ_MULTIPLE_REGISTERS``
      - 0x17
      - Read/Write Multiple Registers
@@ -50,7 +56,16 @@ Function codes
      - 0x2B
      - Encapsulated Interface Transport (with ``MEI_TYPE_READ_DEVICE_ID``, 0x0E: Read Device Identification)
 
-``SUPPORTED_FUNCTION_CODES`` is the tuple of these codes, ``WRITE_FUNCTION_CODES`` the tuple of the write ones.
+The tuples of codes:
+
+- ``SUPPORTED_FUNCTION_CODES``: the functions implemented by the client and the server of the package, all the codes
+  of the table but 0x15 and 0x16 (``ModbusClient.custom_request()`` sends any other code, a handler of the server
+  answers it).
+- ``WRITE_FUNCTION_CODES``: the standard functions that write data, 0x05, 0x06, 0x0F, 0x10, 0x15, 0x16 and 0x17.
+  ``ModbusServer(read_only=True)`` refuses them whatever their handler: 0x15 and 0x16 are not implemented, but a
+  handler of the application (or a gateway) could answer them.
+- ``READ_FUNCTION_CODES``: the functions that only read data, 0x01 to 0x04 and 0x2B (with the MEI type 0x0E): the
+  only ones that a read-only server gives to its fallback handler.
 
 Modbus exception codes
 ----------------------
@@ -151,3 +166,5 @@ Other constants
 - ``VERSION``: the version of the package (also ``pyModbusTCP.__version__``).
 - ``MODBUS_PORT``: the standard Modbus/TCP port, 502.
 - ``MAX_PDU_SIZE`` (253), ``MIN_PDU_SIZE`` (1), ``MBAP_SIZE`` (7): frame sizes, in bytes.
+- ``MBAP_MIN_LENGTH`` (2), ``MBAP_MAX_LENGTH`` (254): the range of the length field of the MBAP header (the unit id
+  and the PDU, ``MIN_PDU_SIZE + 1`` to ``MAX_PDU_SIZE + 1``).

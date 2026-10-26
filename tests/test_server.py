@@ -1312,6 +1312,23 @@ def test_response_pdu_refused() -> None:
         server.stop()
 
 
+def test_function_code_tuples() -> None:
+    """The tuples of constants describe the functions of the server (docs/package/module_constants.rst)."""
+    from pyModbusTCP.constants import (
+        MASK_WRITE_REGISTER,
+        READ_FUNCTION_CODES,
+        SUPPORTED_FUNCTION_CODES,
+        WRITE_FILE_RECORD,
+        WRITE_FUNCTION_CODES,
+    )
+    from pyModbusTCP.server import STANDARD_FUNCTIONS
+    assert set(SUPPORTED_FUNCTION_CODES) == set(STANDARD_FUNCTIONS)
+    # 0x15 and 0x16 are not implemented, but refused by read_only (a handler of the application could answer them)
+    assert set(WRITE_FUNCTION_CODES) - set(SUPPORTED_FUNCTION_CODES) == {WRITE_FILE_RECORD, MASK_WRITE_REGISTER}
+    assert not set(READ_FUNCTION_CODES) & set(WRITE_FUNCTION_CODES)
+    assert set(READ_FUNCTION_CODES) | set(WRITE_FUNCTION_CODES) == set(SUPPORTED_FUNCTION_CODES) | {0x15, 0x16}
+
+
 """Tests for the ModbusServer `allowed_hosts` option."""
 
 
