@@ -555,16 +555,25 @@ def test_tcp2rtu_broadcast() -> None:
         # a burst on an idle bus: the buffer takes a few broadcasts (4, the one the worker holds during the silence of
         # the bus, and the one it may have written already), then the next ones are refused at once (busy)
         results = []
+        refused_excepts = []
+        burst_start = time.monotonic()
         for i in range(8):
             start = time.monotonic()
             results.append(c.write_single_register(i, i))
             assert time.monotonic() - start < 0.2
-        accepted = results.count(True)
-        assert results == [True] * accepted + [False] * (8 - accepted) and 4 <= accepted <= 6
-        assert c.last_except == 0x06
+            if not results[-1]:
+                refused_excepts.append(c.last_except)
+        burst_time = time.monotonic() - burst_start
+        assert False in results and set(refused_excepts) == {0x06}
+        first_refused = results.index(False)
+        assert results[:4] == [True] * 4 and first_refused <= 6
+        # once the buffer is full, a broadcast is accepted again only when the bus has taken one (one per
+        # broadcast_delay): on a slow host, the burst may last long enough for that (but never more often)
+        accepted = [i for i, ok in enumerate(results) if ok]
+        assert len(accepted) - first_refused <= burst_time / 0.3
         # the accepted ones are all written, in order
-        wait_writes(port, 4 + accepted)
-        assert [frame[3] for _, frame in port.writes[4:]] == list(range(accepted))
+        wait_writes(port, 4 + len(accepted))
+        assert [frame[3] for _, frame in port.writes[4:]] == accepted
         c.close()
 
 
