@@ -134,7 +134,7 @@ The values of :attr:`ModbusClient.last_error <pyModbusTCP.client.ModbusClient.la
      - recv timeout occur
    * - ``MB_FRAME_ERR``
      - 6
-     - frame format error (not set by ModbusClient)
+     - frame format error
    * - ``MB_EXCEPT_ERR``
      - 7
      - modbus exception

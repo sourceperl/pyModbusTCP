@@ -265,7 +265,11 @@ A request never raises an exception for a network or a Modbus error: a read retu
      - The request can't be sent.
    * - ``MB_RECV_ERR``
      - 4
-     - No valid reply: the server closed the connection, or its reply is invalid or doesn't match the request.
+     - No reply received: the server closed the connection, or a network error while waiting for the reply.
+   * - ``MB_FRAME_ERR``
+     - 6
+     - A reply received, but invalid: bad MBAP header (like the transaction id of another request), function code or
+       size that don't match the request, a write echo with other values. The connection is closed.
    * - ``MB_TIMEOUT_ERR``
      - 5
      - No complete reply before ``timeout``.

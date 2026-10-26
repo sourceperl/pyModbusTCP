@@ -14,9 +14,12 @@ Revision history for pyModbusTCP
       max_connections_per_host (16), None disables them. start() raises NetworkError if already running.
     - client/server: stricter argument checks (TypeError/ValueError instead of a silent conversion or truncation),
       numpy booleans are no longer accepted as coil values.
-    - client: the function code of a reply must match the request (MB_RECV_ERR otherwise).
+    - client: the function code of a reply must match the request (MB_FRAME_ERR otherwise).
+    - client: an invalid reply (MBAP header, function code, size or echo that don't match the request) sets
+      last_error to MB_FRAME_ERR ("frame format error"), no longer MB_RECV_ERR ("socket recv error"): MB_RECV_ERR is
+      now a network error only (connection closed by the server, socket error while waiting for the reply).
     - client: a read reply must have exactly the data requested (2 bytes per register, 1 byte per 8 bits): a reply
-      with more data, truncated and accepted before, is now an error (MB_RECV_ERR). A device that pads its replies
+      with more data, truncated and accepted before, is now an error (MB_FRAME_ERR). A device that pads its replies
       with extra bytes (not compliant with the Modbus specification) is refused.
     - client (since 0.4.0a2): the arguments of ModbusClient after auto_close are keyword-only, no_delay is renamed
       tcp_no_delay (argument and property).

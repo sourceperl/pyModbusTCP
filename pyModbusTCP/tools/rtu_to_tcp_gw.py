@@ -135,6 +135,7 @@ from ..client import ModbusClient
 from ..constants import (
     EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND,
     MB_EXCEPT_ERR,
+    MODBUS_PORT,
 )
 from ..server._common import LogThrottle
 from ..utils import crc16
@@ -527,7 +528,8 @@ def main(argv: list[str] | None = None) -> int:
                         help='serial end of frame delay in s (default: computed from baudrate, '
                              f'min {MIN_EOF_DELAY:.3f} s)')
     parser.add_argument('-H', '--host', type=str, default='localhost', help='server host (default: localhost)')
-    parser.add_argument('-p', '--port', type=tcp_port, default=502, help='server TCP port (default: 502)')
+    parser.add_argument('-p', '--port', type=tcp_port, default=MODBUS_PORT,
+                        help=f'server TCP port (default: {MODBUS_PORT})')
     parser.add_argument('-u', '--unit-id', type=int, default=1, help='server unit id (default: 1)')
     parser.add_argument('-t', '--timeout', type=positive_float, default=1.0,
                         help='server timeout delay in s (default: 1.0)')

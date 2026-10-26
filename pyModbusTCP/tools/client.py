@@ -81,6 +81,7 @@ from typing import TextIO
 
 from ..client import ModbusClient
 from ..codec import ByteOrder, Codec, DataType
+from ..constants import MODBUS_PORT
 from ._common import add_version_arg, positive_float, tcp_port
 
 logger = logging.getLogger('mbtcp-client')
@@ -139,7 +140,8 @@ def build_parser() -> argparse.ArgumentParser:
                                      epilog='Exit status: 0 success, 1 request failed, 2 invalid parameter, '
                                             '130 interrupted (Ctrl-C).')
     parser.add_argument('-H', '--host', default='localhost', help='server host (default: localhost)')
-    parser.add_argument('-p', '--port', type=tcp_port, default=502, help='server TCP port (default: 502)')
+    parser.add_argument('-p', '--port', type=tcp_port, default=MODBUS_PORT,
+                        help=f'server TCP port (default: {MODBUS_PORT})')
     parser.add_argument('-u', '--unit-id', type=int_value, default=1, help='unit id (default: 1)')
     parser.add_argument('-t', '--timeout', type=positive_float, default=5.0,
                         help='request timeout in s (default: 5.0)')

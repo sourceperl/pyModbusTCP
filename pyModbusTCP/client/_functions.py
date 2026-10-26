@@ -8,7 +8,7 @@ from ..constants import (
     ENCAPSULATED_INTERFACE_TRANSPORT,
     MASK_WRITE_REGISTER,
     MAX_PDU_SIZE,
-    MB_RECV_ERR,
+    MB_FRAME_ERR,
     MEI_TYPE_READ_DEVICE_ID,
     READ_COILS,
     READ_DISCRETE_INPUTS,
@@ -110,7 +110,7 @@ class ClientFunctionsMixin:
             # check rx_byte_count: exactly the bytes of the bits requested (more is the reply of another request,
             # like a late reply relayed by a gateway), and the size of the buffer
             if byte_count != byte_length(bit_nb) or byte_count != len(rx_pdu_bits):
-                raise NetworkError(MB_RECV_ERR, 'rx byte count mismatch')
+                raise NetworkError(MB_FRAME_ERR, 'rx byte count mismatch')
             # return bits list
             return _unpack_bits(rx_pdu_bits, bit_nb)
         # handle error during request
@@ -139,7 +139,7 @@ class ClientFunctionsMixin:
         # check rx_byte_count: exactly the requested number of registers (more is the reply of another request, like a
         # late reply relayed by a gateway), and a consistent buffer size
         if byte_count != 2 * reg_nb or byte_count != len(f_regs):
-            raise NetworkError(MB_RECV_ERR, 'rx byte count mismatch')
+            raise NetworkError(MB_FRAME_ERR, 'rx byte count mismatch')
         # return registers list
         return _decode_regs(f_regs, reg_nb)
 
@@ -149,7 +149,7 @@ class ClientFunctionsMixin:
             rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=5)
             resp_addr, resp_value = struct.unpack('>HH', rx_pdu[1:5])
             if resp_addr != addr or resp_value != value:
-                raise NetworkError(MB_RECV_ERR, 'server reply does not match the request')
+                raise NetworkError(MB_FRAME_ERR, 'server reply does not match the request')
             return True
         # handle error during request
         except InternalError as e:
@@ -250,7 +250,7 @@ class ClientFunctionsMixin:
             rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=7)
             # the reply must echo the MEI type and the read device id code of the request
             if rx_pdu[1] != MEI_TYPE_READ_DEVICE_ID or rx_pdu[2] != read_code:
-                raise NetworkError(MB_RECV_ERR, 'server reply does not match the request')
+                raise NetworkError(MB_FRAME_ERR, 'server reply does not match the request')
             # init response object for populate it
             response = DeviceIdentificationResponse()
             # extract fields
@@ -263,12 +263,12 @@ class ClientFunctionsMixin:
             for _ in range(nb_of_objs):
                 # an object header is 2 bytes (id + length), followed by length bytes
                 if pdu_offset + 2 > len(rx_pdu):
-                    raise NetworkError(MB_RECV_ERR, 'rx byte count mismatch')
+                    raise NetworkError(MB_FRAME_ERR, 'rx byte count mismatch')
                 obj_id = rx_pdu[pdu_offset]
                 obj_len = rx_pdu[pdu_offset + 1]
                 obj_value = rx_pdu[pdu_offset + 2:pdu_offset + 2 + obj_len]
                 if obj_len != len(obj_value):
-                    raise NetworkError(MB_RECV_ERR, 'rx byte count mismatch')
+                    raise NetworkError(MB_FRAME_ERR, 'rx byte count mismatch')
                 # set offset to next object
                 pdu_offset += 2 + obj_len
                 # add result to request list

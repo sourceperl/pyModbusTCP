@@ -13,6 +13,7 @@ from ..constants import (
     MB_ERR_TXT,
     MB_EXCEPT_ERR,
     MB_NO_ERR,
+    MODBUS_PORT,
     VERSION,
 )
 from ..utils import _to_bool
@@ -37,7 +38,7 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
     _NetworkError: TypeAlias = _errors.NetworkError
     _ModbusExcept: TypeAlias = _errors.ModbusExcept
 
-    def __init__(self, host: str = 'localhost', port: int = 502, unit_id: int = 1, timeout: float = 30.0,
+    def __init__(self, host: str = 'localhost', port: int = MODBUS_PORT, unit_id: int = 1, timeout: float = 30.0,
                  auto_open: bool = True, auto_close: bool = False, *,
                  connect_retries: int = 0, connect_retry_delay: float = 0.5,
                  tcp_no_delay: bool = True, broadcast_interval: float = 0.15):

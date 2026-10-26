@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from ..constants import (
     MB_CONNECT_ERR,
+    MB_FRAME_ERR,
     MB_RECV_ERR,
     MB_SEND_ERR,
     MB_SOCK_CLOSE_ERR,
@@ -395,7 +396,7 @@ class ClientTransportMixin:
         if f_transaction_err or f_protocol_err or f_length_err or f_unit_id_err:
             self.close()
             self._on_tx_rx(frame=rx_mbap, is_tx=False)
-            raise NetworkError(MB_RECV_ERR, 'MBAP checking error')
+            raise NetworkError(MB_FRAME_ERR, 'MBAP checking error')
         # recv PDU
         rx_pdu = self._recv_all(f_length - 1)
         # for auto_close mode, close socket after each request
@@ -406,11 +407,11 @@ class ClientTransportMixin:
         # body decode
         # check PDU length for global minimal frame (an except frame: func code + exp code)
         if len(rx_pdu) < 2:
-            raise NetworkError(MB_RECV_ERR, 'PDU length is too short')
+            raise NetworkError(MB_FRAME_ERR, 'PDU length is too short')
         # extract function code: it must be the one of the request (with or without the exception flag)
         rx_fc = rx_pdu[0]
         if rx_fc & 0x7f != func_code:
-            raise NetworkError(MB_RECV_ERR,
+            raise NetworkError(MB_FRAME_ERR,
                                f'function code mismatch (0x{rx_fc:02X} for a 0x{func_code:02X} request)')
         # check except status
         if rx_fc >= 0x80:
@@ -418,7 +419,7 @@ class ClientTransportMixin:
             raise ModbusExcept(exp_code)
         # check PDU length for specific request set in min_len (keep this after except checking)
         if len(rx_pdu) < min_len:
-            raise NetworkError(MB_RECV_ERR, 'PDU length is too short for current request')
+            raise NetworkError(MB_FRAME_ERR, 'PDU length is too short for current request')
         # if no error, return PDU
         return rx_pdu
 

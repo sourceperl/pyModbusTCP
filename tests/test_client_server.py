@@ -18,8 +18,8 @@ from pyModbusTCP.constants import (
     EXP_NONE,
     EXP_SLAVE_DEVICE_FAILURE,
     MB_EXCEPT_ERR,
+    MB_FRAME_ERR,
     MB_NO_ERR,
-    MB_RECV_ERR,
     MB_SEND_ERR,
     MB_TIMEOUT_ERR,
     SUPPORTED_FUNCTION_CODES,
@@ -186,7 +186,7 @@ class TestClientServer(unittest.TestCase):
             self.server.store.app.holding_registers.write(0, [2])
             # the next request receives the late reply (value 1): it must be rejected, not returned as the current one
             self.assertIsNone(self.client.read_holding_registers(0))
-        self.assertEqual(self.client.last_error, MB_RECV_ERR)
+        self.assertEqual(self.client.last_error, MB_FRAME_ERR)
         self.assertFalse(self.client.is_open)
         # the connection is reopened (auto_open) and in sync
         self.client.on_tx_rx = Mock()  # type: ignore

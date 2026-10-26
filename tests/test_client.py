@@ -17,6 +17,7 @@ from pyModbusTCP.constants import (
     EXP_NONE,
     MB_CONNECT_ERR,
     MB_EXCEPT_ERR,
+    MB_FRAME_ERR,
     MB_NO_ERR,
     MB_RECV_ERR,
     MB_TIMEOUT_ERR,
@@ -354,7 +355,7 @@ class TestModbusClient(unittest.TestCase):
                 c = ModbusClient('127.0.0.1', port, timeout=2.0)
                 self.addCleanup(c.close)
                 self.assertIsNone(c.read_holding_registers(0))
-                self.assertEqual(c.last_error, MB_RECV_ERR)
+                self.assertEqual(c.last_error, MB_FRAME_ERR)
                 self.assertEqual(c.last_except, EXP_NONE)
 
     def test_mbap_length_out_of_range(self) -> None:
@@ -367,7 +368,7 @@ class TestModbusClient(unittest.TestCase):
                 c = ModbusClient('127.0.0.1', port, timeout=2.0)
                 self.addCleanup(c.close)
                 self.assertIsNone(c.read_holding_registers(0))
-                self.assertEqual(c.last_error, MB_RECV_ERR)
+                self.assertEqual(c.last_error, MB_FRAME_ERR)
                 self.assertFalse(c.is_open)
 
     def test_modbus_exception_log(self) -> None:
@@ -398,7 +399,7 @@ class TestModbusClient(unittest.TestCase):
                 c = ModbusClient()
                 with mock.patch.object(c, '_req_pdu', return_value=rx_pdu):
                     self.assertIsNone(c.read_device_identification())
-                self.assertEqual(c.last_error, MB_RECV_ERR)
+                self.assertEqual(c.last_error, MB_FRAME_ERR)
         # a valid reply for comparison
         c = ModbusClient()
         with mock.patch.object(c, '_req_pdu', return_value=b'\x2b\x0e\x01\x83\x00\x00\x01\x00\x02ab'):
@@ -425,7 +426,7 @@ class TestModbusClient(unittest.TestCase):
                 c = ModbusClient()
                 with mock.patch.object(c, '_req_pdu', return_value=rx_pdu):
                     self.assertIsNone(getattr(c, method)(*args))
-                self.assertEqual(c.last_error, MB_RECV_ERR)
+                self.assertEqual(c.last_error, MB_FRAME_ERR)
         # the exact size is accepted
         good = [('read_holding_registers', (100, 1), b'\x03\x02\xde\xad', [0xDEAD]),
                 ('read_coils', (0, 9), b'\x01\x02\xff\x01', [True] * 9),
@@ -511,7 +512,7 @@ class TestModbusClient(unittest.TestCase):
                         self.assertEqual(c.last_error, MB_NO_ERR)
                     else:
                         self.assertIs(result, False)
-                        self.assertEqual(c.last_error, MB_RECV_ERR)
+                        self.assertEqual(c.last_error, MB_FRAME_ERR)
 
 
 if __name__ == '__main__':
@@ -641,7 +642,7 @@ class TestBroadcast(unittest.TestCase):
             c._broadcast_ids[tid] -= _transport.BROADCAST_REPLY_DELAY + 1.0
         time.sleep(0.1)
         self.assertFalse(c.write_single_register(12, 44))
-        self.assertEqual(c.last_error, MB_RECV_ERR)
+        self.assertEqual(c.last_error, MB_FRAME_ERR)
         self.assertEqual(c._broadcast_ids, {}, 'cleared by close()')
         # at most BROADCAST_IDS_MAX ids are kept, the oldest are dropped
         gw = self.gateway(echo_unicast)
@@ -682,7 +683,7 @@ class TestBroadcast(unittest.TestCase):
                           + frame[2:])
         c = ModbusClient(host='127.0.0.1', port=gw.port, unit_id=1, timeout=2.0)
         self.assertFalse(c.write_single_register(12, 44))
-        self.assertEqual(c.last_error, MB_RECV_ERR)
+        self.assertEqual(c.last_error, MB_FRAME_ERR)
         self.assertFalse(c.is_open)
 
     def test_custom_request(self) -> None:

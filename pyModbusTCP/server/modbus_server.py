@@ -17,6 +17,7 @@ from ..constants import (
     EXP_SLAVE_DEVICE_FAILURE,
     MAX_PDU_SIZE,
     MEI_TYPE_READ_DEVICE_ID,
+    MODBUS_PORT,
     READ_FUNCTION_CODES,
     WRITE_FUNCTION_CODES,
 )
@@ -57,7 +58,7 @@ class ModbusServer:
     # kept for compatibility (allowed hosts check used outside of this class)
     _validate_allowed_hosts = staticmethod(_validators.validate_allowed_hosts)
 
-    def __init__(self, host: str = 'localhost', port: int = 502, no_block: bool = False, *, ipv6: bool = False,
+    def __init__(self, host: str = 'localhost', port: int = MODBUS_PORT, no_block: bool = False, *, ipv6: bool = False,
                  store: DataStore | Mapping[int, DataStore] | None = None,
                  functions: Mapping[int, FunctionHandler] | None = None, fallback: FunctionHandler | None = None,
                  device_id: DeviceIdentification | None = None,
