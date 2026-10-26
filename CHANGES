@@ -32,6 +32,8 @@ Revision history for pyModbusTCP
       default ABCD) instead of big_endian: big_endian=False is now ByteOrder.CDAB, BADC and DCBA are available.
       New shortcuts read/write_uint16() and read/write_int16() (1 register, no byte order), read/write_uint64() and
       read/write_int64(): one shortcut for each DataType.
+    - utils: word_list_to_long() raises ValueError when the number of words is not a multiple of 2 (4 with
+      long_long): the extra words were ignored in silence.
     - examples: client_serial_gw.py and server_serial_gw.py are removed (replaced by the gateways of the tools).
     - server: the arguments of ModbusServer after no_block are keyword-only (only host, port and no_block are
       positional): ModbusServer('0.0.0.0', 5020, read_only=True).

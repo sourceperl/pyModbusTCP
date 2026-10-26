@@ -117,8 +117,8 @@ To write a negative value, mask it to 16 bits: ``c.write_single_register(0, -1 &
 32 and 64 bits integers
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-A 32 bits value uses 2 registers. :func:`~pyModbusTCP.utils.word_list_to_long` merges each pair of registers,
-:func:`~pyModbusTCP.utils.long_list_to_word` splits the values for a write:
+A 32 bits value uses 2 registers. :func:`~pyModbusTCP.utils.word_list_to_long` merges each pair of registers (an odd
+number of registers raises ``ValueError``), :func:`~pyModbusTCP.utils.long_list_to_word` splits the values for a write:
 
 .. code-block:: python
 

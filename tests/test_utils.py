@@ -75,8 +75,11 @@ class TestUtils(unittest.TestCase):
         """Test function word_list_to_long and it 's short alias words2longs."""
         # empty list, return empty list
         self.assertEqual(word_list_to_long([]), [])
-        # if len of list is odd ignore last value
-        self.assertEqual(word_list_to_long([0x1, 0x2, 0x3]), [0x10002])
+        # a word that is not part of a whole value is an error (it was ignored in silence)
+        with self.assertRaisesRegex(ValueError, '3 words'):
+            word_list_to_long([0x1, 0x2, 0x3])
+        with self.assertRaisesRegex(ValueError, '6 words'):
+            word_list_to_long([0x1] * 6, long_long=True)
         # test convert with big and little endian
         l1 = [0xdead, 0xbeef]
         l2 = [0xfeed, 0xface, 0xcafe, 0xbeef]

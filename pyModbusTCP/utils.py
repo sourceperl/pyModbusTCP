@@ -118,13 +118,16 @@ def word_list_to_long(val_list: list[int], big_endian: bool = True, long_long: b
     :type big_endian: bool
     :param long_long: True for long long 64 bits, default is long 32 bits (optional)
     :type long_long: bool
-    :returns: list of 32 bits int value
+    :returns: list of 32 bits int value (64 bits with long_long)
     :rtype: list
+    :raises ValueError: if the number of words is not a multiple of 2 (4 with long_long): an extra word was ignored
     """
     long_list = []
     block_size = 4 if long_long else 2
+    if len(val_list) % block_size:
+        raise ValueError(f'{len(val_list)} words: a {16 * block_size} bits value takes {block_size} words')
     # populate long_list (len is half or quarter of 16 bits val_list) with 32 or 64 bits value
-    for index in range(int(len(val_list) / block_size)):
+    for index in range(len(val_list) // block_size):
         start = block_size * index
         long = 0
         if big_endian:
@@ -153,7 +156,7 @@ def long_list_to_word(val_list: list[int], big_endian: bool = True, long_long: b
     big_endian param to False. Input format could be long long with long_long
     param to True.
 
-    :param val_list: list of 32 bits int value
+    :param val_list: list of 32 bits int value (64 bits with long_long)
     :type val_list: list
     :param big_endian: True for big endian/False for little (optional)
     :type big_endian: bool
@@ -233,7 +236,7 @@ twos_c_l = get_list_2comp
 # IEEE floating-point functions
 ###############################
 def decode_ieee(val_int: int, double: bool = False) -> float:
-    """Decode Python int (32 bits integer) as an IEEE single or double precision format.
+    """Decode Python int (32 or 64 bits integer) as an IEEE single or double precision format.
 
     Support NaN.
 
@@ -245,14 +248,15 @@ def decode_ieee(val_int: int, double: bool = False) -> float:
     :returns: float result
     :rtype: float
     """
+    # the same explicit byte order on both sides (never the native one): the bits of val_int are the bits of the float
     if double:
-        return float(struct.unpack("d", struct.pack("Q", val_int))[0])
+        return float(struct.unpack('>d', struct.pack('>Q', val_int))[0])
     else:
-        return float(struct.unpack("f", struct.pack("I", val_int))[0])
+        return float(struct.unpack('>f', struct.pack('>I', val_int))[0])
 
 
 def encode_ieee(val_float: float, double: bool = False) -> int:
-    """Encode Python float to int (32 bits integer) as an IEEE single or double precision format.
+    """Encode Python float to int (32 or 64 bits integer) as an IEEE single or double precision format.
 
     Support NaN.
 
@@ -261,13 +265,13 @@ def encode_ieee(val_float: float, double: bool = False) -> int:
     :param double: set to encode as a 64 bits double precision,
                    default is 32 bits single (optional)
     :type double: bool
-    :returns: IEEE 32 bits (single precision) as Python int
+    :returns: IEEE 32 bits (single precision) or 64 bits (double precision) as Python int
     :rtype: int
     """
     if double:
-        return int(struct.unpack("Q", struct.pack("d", val_float))[0])
+        return int(struct.unpack('>Q', struct.pack('>d', val_float))[0])
     else:
-        return int(struct.unpack("I", struct.pack("f", val_float))[0])
+        return int(struct.unpack('>I', struct.pack('>f', val_float))[0])
 
 
 ################
