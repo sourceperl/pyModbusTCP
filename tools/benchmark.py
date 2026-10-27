@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import socket
 import time
 from collections.abc import Callable
 
@@ -9,12 +8,6 @@ from pyModbusTCP.client import ModbusClient
 from pyModbusTCP.server import ModbusServer
 
 HOST = "127.0.0.1"
-
-
-def get_free_tcp_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind((HOST, 0))
-        return int(s.getsockname()[1])
 
 
 def benchmark(name: str, n: int, fn: Callable[[], bool]) -> None:
@@ -36,13 +29,14 @@ def benchmark(name: str, n: int, fn: Callable[[], bool]) -> None:
 
 
 if __name__ == "__main__":
-    srv = ModbusServer(host=HOST, port=get_free_tcp_port(), no_block=True)
-    srv.start()
+    # port 0: the OS chooses a free port at the bind (a port found free before could be taken in between)
+    srv = ModbusServer(host=HOST, port=0, no_block=True)
+    _, port = srv.start()
 
-    cli = ModbusClient(host=HOST, port=srv.port, auto_open=True, auto_close=False)
+    cli = ModbusClient(host=HOST, port=port, auto_open=True, auto_close=False)
 
     try:
-        print(f"Starting benchmark of version {VERSION} on ModbusServer ({HOST}:{srv.port})...\n")
+        print(f"Starting benchmark of version {VERSION} on ModbusServer ({HOST}:{port})...\n")
         data = [False, True, False, True] * 200
         len_data = len(data)
 
