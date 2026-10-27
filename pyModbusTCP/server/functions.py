@@ -220,7 +220,7 @@ def encapsulated_interface_transport(req: Request) -> bytes:
         if not (first_id <= object_id <= last_id and object_id in device_id):
             object_id = first_id
         objects = device_id.items(start=object_id, end=last_id)
-    conformity_level = 0x83
+    conformity_level = device_id.conformity_level
     more_follow = 0
     next_obj_id = 0
     head_size = 7

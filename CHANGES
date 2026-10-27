@@ -102,6 +102,9 @@ Revision history for pyModbusTCP
     - server: Request.reply() and Request.unpack() use the byte order prefix of their format ('<HH' for little endian
       data), and a format without prefix is big endian for both: reply() removed the prefix in silence ('<H' gave a
       big endian value), unpack() without prefix used the native order of the host (little endian on most hosts).
+    - server: the conformity level of the read device identification is computed from the published objects (0x82
+      regular, 0x83 with an extended object 0x80 to 0xFF) instead of always 0x83; an object id of DeviceIdentification
+      can't be a bool (True was the object 1).
     - server: no_block and ipv6 of ModbusServer must be bools, like read_only (TypeError): 0/1, a string or None were
       taken for True or False in silence.
     - tools: --max-connections and --max-connections-per-host (mbtcp-server, mbtcp-tcp2rtu) must be integers greater

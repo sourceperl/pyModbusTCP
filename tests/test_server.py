@@ -57,6 +57,18 @@ class TestModbusServer(unittest.TestCase):
         self.assertNotIn(0x07, device_id)
         self.assertNotIn(0x81, device_id)
         self.assertNotIn('vendor_name', device_id)
+        # an object id is never a bool (True was the object 1)
+        for key in (True, False):
+            with self.assertRaises(TypeError):
+                device_id[key] = b'x'
+            with self.assertRaises(TypeError):
+                device_id[key]
+            self.assertNotIn(key, device_id)
+        # conformity level: the categories of the published objects (0x80: individual access supported)
+        self.assertEqual(device_id.conformity_level, 0x83)
+        self.assertEqual(DeviceIdentification().conformity_level, 0x82)
+        self.assertEqual(DeviceIdentification(objects_id={0x7F: b'r'}).conformity_level, 0x82)
+        self.assertEqual(DeviceIdentification(objects_id={0xFF: b'x'}).conformity_level, 0x83)
         # test __repr__
         device_id = DeviceIdentification(
             product_name=b'server', objects_id={42: b'this'})
@@ -1209,7 +1221,8 @@ class TestReadOnlyOption(unittest.TestCase):
     def test_other_functions_are_not_concerned(self) -> None:
         self._start_server(read_only=True, device_id=DeviceIdentification(vendor_name=b'me'))
         # read device identification (individual access to VendorName)
-        self.assertEqual(self.exchange('2b 0e 04 00'), '2b0e048300000100026d65')
+        # (conformity level 0x82: regular objects only, no extended object)
+        self.assertEqual(self.exchange('2b 0e 04 00'), '2b0e048200000100026d65')
         # an unknown function keeps its own exception
         self.assertEqual(self.exchange('55 00'), 'd501')
 

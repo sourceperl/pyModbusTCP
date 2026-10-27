@@ -53,13 +53,14 @@ class DeviceIdentification:
                 self[key] = value
 
     def __getitem__(self, key: int) -> bytes:
-        if not isinstance(key, int):
+        # an object id is an int, never a bool (True would be the object 1)
+        if isinstance(key, bool) or not isinstance(key, int):
             raise TypeError('key must be an int')
         with self._objs_lock:
             return self._objs_d[key]
 
     def __setitem__(self, key: int, value: bytes) -> None:
-        if not isinstance(key, int):
+        if isinstance(key, bool) or not isinstance(key, int):
             raise TypeError('key must be an int')
         if 0xff >= key >= 0x00:
             if not isinstance(value, bytes):
@@ -73,8 +74,24 @@ class DeviceIdentification:
 
     def __contains__(self, key: object) -> bool:
         # without it, "in" would iterate with __getitem__(0, 1, 2...) until a KeyError escapes
+        if isinstance(key, bool):
+            return False
         with self._objs_lock:
             return key in self._objs_d
+
+    @property
+    def conformity_level(self) -> int:
+        """The conformity level of the read device identification response: the categories of the published objects.
+
+        0x81 basic (objects 0x00 to 0x02), 0x82 regular (an object of 0x03 to 0x7F), 0x83 extended (an object of 0x80
+        to 0xFF); the flag 0x80: the server supports the individual access (read code 4) as well as the stream access.
+        The objects 0x03 to 0x06 always exist (empty by default): the level is at least 0x82.
+        """
+        with self._objs_lock:
+            last_id = max(self._objs_d, default=0)
+        if last_id >= 0x80:
+            return 0x83
+        return 0x82 if last_id >= 0x03 else 0x81
 
     def __repr__(self) -> str:
         named_params = ''
