@@ -8,7 +8,8 @@ build-backend = "hatchling.build"
 [project]
 name = "pyModbusTCP-cli"
 # version: the one of pyModbusTCP (../pyModbusTCP/constants.py, see [tool.hatch.version]), the two packages are always
-# released together with the same version; dependencies: exactly this release of pyModbusTCP (set by hatch_build.py)
+# released together with the same version; dependencies: exactly this release of pyModbusTCP (set by
+# hatch_metadata_cli.py)
 dynamic = ["version", "dependencies"]
 description = "Command line tools for pyModbusTCP: Modbus/TCP server, client and Modbus TCP/RTU gateways"
 readme = "README.md"

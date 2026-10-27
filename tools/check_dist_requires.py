@@ -2,7 +2,7 @@
 """Check that the wheels of the two packages require each other in exactly the version of the repository.
 
 pyModbusTCP-cli X must require pyModbusTCP[serial]==X, and the cli extra of pyModbusTCP X must require
-pyModbusTCP-cli==X (set by hatch_metadata.py and pyModbusTCP-cli/hatch_build.py). Used by tools/build_dist.sh and
+pyModbusTCP-cli==X (set by hatch_metadata.py and pyModbusTCP-cli/hatch_metadata_cli.py). Used by tools/build_dist.sh and
 the CI.
 
 usage: python tools/check_dist_requires.py DIST_DIR

@@ -45,7 +45,7 @@ options and their output may still change. pip never installs a pre-release by d
 
 ```bash
 # a specific pre-release
-pip install pyModbusTCP==0.4.0a2
+pip install pyModbusTCP==0.4.0a3
 # or the latest release, pre-releases included
 pip install --pre pyModbusTCP
 ```
@@ -154,7 +154,7 @@ install the optional package pyModbusTCP-cli. A plain `pip install pyModbusTCP` 
 
 ```bash
 # in a virtual environment, with the library
-pip install "pyModbusTCP[cli]==0.4.0a2"
+pip install "pyModbusTCP[cli]==0.4.0a3"
 # or as isolated command line tools
 pipx install pyModbusTCP-cli
 ```

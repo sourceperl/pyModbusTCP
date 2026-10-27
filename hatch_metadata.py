@@ -2,13 +2,14 @@
 
 pyModbusTCP-cli has no code, only the commands and its dependencies: "pip install pyModbusTCP[cli]==X" installs
 exactly the commands released (and tested) with X, never another release with other dependencies. The other way is
-set by pyModbusTCP-cli/hatch_build.py (pyModbusTCP-cli X requires pyModbusTCP[serial]==X).
+set by pyModbusTCP-cli/hatch_metadata_cli.py (pyModbusTCP-cli X requires pyModbusTCP[serial]==X).
 
 The version is read from pyModbusTCP/constants.py by hatchling ([tool.hatch.version] of pyproject.toml): no version to
 update by hand. This file is in the sdist, so a build from it (like the one of a downstream packager) runs it too.
 
 The metadata hook of [tool.hatch.metadata.hooks.custom] (path = "hatch_metadata.py" in pyproject.toml): not the default
-name hatch_build.py, a second module of that name next to pyModbusTCP-cli/hatch_build.py would stop mypy.
+name hatch_build.py, and not the name of the hook of pyModbusTCP-cli (hatch_metadata_cli.py): two modules of the
+same name would stop mypy.
 """
 
 from typing import Any

@@ -133,7 +133,7 @@ fi
 "$PYTHON" -m twine check --strict "${expected[@]}"
 
 # pyModbusTCP-cli has no code: it requires exactly this release of the library, and the cli extra of the library
-# exactly this release of pyModbusTCP-cli (set by hatch_metadata.py and pyModbusTCP-cli/hatch_build.py)
+# exactly this release of pyModbusTCP-cli (set by hatch_metadata.py and pyModbusTCP-cli/hatch_metadata_cli.py)
 "$PYTHON" tools/check_dist_requires.py "$OUT_DIR"
 
 if [[ "$INSTALL_TEST" -eq 1 ]]; then

@@ -50,7 +50,7 @@ pyModbusTCP-cli always has the version of the library it requires.
 
     The tools are new in version 0.4.0, only available as a pre-release (alpha) for now: their options and their
     output may still change. ``pip install "pyModbusTCP[cli]"`` without a version installs the stable 0.3.1,
-    without the tools: use ``pip install "pyModbusTCP[cli]==0.4.0a2"`` (or ``--pre``).
+    without the tools: use ``pip install "pyModbusTCP[cli]==0.4.0a3"`` (or ``--pre``).
 
 Examples
 --------

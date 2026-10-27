@@ -2,7 +2,7 @@
 #
 # The scripts run with the bash 3.2 of macOS (the last GPLv2 release, still the default there) and in the Git Bash
 # of Windows: no bash 4 feature (${var,,}, ${var^^}, declare -A, mapfile...), no GNU only option (readlink -f, sed -i
-# without suffix...). tools/check_scripts.sh checks it in the CI.
+# without suffix...). The job package of the CI runs tools/build_dist.sh on both.
 
 # venv_bin VENV_DIR: the directory of the executables of a venv, bin/ on Linux and macOS, Scripts/ on Windows
 venv_bin() {
