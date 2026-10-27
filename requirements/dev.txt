@@ -3,7 +3,7 @@
 # known versions of build, hatchling and twine. Dependabot (.github/dependabot.yml) updates them.
 
 # the tools of the CI: flake8, pytest, mypy, types-pyserial, build, hatchling, pyserial
--r requirements-ci.txt
+-r ci.txt
 
 # check of the packages before an upload (tools/build_dist.sh)
 twine==7.0.0

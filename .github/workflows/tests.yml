@@ -14,11 +14,13 @@ permissions:
   contents: read
 
 # The actions are pinned by commit SHA (a tag can be moved to another commit), with the version in a comment, and the
-# Python tools by exact version (.github/requirements-ci.txt): Dependabot (.github/dependabot.yml) proposes the
+# Python tools by exact version (requirements/ci.txt): Dependabot (.github/dependabot.yml) proposes the
 # updates in a pull request.
 
 jobs:
-  test:
+  tests:
+    # the test suite (pytest) on every supported Python version and OS
+    name: Tests (Python ${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
@@ -39,26 +41,21 @@ jobs:
 
     - name: Install dependencies
       run: |
-        # pip: always the latest release; the tools: their exact version (.github/requirements-ci.txt, Dependabot)
+        # pip: always the latest release; the tools: their exact version (requirements/ci.txt, Dependabot)
         python -m pip install --upgrade pip
-        python -m pip install -r .github/requirements-ci.txt
+        python -m pip install -r requirements/ci.txt
         # [serial]: pyserial, for the tests of the gateways of pyModbusTCP.tools (skipped without it); no build
-        # isolation: the hatchling pinned in requirements-ci.txt builds the package
+        # isolation: the hatchling pinned in requirements/ci.txt builds the package
         python -m pip install --no-build-isolation ".[serial]"
-
-    - name: Lint with flake8
-      run: |
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings.
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics --extend-exclude=build/,docs/
 
     - name: Test with pytest
       run: |
         pytest
 
-  tools:
-    # command line tools: pyModbusTCP.tools (in the library) and the package in pyModbusTCP-cli/ (commands only)
+  package:
+    # what is released: lint, type check, then the two packages (pyModbusTCP and pyModbusTCP-cli, commands only) built,
+    # checked and installed by tools/build_dist.sh, on the oldest and the newest Python of each OS
+    name: Package (Python ${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
@@ -80,47 +77,26 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Type check with mypy
+    - name: Type check, build and check the two packages
       run: |
-        # pip: always the latest release; the tools: their exact version (.github/requirements-ci.txt, Dependabot)
+        # pip: always the latest release; the tools: their exact version (requirements/dev.txt: the ones of
+        # the CI, plus twine for tools/build_dist.sh)
         python -m pip install --upgrade pip
-        python -m pip install -r .github/requirements-ci.txt
+        python -m pip install -r requirements/dev.txt
         python -m pip install --no-build-isolation ".[serial]"
+        # lint and type check: here only (6 runs), not in each of the 15 runs of the job tests
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings.
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics --extend-exclude=build/,docs/
         mypy --strict pyModbusTCP
-
-    - name: Build the two packages
-      run: |
-        # no isolation: the build and hatchling of requirements-ci.txt (installed above), not the latest releases
-        python -m build --no-isolation --outdir dist .
-        python -m build --no-isolation --outdir dist pyModbusTCP-cli
-        ls dist
-        # the two packages require each other in exactly the same version (hatch_metadata.py, pyModbusTCP-cli/hatch_build.py)
-        python tools/check_dist_requires.py dist
-
-    - name: Library alone (no command, no pyserial, tools available with python -m)
-      run: |
-        python -m venv "$RUNNER_TEMP/lib-only"
-        BIN="$RUNNER_TEMP/lib-only/bin"; [ -d "$BIN" ] || BIN="$RUNNER_TEMP/lib-only/Scripts"
-        "$BIN/python" -m pip install dist/pymodbustcp-*.whl
-        if "$BIN/python" -m pip show pyModbusTCP-cli pyserial >/dev/null 2>&1; then echo "unexpected package"; exit 1; fi
-        if ls "$BIN" | grep -q mbtcp; then echo "unexpected command"; exit 1; fi
-        "$BIN/python" -m pyModbusTCP.tools server --version
-        # a gateway without pyserial: exit status 2 with the way to install it
-        set +e; "$BIN/python" -m pyModbusTCP.tools tcp2rtu --help 2> err.txt; status=$?; set -e
-        cat err.txt
-        [ "$status" -eq 2 ] && grep -q 'pyModbusTCP\[serial\]' err.txt
-
-    - name: Library with the commands (pyModbusTCP-cli)
-      run: |
-        python -m venv "$RUNNER_TEMP/with-tools"
-        BIN="$RUNNER_TEMP/with-tools/bin"; [ -d "$BIN" ] || BIN="$RUNNER_TEMP/with-tools/Scripts"
-        "$BIN/python" -m pip install -c .github/requirements-ci.txt dist/*.whl
-        for cmd in mbtcp-server mbtcp-client mbtcp-tcp2rtu mbtcp-rtu2tcp; do "$BIN/$cmd" --version; done
-        # the tools package must have the version of the library
-        lib_version=$("$BIN/python" -c "import pyModbusTCP; print(pyModbusTCP.__version__)")
-        "$BIN/mbtcp-client" --version | grep -qF " $lib_version"
+        # the release script itself, without the release checks (-c): build of the two packages without isolation,
+        # twine check, cross requirements (tools/check_dist_requires.py), install in a venv of the library alone
+        # (no command, no pyserial, a gateway exits with status 2) and of the library with the commands (-t)
+        tools/build_dist.sh -p python -t -c
 
   docs:
+    name: Documentation
     # the Sphinx documentation (as built by Read the Docs): any warning is an error
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -4,12 +4,13 @@
 # activated dev venv of ./init_dev_venv.sh: build, twine and hatchling), then check them before an upload with twine.
 #
 # Usage:
-#   tools/build_dist.sh [-p PYTHON] [-o OUT_DIR] [-t] [-h]
+#   tools/build_dist.sh [-p PYTHON] [-o OUT_DIR] [-t] [-c] [-h]
 #
 # Options:
 #   -p PYTHON    Python interpreter with build, twine and hatchling (default: python, the one of the active venv)
 #   -o OUT_DIR   output directory, emptied first (default: dist)
 #   -t           also test the install of the built wheels, in throwaway venvs (needs pyserial from PyPI)
+#   -c           check only, not a release (the CI): no check of the date of CHANGES, no lookup on PyPI/TestPyPI
 #   -h           show this help
 #
 # No isolated build environment: hatchling is taken from PYTHON (python -m build --no-isolation).
@@ -24,16 +25,18 @@ set -euo pipefail
 PYTHON="python"
 OUT_DIR=""
 INSTALL_TEST=0
+RELEASE=1
 
 usage() {
-    sed -n '3,20p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '3,21p' "$0" | sed 's/^# \{0,1\}//'
 }
 
-while getopts "p:o:th" opt; do
+while getopts "p:o:tch" opt; do
     case "$opt" in
         p) PYTHON="$OPTARG" ;;
         o) OUT_DIR="$OPTARG" ;;
         t) INSTALL_TEST=1 ;;
+        c) RELEASE=0 ;;
         h) usage; exit 0 ;;
         *) usage; exit 1 ;;
     esac
@@ -88,7 +91,7 @@ echo "==> Version: $VERSION (pyModbusTCP/constants.py)"
 
 # the changelog of a release (not a .devN version) starts with this version and its release date (YYYY-MM-DD): the
 # changelog is in the sdist and on the docs, a placeholder like "xxxx-xx-xx" can't be fixed after the upload
-if [[ "$VERSION" != *.dev* ]]; then
+if [[ "$RELEASE" -eq 1 && "$VERSION" != *.dev* ]]; then
     changes_head="$(grep -m 1 -E '^[0-9]' CHANGES || true)"
     if [[ ! "$changes_head" =~ ^${VERSION//./\\.}\ [0-9]{4}-[0-9]{2}-[0-9]{2}( |$) ]]; then
         echo "Error: the first entry of CHANGES must be \"$VERSION YYYY-MM-DD\", found: \"$changes_head\"" >&2
@@ -152,12 +155,22 @@ if [[ "$INSTALL_TEST" -eq 1 ]]; then
         exit 1
     fi
     "$BIN_LIB/python" -m pyModbusTCP.tools server --version
+    # a gateway without pyserial: exit status 2, with the way to install it
+    status=0
+    "$BIN_LIB/python" -m pyModbusTCP.tools tcp2rtu --help 2>"$TMP_DIR/err.txt" >/dev/null || status=$?
+    if [[ "$status" -ne 2 ]] || ! grep -qF 'pyModbusTCP[serial]' "$TMP_DIR/err.txt"; then
+        echo "Error: a gateway without pyserial must exit with status 2 and the install command, got $status:" >&2
+        cat "$TMP_DIR/err.txt" >&2
+        exit 1
+    fi
 
     echo "==> Install test: the library with pyModbusTCP-cli (pyserial from the package index)"
     "$PYTHON" -m venv "$TMP_DIR/with-cli"
     BIN_CLI="$(venv_bin "$TMP_DIR/with-cli")"
-    # both wheels in one call: the library comes from OUT_DIR, never from the index (where VERSION may already exist)
-    "$BIN_CLI/python" -m pip install --quiet --disable-pip-version-check "${LIB_WHL}[serial]" "$CLI_WHL"
+    # both wheels in one call: the library comes from OUT_DIR, never from the index (where VERSION may already exist);
+    # pyserial at the version of the CI
+    "$BIN_CLI/python" -m pip install --quiet --disable-pip-version-check -c requirements/ci.txt \
+        "${LIB_WHL}[serial]" "$CLI_WHL"
     for cmd in mbtcp-server mbtcp-client mbtcp-tcp2rtu mbtcp-rtu2tcp; do
         if ! "$BIN_CLI/$cmd" --version | grep -qF "$VERSION"; then
             echo "Error: '$cmd --version' doesn't show $VERSION" >&2
@@ -165,6 +178,12 @@ if [[ "$INSTALL_TEST" -eq 1 ]]; then
         fi
     done
     "$BIN_CLI/mbtcp-client" --version
+fi
+
+if [[ "$RELEASE" -eq 0 ]]; then
+    echo ""
+    echo "Packages built and checked in $OUT_DIR/ (-c: not a release)"
+    exit 0
 fi
 
 # a version can never be uploaded twice: warn if it is already on PyPI or TestPyPI (skipped when offline)

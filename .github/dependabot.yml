@@ -1,6 +1,6 @@
 # Updates of what the CI and the docs use, each pinned (a new release never runs before a reviewed pull request):
 # - the actions of the workflows (.github/workflows/), pinned by commit SHA: the new SHA and its version in the comment
-# - the Python tools of the CI (.github/requirements-ci.txt), of the dev venv (.github/requirements-dev.txt) and of the
+# - the Python tools of the CI (requirements/ci.txt), of the dev venv (requirements/dev.txt) and of the
 #   docs (docs/requirements.txt, also used by Read the Docs), pinned by exact version
 # A new release is proposed only 7 days after its publication (cooldown).
 version: 2
@@ -20,7 +20,7 @@ updates:
       prefix: ci
 
   - package-ecosystem: pip
-    directory: /.github
+    directory: /requirements
     schedule:
       interval: weekly
     # a release is proposed 7 days after its publication: a compromised release is usually found and removed before

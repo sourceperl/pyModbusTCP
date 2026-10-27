@@ -23,7 +23,7 @@ WITH_TOOLS=1
 TOOLS_DIR="pyModbusTCP-cli"
 
 # test and build tools, each at an exact version (the ones of the CI, and twine, ruff...): see this file
-DEV_REQUIREMENTS=".github/requirements-dev.txt"
+DEV_REQUIREMENTS="requirements/dev.txt"
 
 usage() {
     sed -n '3,13p' "$0" | sed 's/^# \{0,1\}//'
