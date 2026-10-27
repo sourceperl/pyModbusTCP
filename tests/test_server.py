@@ -508,7 +508,8 @@ class TestModbusServerLimits(_LiveServerTestCase):
             (True, TypeError), (64.0, TypeError), ('64', TypeError))
         for value, exc in bad_values:
             with self.subTest(value=value), self.assertRaises(exc):
-                ModbusServer(ipv6_host_prefix=value)
+                # (bad values typed Any: they are deliberately not of the annotated type)
+                ModbusServer(ipv6_host_prefix=cast(Any, value))
         # a property, applied at once to a running server
         server = self._start_server()
         server.ipv6_host_prefix = 128

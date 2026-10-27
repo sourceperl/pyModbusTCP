@@ -15,6 +15,8 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# (not read from __doc__: None with python -OO)
+USAGE = 'usage: python tools/check_dist_requires.py DIST_DIR'
 
 
 def repo_version() -> str:
@@ -34,7 +36,7 @@ def requires_dist(wheel: Path) -> list[str]:
 
 def main() -> int:
     if len(sys.argv) != 2:
-        print(__doc__.strip().splitlines()[-2], file=sys.stderr)
+        print(USAGE, file=sys.stderr)
         return 2
     dist = Path(sys.argv[1])
     version = repo_version().lower()
