@@ -96,7 +96,7 @@ class PDU:
         try:
             return struct.unpack(fmt, raw_section)
         except struct.error:
-            err_msg = f"unable to decode PDU message  (fmt: '{fmt}', values: {raw_section!r})"
+            err_msg = f"unable to decode PDU message (fmt: '{fmt}', values: {raw_section!r})"
             raise PDUDecodeError(err_msg)
 
 

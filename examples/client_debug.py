@@ -19,7 +19,7 @@ logging.getLogger('pyModbusTCP.client').setLevel(logging.DEBUG)
 # run a modbus server at localhost:5020
 ModbusServer(host='localhost', port=5020, no_block=True).start()
 
-# this message is show
+# this message is shown
 logger.info('app startup')
 
 # init modbus client to connect to localhost:5020
@@ -27,7 +27,7 @@ c = ModbusClient(port=5020)
 
 # main loop
 for i in range(100):
-    # this message is not not show (global log level is set to INFO)
+    # this message is not shown (the global log level is INFO)
     logger.debug(f'run loop #{i}')
     # modbus i/o
     c.read_coils(0)

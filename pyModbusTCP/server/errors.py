@@ -28,15 +28,15 @@ class Error(Exception):
 
 
 class NetworkError(Error):
-    """ Exception raise by ModbusServer on I/O errors. """
+    """ Exception raised by ModbusServer on I/O errors. """
 
 
 class DataFormatError(Error):
-    """ Exception raise by ModbusServer for data format errors. """
+    """ Exception raised by ModbusServer for data format errors. """
 
 
 class PDUDecodeError(DataFormatError):
-    """ Exception raise when a received request PDU can't be decoded (too short...). """
+    """ Exception raised when a received request PDU can't be decoded (too short...). """
 
 
 class ModbusException(Exception):

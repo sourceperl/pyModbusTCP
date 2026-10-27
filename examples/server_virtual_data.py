@@ -6,7 +6,7 @@ Modbus/TCP server with virtual data
 
 Map the system date and time to @ 0 to 5 on the "holding registers" space.
 Only the reading of these registers in this address space is authorized. All
-other requests return an illegal data address except.
+other requests return an illegal data address exception.
 
 The store has no memory (size 0): the only addresses are the mapped range,
 computed at each request. A mapped range can also be added to a regular store,

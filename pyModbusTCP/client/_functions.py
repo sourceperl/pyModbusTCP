@@ -77,6 +77,9 @@ class ClientFunctionsMixin:
             (the function code is not checked, a code with the exception flag set (0x80 to 0xFF) is sent as is,
             but its reply can't be accepted: it's always a function code mismatch error)
         :type pdu: bytes or bytearray
+        :param broadcast: send to the unit id 0 (every slave of a serial line, through a TCP to RTU gateway), without
+            waiting for a reply: the PDU sent once the request is sent (default: False); a write function only
+        :type broadcast: bool
         :returns: modbus frame PDU or None if error
         :rtype: bytes or None
         """

@@ -69,8 +69,6 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         :param broadcast_interval: min interval in seconds between two broadcast requests (default 0.15, 0 for no
             limit): a broadcast sent sooner waits, a client never sends broadcasts faster than a serial line can take
         :type broadcast_interval: float
-        :return: Object ModbusClient
-        :rtype: ModbusClient
         """
         # private
         # set _sock first: __del__() always needs it, even if a validation below fails

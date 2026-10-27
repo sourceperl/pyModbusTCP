@@ -2,9 +2,9 @@
 #        Website: https://github.com/sourceperl/pyModbusTCP
 #        License: MIT (https://opensource.org/license/mit)
 #    Description: Client/Server ModBus/TCP
-#                 Support functions 3 and 16 (class 0)
-#                 1,2,4,5,6 (Class 1)
-#                 15,23,43
+#                 Functions of the client and the server: 0x01 to 0x06, 0x0F, 0x10, 0x17 and 0x2B/0x0E (read
+#                 device identification); any other with ModbusClient.custom_request() and a function handler of
+#                 ModbusServer
 
 import logging
 
