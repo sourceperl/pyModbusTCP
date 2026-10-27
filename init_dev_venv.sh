@@ -41,7 +41,9 @@ while getopts "p:d:lrh" opt; do
 done
 
 # move to the project root (script directory)
-cd "$(dirname "$(readlink -f "$0")")"
+cd "$(dirname "$0")"
+# venv_bin
+. tools/_lib.sh
 
 if [[ ! -f pyproject.toml ]]; then
     echo "Error: pyproject.toml not found in $(pwd)" >&2
@@ -74,7 +76,8 @@ if [[ ! -d "$VENV_DIR" ]]; then
     "$PYTHON" -m venv --copies "$VENV_DIR"
 fi
 
-VENV_PY="$VENV_DIR/bin/python"
+VENV_BIN="$(venv_bin "$VENV_DIR")"
+VENV_PY="$VENV_BIN/python"
 
 # pip itself: always its latest release (not pinned); the tools below: their exact version
 echo "==> Upgrading pip"
@@ -99,7 +102,7 @@ cat <<EOF
 
 Environment ready.
 
-  Activate the venv:  source $VENV_DIR/bin/activate
+  Activate the venv:  source $VENV_BIN/activate
 
   Library (with its tools, pyModbusTCP.tools):
     Run the tests:    python -m pytest

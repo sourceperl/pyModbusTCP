@@ -57,10 +57,8 @@ if [[ ! -f pyproject.toml || ! -f "$CLI_DIR/pyproject.toml" || ! -f pyModbusTCP/
     exit 1
 fi
 
-venv_bin() {
-    # bin/ on Linux and macOS, Scripts/ on Windows (Git Bash)
-    if [[ -d "$1/bin" ]]; then echo "$1/bin"; else echo "$1/Scripts"; fi
-}
+# venv_bin
+. tools/_lib.sh
 
 if ! command -v "$PYTHON" >/dev/null 2>&1; then
     echo "Error: interpreter '$PYTHON' not found" >&2
@@ -68,7 +66,7 @@ if ! command -v "$PYTHON" >/dev/null 2>&1; then
 fi
 if ! "$PYTHON" -c 'import build, twine, hatchling' 2>/dev/null; then
     echo "Error: build, twine or hatchling missing for $(command -v "$PYTHON"): activate the dev venv" \
-         "(./init_dev_venv.sh, then source venv/bin/activate) or use -p" >&2
+         "(./init_dev_venv.sh, then source $(venv_bin venv)/activate) or use -p" >&2
     exit 1
 fi
 

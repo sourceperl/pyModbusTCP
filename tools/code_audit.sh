@@ -87,6 +87,8 @@ fi
 
 # move to the project root (parent of the script directory)
 cd "$(dirname "$0")/.."
+# venv_bin
+. tools/_lib.sh
 
 if [[ ! -f pyproject.toml ]]; then
     echo "Error: pyproject.toml not found in $(pwd)" >&2
@@ -95,10 +97,10 @@ fi
 
 # default interpreter: the active venv, else the dev venv of the project, else python3
 if [[ -z "$PYTHON" ]]; then
-    if [[ -n "${VIRTUAL_ENV:-}" && -x "$VIRTUAL_ENV/bin/python" ]]; then
-        PYTHON="$VIRTUAL_ENV/bin/python"
-    elif [[ -x venv/bin/python ]]; then
-        PYTHON="venv/bin/python"
+    if [[ -n "${VIRTUAL_ENV:-}" && -x "$(venv_bin "$VIRTUAL_ENV")/python" ]]; then
+        PYTHON="$(venv_bin "$VIRTUAL_ENV")/python"
+    elif [[ -x "$(venv_bin venv)/python" ]]; then
+        PYTHON="$(venv_bin venv)/python"
     else
         PYTHON="python3"
     fi

@@ -41,6 +41,8 @@ fi
 
 # move to the project root (parent of the script directory)
 cd "$(dirname "$0")/.."
+# venv_bin
+. tools/_lib.sh
 
 if [[ ! -f docs/conf.py || ! -f docs/requirements.txt ]]; then
     echo "Error: docs/conf.py or docs/requirements.txt not found in $(pwd)" >&2
@@ -82,7 +84,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 echo "==> Using Python: $("$PYTHON" --version) ($(command -v "$PYTHON"))"
 echo "==> Creating a temporary venv: $TMP_DIR/venv"
 "$PYTHON" -m venv "$TMP_DIR/venv"
-VENV_PY="$TMP_DIR/venv/bin/python"
+VENV_PY="$(venv_bin "$TMP_DIR/venv")/python"
 
 echo "==> Installing the documentation requirements"
 "$VENV_PY" -m pip install --quiet --disable-pip-version-check --requirement docs/requirements.txt
