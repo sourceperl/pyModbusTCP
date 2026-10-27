@@ -216,6 +216,10 @@ the connections of the previous one are fully closed by the system.
   of the request, byte counts (exactly the data requested: a reply with more registers or bits, like the reply of
   another request, is an error), and the echo of the address and value/quantity for the write functions.
   An invalid MBAP header closes the connection.
+- A request that the server may have read is never sent twice by the client: after a connection reset while waiting
+  for the reply, the server may have executed it (and a read can have an effect too, like a counter cleared on read),
+  the request fails and the application decides. Only a request whose send failed on a connection already reset (it
+  never reached the server) is sent again once on a new connection (`auto_open` mode).
 - The transaction ID is a 16 bits counter (from a random start value): two consecutive requests never share
   the same ID, so a late reply to a previous request is never taken for the current one.
 - Parameters are checked before any network I/O (types, ranges, end of the address space). The host is an IPv4

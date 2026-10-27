@@ -62,6 +62,10 @@ Revision history for pyModbusTCP
 
     - client: robustness (timeouts, invalid replies, transaction ids, is_open, write replies check), a link-local
       IPv6 address is accepted with its interface only.
+    - client: a request reset while waiting for its reply on a reused connection is no longer sent again: the server
+      may have executed it, then reset the connection (a write executed twice). It fails with MB_RECV_ERR, whatever
+      its function (a read can clear a counter on some devices), the application decides. Only a send that fails on
+      a connection already reset (the request never reached the server) is still sent again once.
     - server: Modbus compliance (0x05, 0x0F, 0x10, 0x17, 0x2B/0x0E and its conformity level, MBAP length), a
       malformed request is answered with an exception, a handler response too short, too long or of another function
       is replaced by a "slave device failure", listen on a link-local IPv6 address.

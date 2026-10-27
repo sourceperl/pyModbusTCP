@@ -63,7 +63,6 @@ class ClientTransportMixin:
     _tcp_no_delay: bool
     _sock: socket.socket | None
     _deadline: float
-    _rx_count: int
     _conn_reused: bool
     _transaction_id: int
     # transaction id -> time of the send (time.monotonic()) of the last broadcast requests, the oldest first: a late
@@ -268,9 +267,10 @@ class ClientTransportMixin:
             raise NetworkError(MB_TIMEOUT_ERR, 'timeout error')
         except OSError as e:
             self.close()
-            # a modbus frame is sent in one send() call: if it fails, nothing of it was sent
+            # a connection already reset (or closed) by the server: the send fails at once, before the request can
+            # reach the server (a modbus frame, 260 bytes at most, fits in the socket buffer: sendall() never sends
+            # a part of it before a reset is reported)
             raise NetworkError(MB_SEND_ERR, f'send error: {e}', retryable=isinstance(e, CONN_LOST_ERRORS)) from None
-        self._rx_count = 0
 
     def _send_pdu(self, pdu: bytes) -> None:
         """Convert modbus PDU to frame and send it.
@@ -342,15 +342,15 @@ class ClientTransportMixin:
             raise NetworkError(MB_TIMEOUT_ERR, 'timeout error')
         except OSError as e:
             self.close()
-            # reset before any byte of the reply: the server (or its TCP stack after a reboot) didn't read the request
-            # (an end of stream b'' is not enough: the server may have executed the request, then closed)
-            retryable = self._rx_count == 0 and isinstance(e, CONN_LOST_ERRORS)
-            raise NetworkError(MB_RECV_ERR, f'recv error: {e}', retryable=retryable) from None
+            # never retryable, even reset before any byte of the reply: the server may have executed the request, then
+            # reset the connection (an abortive close, a gateway or a firewall that drops it), and a read can have an
+            # effect too on some devices (a counter or an alarm cleared on read): the request fails, the application
+            # decides
+            raise NetworkError(MB_RECV_ERR, f'recv error: {e}') from None
         # handle recv error
         if not r_buffer:
             self.close()
             raise NetworkError(MB_RECV_ERR, 'recv error: connection closed by the server')
-        self._rx_count += len(r_buffer)
         return r_buffer
 
     def _recv_all(self, size: int) -> bytes:

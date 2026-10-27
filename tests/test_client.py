@@ -968,9 +968,9 @@ class TestConnectionClosedByServer(unittest.TestCase):
         The server, closed, never reads this request, it answers with a RST. What the client gets depends on the OS:
         - Linux/macOS: the end of stream first (b''), as for a server that reads the request then closes: it may
           have executed it, the request fails, not sent again;
-        - Windows: the RST (ECONNRESET) before any reply byte: the request was surely not read, it is sent again
-          on a new connection and succeeds.
-        Either way, a request read by the server is never lost: every request received by the server is answered.
+        - Windows: the RST (ECONNRESET) before any reply byte: the client can't tell it from a server that executed
+          the request then reset the connection, the request fails too, not sent again.
+        Either way, a request is never sent twice: the server receives exactly the requests that succeeded.
         """
         port, requests = self._server(self._reply_then(lambda conn: conn.close()))
         c = ModbusClient('127.0.0.1', port, timeout=2.0)
@@ -1015,6 +1015,99 @@ class TestConnectionClosedByServer(unittest.TestCase):
         self.assertEqual(c.last_error, MB_RECV_ERR)
         time.sleep(0.1)
         self.assertEqual(len(requests), 2)
+
+    def _execute_then_reset_server(self) -> tuple[int, list[bytes]]:
+        """A server that answers every request (echo of a write, 42 for a read), except the 2nd request of the 1st
+        connection: it reads (executes) it, then resets the connection (RST, SO_LINGER 0) without a reply."""
+        def answer(conn: socket.socket, req: bytes) -> None:
+            pdu = req[7:]
+            if pdu[0] == 0x03:
+                conn.sendall(req[:2] + self.REPLY)
+            else:
+                conn.sendall(req[:4] + struct.pack('>HB', len(pdu[:5]) + 1, req[6]) + pdu[:5])
+
+        def on_conn(conn: socket.socket, requests: list[bytes]) -> None:
+            first_conn = not requests
+            while True:
+                req = conn.recv(256)
+                if not req:
+                    conn.close()
+                    return
+                requests.append(req)
+                if first_conn and len(requests) == 2:
+                    conn.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', 1, 0))
+                    conn.close()
+                    return
+                answer(conn, req)
+
+        return self._server(on_conn)
+
+    def test_reset_after_execution_not_resent(self) -> None:
+        """The server executes a request then resets the connection before its reply: it is never sent again (a write
+        would be executed twice, a read can clear a counter on some devices), whatever the function."""
+        requests_of: dict[str, Callable[[ModbusClient], object]] = {
+            'read_holding_registers': lambda c: c.read_holding_registers(0),
+            'read_device_identification': lambda c: c.read_device_identification(),
+            'custom_request (read)': lambda c: c.custom_request(b'\x03\x00\x00\x00\x01'),
+            'write_single_register': lambda c: c.write_single_register(1, 1234),
+            'write_multiple_registers': lambda c: c.write_multiple_registers(1, [1, 2]),
+            'write_read_multiple_registers': lambda c: c.write_read_multiple_registers(1, [1], 0, 1),
+            'custom_request': lambda c: c.custom_request(b'\x41\x01'),
+        }
+        for name, request in requests_of.items():
+            with self.subTest(request=name):
+                port, requests = self._execute_then_reset_server()
+                c = ModbusClient('127.0.0.1', port, timeout=2.0)
+                self.addCleanup(c.close)
+                self.assertEqual(c.read_holding_registers(0), [42])
+                self.assertIn(request(c), (None, False))
+                self.assertEqual(c.last_error, MB_RECV_ERR)
+                time.sleep(0.1)
+                # executed once: the 1st read, then the request (never a 2nd copy of it)
+                self.assertEqual(len(requests), 2)
+                # the next request reconnects
+                self.assertEqual(c.read_holding_registers(0), [42])
+
+    def test_write_send_failed_resent(self) -> None:
+        """The connection is already reset when a write is sent (the check before the send doesn't see it): the
+        send fails, the server never got the write, it is sent again once on a new connection and succeeds."""
+        def on_conn(conn: socket.socket, requests: list[bytes]) -> None:
+            req = conn.recv(256)
+            requests.append(req)
+            pdu = req[7:]
+            self.reply_read.clear()
+            conn.sendall(req[:4] + struct.pack('>HB', len(pdu[:5]) + 1, req[6]) + pdu[:5])
+            self._rst(conn)
+
+        port, requests = self._server(on_conn)
+        c = ModbusClient('127.0.0.1', port, timeout=2.0)
+        self.addCleanup(c.close)
+        self.assertTrue(c.write_single_register(0, 1))
+        self.reply_read.set()
+        time.sleep(0.1)
+        sends: list[Exception | None] = []
+        real_send = c._send
+
+        def spy_send(frame: bytes) -> None:
+            try:
+                real_send(frame)
+            except Exception as e:
+                sends.append(e)
+                raise
+            sends.append(None)
+
+        with mock.patch.object(c, '_closed_by_peer', return_value=False), mock.patch.object(c, '_send', spy_send):
+            ok = c.write_single_register(0, 2)
+        if sends and sends[0] is not None:
+            # the send failed (the usual case): the write never reached the server, sent again and executed once
+            self.assertTrue(ok, c.last_error_as_txt)
+            self.assertEqual(len(requests), 2)
+        else:
+            # the RST was not yet seen by the send (a race): the reset comes while waiting for the reply, the write
+            # is not sent again (it fails), the server, closed, never read it
+            self.assertFalse(ok)
+            self.assertEqual(c.last_error, MB_RECV_ERR)
+            self.assertEqual(len(requests), 1)
 
     def test_is_open(self) -> None:
         """is_open is False once the server has closed (FIN) or reset (RST) the connection, with no request."""

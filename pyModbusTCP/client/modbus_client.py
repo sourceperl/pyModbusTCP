@@ -59,7 +59,7 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         :param auto_close: auto TCP close
         :type auto_close: bool
         :param connect_retries: number of new connect attempts after a failed one (default 0: no retry), for
-            open() and the auto_open connections (a request is never sent twice, only the connection is retried)
+            open() and the auto_open connections (only the connection is retried, a failed request is not)
         :type connect_retries: int
         :param connect_retry_delay: base delay in seconds before the first connect retry (default 0.5), doubled at
             each next retry (exponential backoff, capped at 60 s, with a random jitter)
@@ -89,7 +89,6 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         self._last_broadcast = -math.inf
         # internal variables
         self._deadline = 0.0  # end of the current request (time.monotonic() value), see _send() and _recv()
-        self._rx_count = 0  # bytes received since the last send (see _recv())
         self._conn_reused = False  # the current request is sent on a connection open before it (see _send_pdu())
         # MBAP transaction ID: a counter incremented at each request
         self._transaction_id = random.randint(0, 0xffff)
@@ -327,8 +326,9 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
             # return receive PDU
             return self._recv_pdu(func_code=tx_pdu[0], min_len=rx_min_len)
         except NetworkError as e:
-            # auto_open mode, a reused connection lost (reset) before the server read the request: reconnect and
-            # send it again, once (safe, even for a write: the server has not seen the first one)
+            # auto_open mode, a reused connection already reset when the request is sent (the send fails): the request
+            # never reached the server, reconnect and send it again, once. A reset while waiting for the reply is never
+            # retried (see _recv()): the server may have executed the request, whatever its function
             if not (self.auto_open and self._conn_reused and e.retryable):
                 raise
             self._debug_msg(f'{e.message} on a reused connection: reconnect and send the request again')

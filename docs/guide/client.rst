@@ -55,10 +55,17 @@ Manage the TCP connection
 With the default settings (``auto_open=True``, ``auto_close=False``), the connection is opened at the first request
 and kept open for the next ones. If the server closes it (an idle timeout, a restart), the next request sees it
 before the send and reconnects at once: the request is sent on the new connection, it doesn't fail. If the
-connection is reset by the server just as the request is sent (it was not read), the request is sent again once on a
-new connection. A request that the server may have read is never sent again (a write could be executed twice): it
-fails, the next request reconnects. A server gone without closing the connection (a cable pulled, a power cut) can't
-be seen: the request fails on timeout.
+connection is reset by the server, two cases:
+
+- the send itself fails (the connection was already reset): the request never reached the server, it is sent again
+  once on a new connection, whatever its function;
+- the reset comes while waiting for the reply: the server may have executed the request, then reset the connection
+  (an abortive close, a gateway or a firewall that drops it). The request fails (``MB_RECV_ERR``), even a read (some
+  devices clear a counter or an alarm when it is read): the application decides whether to send it again, the next
+  request reconnects.
+
+A request that the server may have read is never sent again. A server gone without closing the connection (a cable
+pulled, a power cut) can't be seen: the request fails on timeout.
 
 To open the connection before each request and close it after (useful with a server that accepts few
 connections, or for a request every few minutes):
@@ -88,8 +95,9 @@ To retry a failed connection (a server that restarts, a link that comes back), s
 :attr:`~.ModbusClient.connect_retries`: after a failed connect, up to this number of new attempts are made, the first
 one after about :attr:`~.ModbusClient.connect_retry_delay` seconds, the delay doubled at each next one (up to 60 s,
 with a random jitter so that many clients don't retry in sync). This applies to :meth:`~.ModbusClient.open` and to
-the connections opened by ``auto_open``. An unknown host name is not retried. Only the connection is retried, never a
-request: a write sent twice could be executed twice, the application decides what to do on a request error.
+the connections opened by ``auto_open``. An unknown host name is not retried. Only the connection is retried, not a
+failed request (apart from the single new send above, never for a request that can change something): a write sent
+twice could be executed twice, the application decides what to do on a request error.
 
 .. code-block:: python
 
@@ -269,7 +277,7 @@ A request never raises an exception for a network or a Modbus error: a read retu
    * - ``MB_FRAME_ERR``
      - 6
      - A reply received, but invalid: bad MBAP header (like the transaction id of another request), function code or
-       size that don't match the request, a write echo with other values. The connection is closed.
+       size that don't match the request, a write echo with other values. A bad MBAP header closes the connection.
    * - ``MB_TIMEOUT_ERR``
      - 5
      - No complete reply before ``timeout``.

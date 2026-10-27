@@ -13,7 +13,7 @@ class NetworkError(InternalError):
         self.code = code
         self.message = message
         # True if a new attempt is safe and may succeed: a connect error (but not an unknown host name), or a request
-        # that the server has surely not read (connection reset before any reply on a reused connection)
+        # whose send failed on a connection already reset (it never reached the server)
         self.retryable = retryable
 
 
