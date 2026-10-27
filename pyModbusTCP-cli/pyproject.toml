@@ -11,7 +11,7 @@ name = "pyModbusTCP-cli"
 # released together with the same version; dependencies: exactly this release of pyModbusTCP (set by
 # hatch_metadata_cli.py)
 dynamic = ["version", "dependencies"]
-description = "Command line tools for pyModbusTCP: Modbus/TCP server, client and Modbus TCP/RTU gateways"
+description = "Command line tools for pyModbusTCP: Modbus/TCP server, client, Modbus TCP/RTU gateways and RTU scanner"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Loïc Lefebvre" }]
@@ -31,6 +31,7 @@ mbtcp-server = "pyModbusTCP.tools._entry:run_server"
 mbtcp-client = "pyModbusTCP.tools._entry:run_client"
 mbtcp-tcp2rtu = "pyModbusTCP.tools._entry:run_tcp2rtu"
 mbtcp-rtu2tcp = "pyModbusTCP.tools._entry:run_rtu2tcp"
+mbtcp-rtu-scan = "pyModbusTCP.tools._entry:run_rtu_scan"
 
 [project.urls]
 Source = "https://github.com/sourceperl/pyModbusTCP"

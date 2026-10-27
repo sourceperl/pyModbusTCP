@@ -871,6 +871,15 @@ def test_tcp2rtu_cancelled_request_is_not_sent() -> None:
 
 @pytest.mark.parametrize('tool, args, error', [
     ('tcp_to_rtu_gw', ['-b', '0'], '-b/--baudrate'),
+    ('rtu_scan', ['-b', '9600,0'], '-b/--baudrate'),
+    ('rtu_scan', ['-a', '0'], '-a/--address'),
+    ('rtu_scan', ['-a', '1-248'], '-a/--address'),
+    ('rtu_scan', ['-a', '10-2'], 'empty range'),
+    ('rtu_scan', ['--parity', 'N,X'], 'invalid parity'),
+    ('rtu_scan', ['--stopbits', '1.5'], 'invalid stop bits'),
+    ('rtu_scan', ['-f', '5'], '-f/--function'),
+    ('rtu_scan', ['-t', '0'], '-t/--timeout'),
+    ('rtu_scan', ['--rs485-rts-tx', 'low'], '--rs485-rts-tx needs --rs485'),
     ('tcp_to_rtu_gw', ['-t', '-1'], '-t/--timeout'),
     ('tcp_to_rtu_gw', ['-t', 'nan'], '-t/--timeout'),
     ('tcp_to_rtu_gw', ['-e', '0'], '-e/--eof'),
@@ -1298,11 +1307,162 @@ def test_rtu2tcp_late_response_dropped(server: tuple[ModbusServer, int], caplog:
     assert any('Response dropped' in r.getMessage() for r in caplog.records)
 
 
+# --- mbtcp-rtu-scan ---
+
+class SlavesSerial:
+    """A serial port with Modbus/RTU slaves that only answer at 19200 bauds, 8E1: slave 17 has holding register 0 =
+    1234 and coil 0 on, slave 5 answers every read with exception 0x02. Options: a local echo, a noise answered at
+    19200 8N1, and baud rates refused by the port.
+    """
+    port, bytesize, is_open, timeout = 'slaves', 8, True, 0.0
+
+    def __init__(self, echo: bool = False, noise: bool = False, refused: tuple[int, ...] = ()) -> None:
+        self._baudrate, self.parity, self.stopbits = 9600, 'N', 1
+        self.echo, self.noise, self.refused = echo, noise, refused
+        self.buffer = bytearray()
+        self.requests: list[tuple[int, str, float, bytes]] = []
+
+    @property
+    def baudrate(self) -> int:
+        return self._baudrate
+
+    @baudrate.setter
+    def baudrate(self, value: int) -> None:
+        if value in self.refused:
+            raise OSError(22, 'Invalid argument')
+        self._baudrate = value
+
+    @property
+    def in_waiting(self) -> int:
+        return len(self.buffer)
+
+    def reset_input_buffer(self) -> None:
+        self.buffer.clear()
+
+    def flush(self) -> None:
+        pass
+
+    def close(self) -> None:
+        self.is_open = False
+
+    def read(self, size: int = 1) -> bytes:
+        data = bytes(self.buffer[:size])
+        del self.buffer[:size]
+        return data
+
+    def write(self, data: bytes) -> int:
+        self.requests.append((self.baudrate, self.parity, self.stopbits, bytes(data)))
+        if self.echo:
+            self.buffer += data
+        settings = (self.baudrate, self.parity, self.stopbits)
+        if self.noise and settings == (19200, 'N', 1):
+            self.buffer += b'\xff\x13\x00'
+        if settings != (19200, 'E', 1) or crc16(data) != 0:
+            return len(data)
+        address, function = data[0], data[1]
+        if address == 17 and function in (1, 2):
+            self.buffer += rtu_frame(17, bytes([function, 1, 0x01]))
+        elif address == 17 and function == 3:
+            self.buffer += rtu_frame(17, bytes([3, 2, 0x04, 0xD2]))
+        elif address in (5, 17):
+            self.buffer += rtu_frame(address, bytes([function | 0x80, 0x02 if address == 5 else 0x01]))
+        return len(data)
+
+
+def run_rtu_scan(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, args: list[str],
+                 port: SlavesSerial | None = None) -> tuple[int, str, SlavesSerial]:
+    """Run mbtcp-rtu-scan on a SlavesSerial port: (exit status, stdout, the port)."""
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import rtu_scan
+    port = port or SlavesSerial()
+    monkeypatch.setattr(rtu_scan, 'Serial', lambda **_kwargs: port)
+    status = rtu_scan.main(args + ['-t', '0.001', 'COM9'])
+    return status, capsys.readouterr().out, port
+
+
+def test_rtu_scan_finds_slaves(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    """The first slave found gives the settings, --all lists the other slaves of the bus with them."""
+    status, out, port = run_rtu_scan(capsys, monkeypatch, ['--all'])
+    assert status == 0
+    lines = out.splitlines()
+    assert lines[0] == ('probe request: read holding registers (function 0x03) of holding register 0, '
+                        'response timeout 0.001 s')
+    # 9600 8N1, 8E1, 8O1, 8N2, then 19200 8N1, 8E1: slave 5 is the first address that answers
+    assert [line for line in lines if line.startswith('test:')] == [
+        'test: 9600 8N1, addresses 1-247', 'test: 9600 8E1, addresses 1-247', 'test: 9600 8O1, addresses 1-247',
+        'test: 9600 8N2, addresses 1-247', 'test: 19200 8N1, addresses 1-247', 'test: 19200 8E1, addresses 1-247']
+    assert 'slave found at address 5 (19200 8E1), answer: exception 0x02 (illegal data address)' in lines
+    assert '  mbtcp-tcp2rtu -b 19200 --parity E --stopbits 1 COM9' in lines
+    assert lines[-1] == 'slave found at address 17, answer: holding register 0 = 1234'
+    # the addresses in ascending order, the requests of the function 3 (holding register 0)
+    assert [frame[0] for *_, frame in port.requests[:247]] == list(range(1, 248))
+    assert port.requests[0][3] == rtu_frame(1, bytes.fromhex('0300000001'))
+    assert len(port.requests) == 5 * 247 + 5 + 246
+    assert not port.is_open
+
+
+def test_rtu_scan_options(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    """-b, --parity, -a and -f restrict the scan, in the given order; --stopbits 2 also tries 8E2 and 8O2."""
+    status, out, port = run_rtu_scan(capsys, monkeypatch, ['-b', '19200', '--parity', 'E', '-a', '20,17', '-f', '1'])
+    assert status == 0
+    assert out.splitlines()[0].startswith('probe request: read coils (function 0x01) of coil 0,')
+    assert 'slave found at address 17 (19200 8E1), answer: coil 0 = 1' in out.splitlines()
+    assert [(frame[0], frame[1]) for *_, frame in port.requests] == [(20, 1), (17, 1)]
+    from pyModbusTCP.tools import rtu_scan
+    formats = rtu_scan.serial_formats(argparse.Namespace(baudrate=[9600], parity=['N', 'E'], stopbits=[2, 1]))
+    assert [str(fmt) for fmt in formats] == ['9600 8N2', '9600 8E2', '9600 8N1', '9600 8E1']
+
+
+def test_rtu_scan_not_found(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    """No slave: exit status 1, the answers with a bad CRC are listed as hints; a refused baud rate is skipped."""
+    port = SlavesSerial(noise=True, refused=(9600,))
+    status, out, _ = run_rtu_scan(capsys, monkeypatch, ['-b', '9600,19200', '--parity', 'N', '-a', '3'], port)
+    assert status == 1
+    assert '9600 8N1: refused by the serial port, skipped' in out
+    assert 'no slave found' in out
+    assert '19200 8N1, address 3: [3 bytes] ff 13 00' in out
+
+
+def test_rtu_scan_echo(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    """The local echo of an adapter is not taken for an answer."""
+    port = SlavesSerial(echo=True)
+    status, out, _ = run_rtu_scan(capsys, monkeypatch, ['-b', '9600,19200', '--parity', 'E', '-a', '17'], port)
+    assert status == 0
+    assert 'slave found at address 17 (19200 8E1), answer: holding register 0 = 1234' in out
+    assert 'no answer' not in out and 'bad CRC' not in out
+
+
+def test_rtu_scan_types() -> None:
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import rtu_scan
+    assert rtu_scan.address_list('1-3, 0x10,247') == [1, 2, 3, 16, 247]
+    assert rtu_scan.ranges([1, 2, 3, 16, 247, 5]) == '1-3,16,247,5'
+    assert rtu_scan.ranges(list(range(1, 248))) == '1-247'
+    assert rtu_scan.baudrate_list('9600, 19200') == [9600, 19200]
+    assert rtu_scan.parity_list('e,N') == ['E', 'N']
+    assert rtu_scan.stopbits_list('2,1') == [2, 1]
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='needs a pseudo-terminal (POSIX only)')
+def test_rtu_scan_rs485_refused(caplog: pytest.LogCaptureFixture) -> None:
+    """A pseudo-terminal has no RS-485 mode: exit status 2, before any request."""
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import rtu_scan
+    master_fd, slave_fd = os.openpty()
+    try:
+        with caplog.at_level(logging.CRITICAL):
+            assert rtu_scan.main(['--rs485', os.ttyname(slave_fd)]) == 2
+        assert 'RS-485 mode' in caplog.text
+    finally:
+        os.close(master_fd)
+        os.close(slave_fd)
+
+
 # --- common ---
 
-@pytest.mark.parametrize('command', ['server', 'client', 'tcp2rtu', 'rtu2tcp'])
+@pytest.mark.parametrize('command', ['server', 'client', 'tcp2rtu', 'rtu2tcp', 'rtu-scan'])
 def test_help_and_version(command: str) -> None:
-    if command in ('tcp2rtu', 'rtu2tcp'):
+    if command in ('tcp2rtu', 'rtu2tcp', 'rtu-scan'):
         pytest.importorskip('serial')
     for option in ('--help', '--version', '-v'):
         # through the dispatcher (python -m pyModbusTCP.tools) and the module itself
@@ -1387,9 +1547,9 @@ def test_client_ctrl_c_status(extra_args: list[str], status: int, capsys: pytest
     assert run_client(capsys, ['read-holding', '0'] + extra_args)[0] == status
 
 
-@pytest.mark.parametrize('command', ['tcp2rtu', 'rtu2tcp'])
+@pytest.mark.parametrize('command', ['tcp2rtu', 'rtu2tcp', 'rtu-scan'])
 def test_gateway_without_pyserial(command: str) -> None:
-    """Without pyserial, a gateway exits with status 2 and the way to install it (the other tools still work)."""
+    """Without pyserial, a serial tool exits with status 2 and the way to install it (the other tools still work)."""
     code = ('import sys; sys.modules["serial"] = None; '  # "import serial" now fails like a missing pyserial
             'from pyModbusTCP.tools import _entry; '
             'import pyModbusTCP.tools.client, pyModbusTCP.tools.server; '  # the other tools still work

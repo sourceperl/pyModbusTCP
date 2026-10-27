@@ -20,7 +20,7 @@ from hatchling.metadata.plugin.interface import MetadataHookInterface
 class CustomMetadataHook(MetadataHookInterface):
     def update(self, metadata: dict[str, Any]) -> None:
         metadata['optional-dependencies'] = {
-            # serial line of the gateways of pyModbusTCP.tools (python -m pyModbusTCP.tools tcp2rtu/rtu2tcp)
+            # serial line of the gateways and rtu-scan (python -m pyModbusTCP.tools tcp2rtu, rtu2tcp, rtu-scan)
             'serial': ['pyserial>=3.5,<4'],
             # commands mbtcp-* in the PATH: a separate package without code (console scripts can't depend on an extra,
             # so a plain install of the library puts no command in the PATH), exactly this release

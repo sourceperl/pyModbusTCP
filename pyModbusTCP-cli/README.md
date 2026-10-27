@@ -8,9 +8,10 @@ Command line tools built on [pyModbusTCP](https://github.com/sourceperl/pyModbus
 | `mbtcp-client`   | Modbus/TCP client: read and write requests from the command line           |
 | `mbtcp-tcp2rtu`  | gateway: Modbus/TCP clients -> Modbus/RTU slaves on a serial line          |
 | `mbtcp-rtu2tcp`  | gateway: a Modbus/RTU master on a serial line -> a Modbus/TCP server       |
+| `mbtcp-rtu-scan` | find the serial settings and the address of Modbus/RTU slaves              |
 
 The code of the tools is in the pyModbusTCP library (module `pyModbusTCP.tools`). This package contains no code:
-it only adds the commands to the PATH, with pyserial for the gateways. So a plain `pip install pyModbusTCP` puts no
+it only adds the commands to the PATH, with pyserial for the serial tools. So a plain `pip install pyModbusTCP` puts no
 command in the PATH and installs no dependency.
 
 ## Install
@@ -32,9 +33,10 @@ Without this package, the tools can still be run from the library alone:
 ```bash
 python -m pyModbusTCP.tools server --help
 python -m pyModbusTCP.tools client --help
-pip install "pyModbusTCP[serial]==0.4.0a3"  # pyserial, only needed by the gateways
+pip install "pyModbusTCP[serial]==0.4.0a3"  # pyserial, only needed by the serial tools
 python -m pyModbusTCP.tools tcp2rtu --help
 python -m pyModbusTCP.tools rtu2tcp --help
+python -m pyModbusTCP.tools rtu-scan --help
 ```
 
 ## Examples
@@ -57,6 +59,9 @@ mbtcp-tcp2rtu -H 0.0.0.0 -A 192.168.1.0/24 --read-only -b 19200 --parity E /dev/
 
 # an RTU master on /dev/ttyUSB0 reads the Modbus/TCP server 192.168.1.10 (the gateway is the RTU slave 30)
 mbtcp-rtu2tcp -a 30 -H 192.168.1.10 /dev/ttyUSB0
+
+# find the baud rate, the format and the address of the RTU slaves of /dev/ttyUSB0 (stop the usual master first)
+mbtcp-rtu-scan --all /dev/ttyUSB0
 ```
 
 On a terminal, `mbtcp-client` prints a table (registers in hexadecimal, unsigned, signed, binary and ASCII, bits

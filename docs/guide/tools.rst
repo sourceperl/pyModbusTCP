@@ -1,7 +1,7 @@
 Command line tools
 ==================
 
-pyModbusTCP comes with 4 command line tools, built on the library:
+pyModbusTCP comes with 5 command line tools, built on the library:
 
 .. list-table::
    :header-rows: 1
@@ -22,12 +22,15 @@ pyModbusTCP comes with 4 command line tools, built on the library:
    * - ``mbtcp-rtu2tcp``
      - ``python -m pyModbusTCP.tools rtu2tcp``
      - Gateway: a Modbus/RTU master on a serial line to a Modbus/TCP server.
+   * - ``mbtcp-rtu-scan``
+     - ``python -m pyModbusTCP.tools rtu-scan``
+     - Find the serial settings and the address of Modbus/RTU slaves.
 
 Installation
 ------------
 
 The tools are part of the library: ``python -m pyModbusTCP.tools`` runs them without any other package. The
-gateways need pyserial, an optional dependency:
+serial tools (the gateways and mbtcp-rtu-scan) need pyserial, an optional dependency:
 
 .. code-block:: bash
 
@@ -80,6 +83,9 @@ Examples
     # an RTU master on /dev/ttyUSB0 reads the Modbus/TCP server 192.168.1.10 (the gateway is the RTU slave 30)
     mbtcp-rtu2tcp -a 30 -H 192.168.1.10 /dev/ttyUSB0
 
+    # find the baud rate, the format and the address of the RTU slaves of /dev/ttyUSB0
+    mbtcp-rtu-scan --all /dev/ttyUSB0
+
 Functions relayed by mbtcp-tcp2rtu
 ----------------------------------
 
@@ -130,8 +136,43 @@ the gateway (dropped, or a serial port lost) is never reported to the client: it
 
     mbtcp-tcp2rtu --allow-broadcast --broadcast-delay 0.2 --broadcast-buffer 8 -b 19200 /dev/ttyUSB0
 
-RS-485 mode of the gateways
----------------------------
+Find the settings of a slave with mbtcp-rtu-scan
+------------------------------------------------
+
+For a slave whose settings are unknown, ``mbtcp-rtu-scan`` is a Modbus/RTU master that sends a read request (holding
+register 0, ``-f`` for coils, discrete inputs or input registers) with each baud rate and serial format, to each slave
+address in ascending order (1 to 247). Any valid answer gives the settings, an exception included (a slave without
+holding register 0 answers "illegal data address"); the tool prints them with the ``mbtcp-tcp2rtu`` command that uses
+them. The slaves of a bus share the serial settings: ``--all`` then reads every address with these settings, to list
+the other slaves.
+
+The order of the tries, from the most common to the least common:
+
+- baud rates (``-b``): 9600, 19200, 38400, 115200, 57600, 4800, 2400, 1200, 14400, 28800, 76800, 230400 (a rate
+  refused by the serial port is skipped);
+- serial formats (``--parity``, ``--stopbits``): 8N1, 8E1 (the default of the Modbus serial line spec), 8O1, then 8N2
+  (2 stop bits are only tried with no parity, unless ``--stopbits`` is given).
+
+Each baud rate and format with all the addresses takes about 2.5 minutes with the default timeout (``-t``, 0.6 s),
+every setting about 2 hours: give what you know.
+
+.. code-block:: bash
+
+    # at 9600 or 19200 bauds, even parity only, slaves 1 to 10, then the other slaves of the bus
+    mbtcp-rtu-scan -b 9600,19200 --parity E -a 1-10 --all /dev/ttyUSB0
+
+On a terminal, the address in test is shown on the line of its setting. When no slave is found, the answers with a
+bad CRC or from another address are listed: something answers, with other settings, or the line is noisy. ``-d``
+logs every frame. Exit status: 0 a slave is found, 1 no slave found or serial error, 2 invalid parameter, 130
+interrupted.
+
+.. warning::
+
+    The tool only sends read requests, but it is a master: stop the usual master of the bus (PLC, SCADA, gateway)
+    while it runs, two masters collide. The tries at a wrong baud rate also put meaningless bytes on the line.
+
+RS-485 mode of the serial tools
+-------------------------------
 
 An USB-RS485 adapter switches its transceiver between send and receive by itself: nothing to set. The UART of an
 embedded board often drives the transceiver with its RTS line: ``--rs485`` enables the RS-485 mode of the serial
@@ -153,9 +194,10 @@ the levels used, with ``(driver)`` for a level kept from the driver.
     # a board whose transceiver sends while RTS is not asserted (nRTS pin wired directly to the DE input)
     mbtcp-tcp2rtu --rs485 --rs485-rts-tx low --rs485-rts-rx high /dev/ttyRS485
 
-The mode is applied again when a lost port is reopened. A driver without RS-485 support (a pseudo-terminal, most USB
-adapters) refuses it at startup: the gateway exits with the code 2. On Windows, only the default levels and delays are
-accepted; macOS has no RS-485 mode. Without these options, the serial port is opened as before.
+``mbtcp-rtu-scan`` has the same options. The mode is applied again when a lost port is reopened (gateways). A driver
+without RS-485 support (a pseudo-terminal, most USB adapters) refuses it at startup: the tool exits with the code 2.
+On Windows, only the default levels and delays are accepted; macOS has no RS-485 mode. Without these options, the
+serial port is opened as before.
 
 Output of mbtcp-client
 ----------------------
@@ -314,4 +356,10 @@ mbtcp-rtu2tcp
 ~~~~~~~~~~~~~
 
 .. literalinclude:: ../_generated/help_rtu2tcp.txt
+   :language: none
+
+mbtcp-rtu-scan
+~~~~~~~~~~~~~~
+
+.. literalinclude:: ../_generated/help_rtu-scan.txt
    :language: none

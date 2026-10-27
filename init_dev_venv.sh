@@ -108,7 +108,7 @@ Environment ready.
     Run the tests:    python -m pytest
     Code audit:       tools/code_audit.sh
     Type check:       mypy --strict pyModbusTCP
-    Run a tool:       python -m pyModbusTCP.tools {server,client,tcp2rtu,rtu2tcp} --help
+    Run a tool:       python -m pyModbusTCP.tools {server,client,tcp2rtu,rtu2tcp,rtu-scan} --help
     Build:            python -m build --no-isolation --outdir dist .
     Check the build:  twine check dist/*
 EOF
@@ -117,7 +117,7 @@ if [[ "$WITH_TOOLS" -eq 1 ]]; then
     cat <<EOF
 
   Commands (package pyModbusTCP-cli, $TOOLS_DIR/):
-    Commands:         mbtcp-server, mbtcp-client, mbtcp-tcp2rtu, mbtcp-rtu2tcp (--help for each)
+    Commands:         mbtcp-server, mbtcp-client, mbtcp-tcp2rtu, mbtcp-rtu2tcp, mbtcp-rtu-scan (--help for each)
     Build:            python -m build --no-isolation --outdir dist $TOOLS_DIR
     Check the build:  twine check dist/*
 EOF

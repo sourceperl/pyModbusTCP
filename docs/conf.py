@@ -66,9 +66,9 @@ epub_show_urls = 'no'
 
 # -- Help of the command line tools --------------------------------------------
 # The "--help" of each tool is written to docs/_generated/ at each build and included in tools.rst, so the documented
-# options are always those of the code. The gateways need pyserial (in docs/requirements.txt).
+# options are always those of the code. The serial tools need pyserial (in docs/requirements.txt).
 
-TOOLS = ('server', 'client', 'tcp2rtu', 'rtu2tcp')
+TOOLS = ('server', 'client', 'tcp2rtu', 'rtu2tcp', 'rtu-scan')
 
 
 def write_tools_help() -> None:

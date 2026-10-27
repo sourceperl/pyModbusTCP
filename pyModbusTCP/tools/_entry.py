@@ -1,7 +1,7 @@
 """Entry points of the command line tools (console scripts of pyModbusTCP-cli and "python -m pyModbusTCP.tools").
 
-A tool module is only imported when it is run: the gateways import pyserial, an optional dependency, so a missing
-pyserial must only affect them, and with a clear message.
+A tool module is only imported when it is run: the serial tools (the gateways, mbtcp-rtu-scan) import pyserial, an
+optional dependency, so a missing pyserial must only affect them, and with a clear message.
 """
 
 import importlib
@@ -14,6 +14,7 @@ COMMANDS: dict[str, str] = {
     'client': 'client',
     'tcp2rtu': 'tcp_to_rtu_gw',
     'rtu2tcp': 'rtu_to_tcp_gw',
+    'rtu-scan': 'rtu_scan',
 }
 
 
@@ -48,6 +49,11 @@ def run_tcp2rtu() -> int:
 def run_rtu2tcp() -> int:
     """Console script mbtcp-rtu2tcp."""
     return run_tool('rtu_to_tcp_gw')
+
+
+def run_rtu_scan() -> int:
+    """Console script mbtcp-rtu-scan."""
+    return run_tool('rtu_scan')
 
 
 def main(argv: list[str] | None = None) -> int:

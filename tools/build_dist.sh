@@ -18,7 +18,7 @@
 # pyModbusTCP/constants.py, pyModbusTCP-cli requires exactly this release and the cli extra exactly this release of
 # pyModbusTCP-cli (tools/check_dist_requires.py), and a warning if VERSION is already on PyPI or TestPyPI (an
 # uploaded version can never be uploaded again). With -t: the library alone (no mbtcp-* command, no pyserial), then
-# with pyModbusTCP-cli (the 4 commands), each in a fresh venv.
+# with pyModbusTCP-cli (the 5 commands), each in a fresh venv.
 
 set -euo pipefail
 
@@ -173,7 +173,7 @@ if [[ "$INSTALL_TEST" -eq 1 ]]; then
     ci_requirements="$PWD/requirements/ci.txt"
     (cd "$OUT_DIR" && "$BIN_CLI/python" -m pip install --quiet --disable-pip-version-check -c "$ci_requirements" \
         "./$(basename "$LIB_WHL")[serial]" "./$(basename "$CLI_WHL")")
-    for cmd in mbtcp-server mbtcp-client mbtcp-tcp2rtu mbtcp-rtu2tcp; do
+    for cmd in mbtcp-server mbtcp-client mbtcp-tcp2rtu mbtcp-rtu2tcp mbtcp-rtu-scan; do
         if ! "$BIN_CLI/$cmd" --version | grep -qF "$VERSION"; then
             echo "Error: '$cmd --version' doesn't show $VERSION" >&2
             exit 1

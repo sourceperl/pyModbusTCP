@@ -136,20 +136,23 @@ server.start()
 ***The tools are new in 0.4.0 (only pre-releases for now): without a version or `--pre`,
 `pip install "pyModbusTCP[cli]"` installs the stable 0.3.1, without the tools (pip only shows a warning).***
 
-The library comes with command line tools: a Modbus/TCP server, a Modbus/TCP client, and two gateways between
-Modbus/TCP and Modbus/RTU (serial line). They run from the library itself:
+The library comes with command line tools: a Modbus/TCP server, a Modbus/TCP client, two gateways between
+Modbus/TCP and Modbus/RTU (serial line), and a scanner that finds the serial settings and the address of RTU slaves.
+They run from the library itself:
 
 ```bash
 python -m pyModbusTCP.tools server --help
 python -m pyModbusTCP.tools client -H 192.168.1.10 read-holding 0 -n 4
 
-# the gateways need pyserial (an optional dependency)
+# the serial tools need pyserial (an optional dependency)
 pip install "pyModbusTCP[serial]"
 python -m pyModbusTCP.tools tcp2rtu --help
 python -m pyModbusTCP.tools rtu2tcp --help
+python -m pyModbusTCP.tools rtu-scan --help
 ```
 
-To have them as commands in the PATH (`mbtcp-server`, `mbtcp-client`, `mbtcp-tcp2rtu` and `mbtcp-rtu2tcp`),
+To have them as commands in the PATH (`mbtcp-server`, `mbtcp-client`, `mbtcp-tcp2rtu`, `mbtcp-rtu2tcp` and
+`mbtcp-rtu-scan`),
 install the optional package pyModbusTCP-cli. A plain `pip install pyModbusTCP` puts no command in the PATH.
 
 ```bash

@@ -1,6 +1,6 @@
-"""The Modbus/RTU side shared by the two gateways (mbtcp-tcp2rtu, mbtcp-rtu2tcp): frames, timings, serial errors.
+"""The Modbus/RTU side of the serial tools (mbtcp-tcp2rtu, mbtcp-rtu2tcp, mbtcp-rtu-scan): frames, timings, errors.
 
-Needs pyserial, like the gateways (pip install "pyModbusTCP[serial]").
+Needs pyserial, like these tools (pip install "pyModbusTCP[serial]").
 """
 
 import logging

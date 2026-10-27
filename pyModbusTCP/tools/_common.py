@@ -18,12 +18,12 @@ from ..server._common import HOST_IPV6_PREFIX
 from ..server._validators import parse_network
 
 if TYPE_CHECKING:
-    # pyserial is optional: only imported by the serial gateways
+    # pyserial is optional: only imported by the serial tools
     from serial import Serial
     from serial.rs485 import RS485Settings
 
-# the serial gateways need pyserial, an optional dependency of pyModbusTCP
-SERIAL_MISSING_MSG = 'this gateway needs pyserial: pip install "pyModbusTCP[serial]" (or pyModbusTCP-cli)'
+# the serial tools (the gateways, mbtcp-rtu-scan) need pyserial, an optional dependency of pyModbusTCP
+SERIAL_MISSING_MSG = 'this tool needs pyserial: pip install "pyModbusTCP[serial]" (or pyModbusTCP-cli)'
 
 # README section about the privileged port 502
 PORT_502_HELP = ('see "Listen on the standard Modbus port 502 without root" in the pyModbusTCP examples README '
