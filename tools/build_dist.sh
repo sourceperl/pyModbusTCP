@@ -168,9 +168,11 @@ if [[ "$INSTALL_TEST" -eq 1 ]]; then
     "$PYTHON" -m venv "$TMP_DIR/with-cli"
     BIN_CLI="$(venv_bin "$TMP_DIR/with-cli")"
     # both wheels in one call: the library comes from OUT_DIR, never from the index (where VERSION may already exist);
-    # pyserial at the version of the CI
-    "$BIN_CLI/python" -m pip install --quiet --disable-pip-version-check -c requirements/ci.txt \
-        "${LIB_WHL}[serial]" "$CLI_WHL"
+    # pyserial at the version of the CI. The wheels by their name, from OUT_DIR: Git Bash (Windows) converts a path
+    # like /d/a/dist/x.whl for the Windows python only when it is the whole argument, never "/d/a/dist/x.whl[serial]"
+    ci_requirements="$PWD/requirements/ci.txt"
+    (cd "$OUT_DIR" && "$BIN_CLI/python" -m pip install --quiet --disable-pip-version-check -c "$ci_requirements" \
+        "./$(basename "$LIB_WHL")[serial]" "./$(basename "$CLI_WHL")")
     for cmd in mbtcp-server mbtcp-client mbtcp-tcp2rtu mbtcp-rtu2tcp; do
         if ! "$BIN_CLI/$cmd" --version | grep -qF "$VERSION"; then
             echo "Error: '$cmd --version' doesn't show $VERSION" >&2
