@@ -1386,6 +1386,48 @@ def test_rtu2tcp_broadcast_backlog(caplog: pytest.LogCaptureFixture) -> None:
     assert sent == pdus[:backlog + 1]
 
 
+def test_rtu2tcp_client_never_closed_while_the_relay_uses_it() -> None:
+    """At the end, the Modbus/TCP client is closed only once the relay thread is done (ModbusClient is not
+    thread-safe): a request held longer than the bound of the wait of run() is never broken by a close()."""
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import _rtu, rtu_to_tcp_gw
+    started, release = threading.Event(), threading.Event()
+
+    class BlockedClient:
+        """A Modbus/TCP client whose request lasts until released, its close() calls are counted."""
+        timeout = 0.05
+        closed = 0
+
+        def custom_request(self, pdu: bytes) -> bytes:
+            started.set()
+            release.wait(10.0)
+            return pdu
+
+        def close(self) -> None:
+            self.closed += 1
+
+    client = BlockedClient()
+    worker = rtu_to_tcp_gw.RtuToTcpWorker(
+        SilentSerial(), client, slave_address=30, allow_broadcast=True)  # type: ignore[arg-type]
+    try:
+        assert not worker.relay_running
+        # a broadcast: the relay thread takes it, its request is held
+        worker.request = _rtu.ModbusRTUFrame(rtu_frame(0, bytes.fromhex('0600010001')))
+        worker.handle_request()
+        assert started.wait(5.0)
+        # the end of run(): its wait for the relay thread ((4 + 1) * 0.05 + 1 s) ends before the request
+        worker.stop()
+        worker.run()
+        assert worker.relay_running
+        assert worker.close_client() is False and client.closed == 0
+    finally:
+        release.set()
+    assert worker._relay_thread is not None
+    worker._relay_thread.join(5.0)
+    assert not worker.relay_running
+    assert worker.close_client() is True and client.closed == 1
+
+
 @pytest.mark.skipif(os.name == 'nt', reason='needs a pseudo-terminal (POSIX only)')
 def test_rtu2tcp_late_response_dropped(server: tuple[ModbusServer, int], caplog: pytest.LogCaptureFixture) -> None:
     """A response ready after the master has sent another frame is not written (it would collide on the bus)."""

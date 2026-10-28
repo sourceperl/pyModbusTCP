@@ -343,6 +343,29 @@ class RtuToTcpWorker(SlaveSerialWorkerModel):
                 # the broadcasts still waiting are sent before the stop, each one ends within the timeout of the client
                 self._relay_thread.join((BROADCAST_BACKLOG + 1) * self.mbus_cli.timeout + 1.0)
 
+    @property
+    def relay_running(self) -> bool:
+        """True while the relay thread runs: it uses the Modbus/TCP client (see close_client())."""
+        thread = self._relay_thread
+        return thread is not None and thread.is_alive()
+
+    def close_client(self) -> bool:
+        """Close the Modbus/TCP client at the end, unless the relay thread still uses it.
+
+        ModbusClient is not thread-safe: run() waits for the relay thread within a bound, but past it (a request held
+        longer than the timeout of the client, like a name resolution, that it doesn't limit, or a second Ctrl-C during
+        the wait), a close() from another thread would break its request in progress. The client is then left to this
+        daemon thread, its socket is closed with the process.
+
+        :returns: True if the client is closed
+        """
+        if self.relay_running:
+            logger.warning('The relay thread still uses the Modbus/TCP client (a request held longer than its '
+                           'timeout?): not closed, it ends with the process')
+            return False
+        self.mbus_cli.close()
+        return True
+
     def _relay_loop(self) -> None:
         """The relay thread: send the queued PDUs to the server, one at a time."""
         while True:
@@ -541,7 +564,9 @@ def main(argv: list[str] | None = None) -> int:
         # clean shutdown
         if serial_worker is not None:
             serial_worker.stop()
-        if mbus_cli is not None:
+            # never while the relay thread uses it (ModbusClient is not thread-safe)
+            serial_worker.close_client()
+        elif mbus_cli is not None:
             mbus_cli.close()
         if serial_port is not None and serial_port.is_open:
             try:
