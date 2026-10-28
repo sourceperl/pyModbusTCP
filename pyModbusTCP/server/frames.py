@@ -63,6 +63,8 @@ class PDU:
     def func_code(self) -> int:
         return self.raw[0]
 
+    # except_code, is_except and is_valid: the API of ModbusServer.PDU in 0.3.x, kept for the code written for it (the
+    # server itself doesn't use them)
     @property
     def except_code(self) -> int:
         return self.raw[1]

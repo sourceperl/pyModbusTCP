@@ -510,7 +510,7 @@ class ModbusServer:
 
         :return: A tuple containing the bound host string and port integer.
         :rtype: Tuple[str, int]
-        :raises NetworkError: if the server can't listen (port already in use, bad host...)
+        :raises NetworkError: if the server is already running, or can't listen (port already in use, bad host...)
         """
         with self._start_stop_lock:
             # do nothing if server is already running

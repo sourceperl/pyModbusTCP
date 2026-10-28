@@ -75,7 +75,8 @@ EXP_DETAILS = {
     EXP_GATEWAY_PATH_UNAVAILABLE: 'Specialized for Modbus gateways, this indicates a misconfiguration on gateway.',
     EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND: 'Specialized for Modbus gateways, sent when slave fails to respond.'
 }
-# Module error codes
+# Module error codes (ModbusClient.last_error); MB_RESOLVE_ERR and MB_CRC_ERR are never set by ModbusClient (a name
+# resolution error is MB_CONNECT_ERR, Modbus/TCP has no CRC): kept for the code written for 0.3.x
 MB_NO_ERR = 0
 MB_RESOLVE_ERR = 1
 MB_CONNECT_ERR = 2
