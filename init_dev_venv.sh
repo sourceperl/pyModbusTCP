@@ -22,7 +22,7 @@ WITH_TOOLS=1
 # package pyModbusTCP-cli: the mbtcp-* commands of the tools of the library (pyModbusTCP.tools)
 TOOLS_DIR="pyModbusTCP-cli"
 
-# test and build tools, each at an exact version (the ones of the CI, and twine, ruff...): see this file
+# test and build tools, each at an exact version (the ones of the CI, and twine, ruff, pip-audit...): see this file
 DEV_REQUIREMENTS="requirements/dev.txt"
 
 usage() {
@@ -143,6 +143,7 @@ Environment ready.
   Library (with its tools, pyModbusTCP.tools):
     Run the tests:    python -m pytest
     Code audit:       tools/code_audit.sh
+    Dependency audit: tools/code_audit.sh pip-audit   (known vulnerabilities, needs the network)
     Type check:       mypy --strict pyModbusTCP
     Run a tool:       python -m pyModbusTCP.tools {server,client,tcp2rtu,rtu2tcp,rtu-scan} --help
     Build:            python -m build --no-isolation --outdir dist .

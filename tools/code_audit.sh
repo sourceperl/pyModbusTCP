@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
 #
-# Code audit of the repository: flake8, mypy and ruff (and optionally the tests), with the tools of a Python
-# interpreter (the dev venv of ./init_dev_venv.sh), then a summary. The exit status is 1 if any check fails.
+# Code audit of the repository: flake8, mypy and ruff (and optionally the tests and the known vulnerabilities of the
+# dependencies), with the tools of a Python interpreter (the dev venv of ./init_dev_venv.sh), then a summary. The exit
+# status is 1 if any check fails.
 #
 # Usage:
 #   tools/code_audit.sh [-a] [-s] [-p PYTHON] [-o FILE] [-h] [CHECK...]
 #
 # Options:
-#   -a           run all the checks, the tests included (same as the check "all")
+#   -a           run all the checks, the tests and pip-audit included (same as the check "all")
 #   -s           summary only: hide the outputs of the tools (the full report is still written with -o)
 #   -p PYTHON    Python interpreter with the dev tools (default: the active venv, else ./venv, else python3)
 #   -o FILE      also write the full report to FILE
 #   -h           show this help
 #
-# Checks: flake8, mypy, ruff, pytest, or all (default: flake8 mypy ruff).
+# Checks: flake8, mypy, ruff, pytest, pip-audit, or all (default: flake8 mypy ruff).
+# pip-audit looks for the known vulnerabilities (PyPI advisory database) of the packages installed for PYTHON (the
+# editable installs of this checkout excepted) and of the pins of docs/requirements.txt (the docs build, not installed
+# in the dev venv): it needs the network, so it's not a default check.
 # The summary at the end gives the result of each check (number of issues, tests passed/failed) and its duration.
 # The tools are run as modules of PYTHON (python -m mypy...), never from the PATH: the versions and the installed
 # packages (pyserial, type stubs, hatchling) are those of the venv, like in the CI. mypy uses the [tool.mypy]
@@ -25,7 +29,7 @@ PYTHON=""
 OUT_FILE=""
 RUN_ALL=0
 SUMMARY_ONLY=0
-ALL_CHECKS=(flake8 mypy ruff pytest)
+ALL_CHECKS=(flake8 mypy ruff pytest pip-audit)
 DEFAULT_CHECKS=(flake8 mypy ruff)
 
 # directories out of the audit (same list for every tool)
@@ -35,7 +39,12 @@ EXCLUDED_DIRS=(build docs lab venv .venv)
 TYPING_PACKAGES=(types-pyserial pyserial hatchling)
 
 usage() {
-    sed -n '3,20p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '3,24p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+# check_module CHECK: the Python module of the tool of a check (python -m MODULE), its name with "_" for "-"
+check_module() {
+    echo "${1//-/_}"
 }
 
 # contains WORD ITEM...: true if WORD is one of the items
@@ -114,7 +123,7 @@ fi
 # each tool must be a module of PYTHON: stop now with the install command, not with an error in the middle of the report
 missing=()
 for check in "${CHECKS[@]}"; do
-    "$PYTHON" -c "import $check" 2>/dev/null || missing+=("$check")
+    "$PYTHON" -c "import $(check_module "$check")" 2>/dev/null || missing+=("$check")
 done
 if [[ ${#missing[@]} -gt 0 ]]; then
     echo "Error: not installed for $PYTHON: ${missing[*]}" >&2
@@ -165,6 +174,18 @@ check_detail() {
             grep -E '[0-9]+ (passed|failed|errors?|skipped|deselected)|no tests ran' "$log" | tail -n 1 \
                 | sed -E 's/^=+ //; s/ =+$//; s/ in [0-9.]+s( \([0-9:]+\))?$//'
             ;;
+        pip-audit)
+            # one line per audit: "No known vulnerabilities found", or "Found N known vulnerabilities in M packages"
+            count="$(sed -n -E 's/^Found ([0-9]+) known vulnerabilit.*/\1/p' "$log" \
+                     | awk '{ n += $1 } END { print n + 0 }')"
+            if [[ "$count" -gt 0 ]]; then
+                echo "$count known vulnerability(ies)"
+            elif grep -qE 'ConnectionError|HTTPSConnectionPool|Max retries exceeded|NameResolutionError' "$log"; then
+                echo "network error (pip-audit needs the network)"
+            elif [[ "$(grep -c '^No known vulnerabilities found' "$log")" -eq 2 ]]; then
+                echo "no known vulnerability (venv and docs/requirements.txt)"
+            fi
+            ;;
     esac
 }
 
@@ -175,7 +196,8 @@ run_check() {
     [[ $SUMMARY_ONLY -eq 1 ]] && printf 'Running %s...\n' "$name" >&3
     echo ""
     echo "=== Run $name ==="
-    echo "\$ ${*/#$PYTHON/python}"
+    # a shell function (several commands) shows its commands itself
+    declare -F "$1" >/dev/null || echo "\$ ${*/#$PYTHON/python}"
     start=$SECONDS
     # never stop the audit on a failed check: the status is recorded for the summary (pipefail: status of the tool)
     if "$@" 2>&1 | tee "$log"; then status=0; else status=$?; fi
@@ -186,7 +208,21 @@ run_check() {
 }
 
 tool_version() {
-    "$PYTHON" -m "$1" --version 2>/dev/null | head -n 1
+    "$PYTHON" -m "$(check_module "$1")" --version 2>/dev/null | head -n 1
+}
+
+# the 2 audits of pip-audit, both always run: failed (status 1) if one of them fails
+pip_audit_all() {
+    local status=0
+    # the packages installed for PYTHON (the dev tools and their dependencies), not the editable installs of this
+    # checkout (pyModbusTCP and pyModbusTCP-cli are not the releases of PyPI)
+    echo "\$ python -m pip_audit --skip-editable --progress-spinner off"
+    "$PYTHON" -m pip_audit --skip-editable --progress-spinner off || status=1
+    # the pins of the docs build (Read the Docs), not installed in the dev venv: each pin as is, without install
+    # (--disable-pip --no-deps: their own dependencies are not resolved)
+    echo "\$ python -m pip_audit --disable-pip --no-deps --progress-spinner off -r docs/requirements.txt"
+    "$PYTHON" -m pip_audit --disable-pip --no-deps --progress-spinner off -r docs/requirements.txt || status=1
+    return "$status"
 }
 
 audit() {
@@ -200,7 +236,7 @@ audit() {
     echo "Python:  $("$PYTHON" --version 2>&1) ($(command -v "$PYTHON"))"
     local check
     for check in "${CHECKS[@]}"; do
-        printf '%-8s %s\n' "$check:" "$(tool_version "$check")"
+        printf '%-10s %s\n' "$check:" "$(tool_version "$check")"
     done
 
     # without these packages mypy sees Any instead of their types (--ignore-missing-imports): results differ from CI
@@ -239,6 +275,9 @@ audit() {
             pytest)
                 run_check pytest "$PYTHON" -m pytest -q
                 ;;
+            pip-audit)
+                run_check pip-audit pip_audit_all
+                ;;
         esac
     done
 
@@ -256,7 +295,7 @@ audit() {
             [[ -z "$detail" ]] && detail="exit status ${RESULT_STATUS[$i]}"
         fi
         total=$((total + RESULT_TIMES[i]))
-        printf '  %-8s %-7s %4ss   %s\n' "${RESULT_NAMES[$i]}" "$result" "${RESULT_TIMES[$i]}" "$detail"
+        printf '  %-9s %-7s %4ss   %s\n' "${RESULT_NAMES[$i]}" "$result" "${RESULT_TIMES[$i]}" "$detail"
     done
     if [[ $failed -gt 0 ]]; then
         echo "$failed of ${#RESULT_NAMES[@]} check(s) failed (${total}s)"

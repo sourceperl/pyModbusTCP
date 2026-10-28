@@ -9,5 +9,7 @@
 twine==7.0.0
 # linter of tools/code_audit.sh
 ruff==0.17.2
+# known vulnerabilities of the packages of the dev venv and of docs/requirements.txt (tools/code_audit.sh pip-audit)
+pip-audit==2.10.1
 # editable install without build isolation (pip install --no-build-isolation --editable ., backend hatchling)
 editables==0.6
