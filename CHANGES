@@ -112,7 +112,8 @@ Revision history for pyModbusTCP
       listener reads them.
     - tools: mbtcp-tcp2rtu no longer returns a late reply of a slave as the response of another request (a client
       could read the value of another address) and has a fair queue by client host; mbtcp-rtu2tcp no longer blocks
-      the serial line while a broadcast is relayed.
+      the serial line while a broadcast is relayed. mbtcp-tcp2rtu: a malformed broadcast of 0x15 gets exception
+      0x03 and is never written (it was queued for the bus while the client got a "slave device failure").
     - tools: stricter checks of the options (--max-connections, -u...); codec: decode() refuses a register out of 0
       to 65535; utils: valid_host() edge cases (legacy IPv4 forms, length, NUL and non-ASCII chars).
 

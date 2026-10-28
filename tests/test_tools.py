@@ -603,6 +603,35 @@ def test_tcp2rtu_broadcast() -> None:
         c.close()
 
 
+def test_tcp2rtu_broadcast_write_file_record() -> None:
+    """A broadcast of 0x15 is answered with its echo: a malformed one gets exception 0x03 and is never on the bus.
+
+    The function code alone was queued for the bus while the client got a "slave device failure" (the echo of one
+    byte is refused by the server).
+    """
+    pytest.importorskip('serial')
+    port = TimedSerial()
+    with broadcast_gateway(port, broadcast_delay=0.0, functions=FunctionFilter.parse('6,0x15')) as tcp_port:
+        with ModbusClient(host='127.0.0.1', port=tcp_port, unit_id=0, timeout=3.0) as c:
+            malformed = ('15',                                  # the function code alone
+                         '1500',                                # a byte count of 0
+                         '150906000100000001',                  # byte count 9, 7 bytes of data
+                         '15090600010000000112',                # the record data truncated
+                         '150905000100000001abcd',              # reference type 5
+                         '150906000100000000abcd',              # a record length of 0
+                         '150906000100000001abcdef')            # a byte after the data
+            for pdu in malformed:
+                assert c.custom_request(bytes.fromhex(pdu)) is None and c.last_except == 0x03, pdu
+            # a valid request: its echo at once, and its frame on the bus
+            valid = bytes.fromhex('15 09 06 0001 0000 0001 abcd')
+            assert c.custom_request(valid) == valid
+            # two sub-requests
+            valid2 = bytes.fromhex('15 14 06 0001 0000 0001 abcd 06 0002 0003 0002 0102 0304')
+            assert c.custom_request(valid2) == valid2
+        wait_writes(port, 2)
+        assert [frame for _, frame in port.writes] == [rtu_frame(0, valid), rtu_frame(0, valid2)]
+
+
 def test_tcp2rtu_broadcast_max_age() -> None:
     """A broadcast that waited more than broadcast_max_age for the bus is dropped, never written."""
     pytest.importorskip('serial')

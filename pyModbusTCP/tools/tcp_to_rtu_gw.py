@@ -286,6 +286,27 @@ DEFAULT_BROADCAST_MAX_AGE = 10.0
 MAX_BROADCAST_MAX_AGE = 60.0
 
 
+def is_write_file_record(pdu: bytes) -> bool:
+    """Check the format of a Write File Record (0x15) request PDU: a byte count of 0x09 to 0xFB that matches the
+    data, then sub-requests of reference type 6, each with its record length and exactly its record data.
+
+    A broadcast of this function is answered by the gateway with its echo, before the bus: a malformed one would be
+    answered with an exception, but written on the bus anyway.
+    """
+    if len(pdu) < 2 or not 0x09 <= pdu[1] <= 0xFB or len(pdu) != 2 + pdu[1]:
+        return False
+    offset = 2
+    while offset < len(pdu):
+        # reference type (6), file number, record number, record length (in registers), then the record data
+        if len(pdu) - offset < 7 or pdu[offset] != 0x06:
+            return False
+        record_length = int.from_bytes(pdu[offset + 5:offset + 7], 'big')
+        offset += 7 + 2 * record_length
+        if record_length == 0 or offset > len(pdu):
+            return False
+    return True
+
+
 def response_matches(req_pdu: bytes, resp_pdu: bytes) -> bool:
     """Check the content of a response PDU against its request PDU (same function code, already checked).
 
@@ -732,9 +753,14 @@ class TcpToRtuWorker(_rtu.SerialLink):
         at once. A broadcast that waited more than broadcast_max_age is dropped by the worker (see loop()): a client
         that sends broadcasts faster than the bus can take them never builds a backlog of old writes.
         """
-        # the normal response of the function: the start of the request (checked before the bus)
+        # the normal response of the function: the start of the request (checked before the bus: once queued, the
+        # broadcast is written, the client must never get an exception for it)
         size = BROADCAST_FUNCTIONS[req.pdu[0]]
         if size is not None and len(req.pdu) < size:
+            raise IllegalDataValue()
+        # the echo of a whole request (0x15): its format is checked, a malformed one (like the function code alone)
+        # gave a response refused by the server ("slave device failure"), while the frame was queued for the bus
+        if size is None and not is_write_file_record(req.pdu):
             raise IllegalDataValue()
         response = req.pdu if size is None else req.pdu[:size]
         with self._broadcast_lock:
