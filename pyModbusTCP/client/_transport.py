@@ -268,8 +268,9 @@ class ClientTransportMixin:
         except OSError as e:
             self.close()
             # a connection already reset (or closed) by the server: the send fails at once, before the request can
-            # reach the server (a modbus frame, 260 bytes at most, fits in the socket buffer: sendall() never sends
-            # a part of it before a reset is reported)
+            # reach the server. A modbus frame (260 bytes at most) goes in the empty send buffer of the socket in the
+            # first send() of sendall(): an error there means that none of it was queued. A reset that comes after
+            # a successful send is seen by _recv(), and is never retryable (the server may have read the request)
             raise NetworkError(MB_SEND_ERR, f'send error: {e}', retryable=isinstance(e, CONN_LOST_ERRORS)) from None
 
     def _send_pdu(self, pdu: bytes) -> None:

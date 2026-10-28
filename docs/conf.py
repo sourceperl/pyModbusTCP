@@ -25,7 +25,7 @@ import pyModbusTCP
 project = 'pyModbusTCP'
 author = 'Loïc Lefebvre'
 copyright = f'2014-{datetime.date.today().year}, {author}'
-# full version (like 0.4.0.dev0) and short X.Y version
+# full version (like 0.4.0a4.dev0, 0.4.0a4 or 0.4.0) and short X.Y version (0.4)
 release = pyModbusTCP.__version__
 version = '.'.join(release.split('.')[:2])
 

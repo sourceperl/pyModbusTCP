@@ -1,6 +1,7 @@
 # Tools of the CI (.github/workflows/tests.yml), each pinned to an exact version: a new release (or a compromised one)
-# never runs in the CI before a pull request of Dependabot (.github/dependabot.yml) updates it here. The dev venv
-# (./init_dev_venv.sh) installs them too (requirements/dev.txt).
+# of these tools never runs in the CI before a pull request of Dependabot (.github/dependabot.yml) updates it here.
+# Their own dependencies (pluggy, pycodestyle, packaging...) are not pinned: pip installs their latest compatible
+# release. The dev venv (./init_dev_venv.sh) installs them too (requirements/dev.txt).
 # Every version must support Python 3.10 to 3.14 (the matrix of the tests). pip itself is not here: the CI and the dev
 # venv upgrade it to its latest release before installing these tools.
 #
