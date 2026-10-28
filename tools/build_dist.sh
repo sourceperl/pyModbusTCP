@@ -19,7 +19,7 @@
 # pyModbusTCP-cli (tools/check_dist_requires.py), the pre-release pins of the docs name VERSION without its .devN
 # suffix (an error for a release), and a warning if VERSION is already on PyPI or TestPyPI (an uploaded version can
 # never be uploaded again). With -t: the library alone (no mbtcp-* command, no pyserial), then with pyModbusTCP-cli
-# (the 5 commands), each in a fresh venv.
+# (the 5 commands), each in a fresh venv. Nothing is uploaded: the workflow release.yml does it (HOWTO-PyPi.md).
 
 set -euo pipefail
 
@@ -236,8 +236,6 @@ echo ""
 echo "Packages ready in $OUT_DIR/:"
 ls -1 "$OUT_DIR"
 echo ""
-echo "Upload them (see HOWTO-PyPi.md), the library first, twine asks for the API token of each project:"
-for repo in testpypi pypi; do
-    echo "  twine upload -r $repo $OUT_DIR/pymodbustcp-$VERSION*"
-    echo "  twine upload -r $repo $OUT_DIR/pymodbustcp_cli-$VERSION*"
-done
+# no upload from here: the workflow release.yml uploads them (Trusted Publishing, no API token)
+echo "Release: commit, then push the tag v$VERSION: the workflow Release (.github/workflows/release.yml) builds and"
+echo "checks them again, uploads them to TestPyPI, then to PyPI once approved (see HOWTO-PyPi.md)."

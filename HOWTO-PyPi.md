@@ -1,7 +1,11 @@
 ## How to upload on PyPI
 
-Here we use the twine tool to do the job (installed by `./init_dev_venv.sh`). There is no `~/.pypirc` and no stored
-credential: twine asks for an API token at each upload.
+The packages are uploaded by the workflow `.github/workflows/release.yml`, with the
+[Trusted Publishing](https://docs.pypi.org/trusted-publishers/) of PyPI: no API token exists, neither on a computer nor
+in the secrets of the repository. Each upload job of the workflow gets a short-lived OpenID Connect token from GitHub,
+that PyPI exchanges for an upload token valid a few minutes, for this repository, this workflow file and its
+environment only. The uploads also publish the attestations of the files (PEP 740): anyone can check that a file of
+PyPI was built by this workflow, from this repository, at the commit of the tag (see "check a release" below).
 
 
 ### build archive and wheel
@@ -48,43 +52,64 @@ Set the `Development Status` classifier of both `pyproject.toml` (`3 - Alpha`, `
 An uploaded version can never be uploaded again, even after its deletion: on a mistake, yank it on PyPI and release
 the next number.
 
-### upload archive and wheel to PyPI test server
+### set up the Trusted Publishing (once)
 
-pyModbusTCP and pyModbusTCP-cli are two projects on PyPI, and a token scoped to a project can upload to this project
-only: upload the library first (pyModbusTCP-cli requires it), then the commands, each with its own token. twine asks
-for the token (hidden input, "Enter your API token"), the username is `__token__` by default.
+1. On GitHub (Settings, Environments), create the 2 environments of the workflow:
+   - `testpypi`: deployment branches and tags, "Selected branches and tags", the tag rule `v*`;
+   - `pypi`: the same tag rule, and the "Required reviewers" protection with the maintainers: the upload to PyPI waits
+     for the approval of one of them, once the upload to TestPyPI and its install check have passed.
+2. On GitHub (Settings, Rules, Rulesets), protect the tags `v*`: a new ruleset of tags, target `v*`, with
+   "Restrict creations", "Restrict updates" and "Restrict deletions" (bypass: the maintainers only). A tag pushed by
+   anyone else would start a release.
+3. On PyPI and on TestPyPI, add a trusted publisher to each project (pyModbusTCP and pyModbusTCP-cli: 4 publishers),
+   in "Manage project", "Publishing", "Add a new publisher", "GitHub":
+
+   | Field             | Value                                       |
+   |-------------------|---------------------------------------------|
+   | Owner             | `sourceperl`                                |
+   | Repository name   | `pyModbusTCP`                               |
+   | Workflow name     | `release.yml`                               |
+   | Environment name  | `pypi` on PyPI, `testpypi` on TestPyPI      |
+
+   A project that doesn't exist yet on an index is added as a "pending publisher" (in "Your account", "Publishing").
+4. Once a release has been uploaded by the workflow, delete the API tokens of the projects on PyPI and TestPyPI
+   ("Account settings", "API tokens"), and the `~/.pypirc` or keyring entries that may hold one: the workflow is the
+   only way to upload.
+
+### release
+
+1. Set `VERSION` (see "version numbers") and the first entry of `CHANGES` (the release date), check the docs pins,
+   then build the packages locally with `tools/build_dist.sh -t`: the workflow runs the same checks, a failure there
+   is found before the tag.
+2. Commit, push to master, wait for the workflow Tests.
+3. Tag the commit with the version and push the tag:
+
+   ```bash
+   VERSION=$(sed -n "s/^VERSION = '\(.*\)'/\1/p" pyModbusTCP/constants.py)
+   git tag -a "v$VERSION" -m "pyModbusTCP $VERSION"
+   git push origin "v$VERSION"
+   ```
+
+4. The workflow Release (Actions tab) checks that the tag is `v` + `VERSION` (never a `.devN` version), runs the tests,
+   builds and checks the 4 files with `tools/build_dist.sh -t`, uploads them to TestPyPI (the library first,
+   pyModbusTCP-cli requires it) and installs them from it: the two packages from TestPyPI only (`--no-deps`: never a
+   dependency from TestPyPI, where anyone can upload any name), pyserial from PyPI, then the 5 commands.
+5. Check the release on https://test.pypi.org/project/pyModbusTCP/ and https://test.pypi.org/project/pyModbusTCP-cli/,
+   then approve the deployment `pypi` in the run of the workflow ("Review deployments"): the same files are uploaded
+   to PyPI (never built again between the two uploads).
+6. Check the result at https://pypi.org/project/pyModbusTCP/ and https://pypi.org/project/pyModbusTCP-cli/.
+
+A failed job can be run again from the run of the workflow ("Re-run failed jobs"): the files of the build are kept
+with the run. A version already uploaded to an index can't be uploaded again: on a mistake after the upload to
+TestPyPI, set the next version and tag it.
+
+### check a release
+
+The "Provenance" of each file on PyPI (in "Download files", "File details") gives the workflow, the repository and the
+commit that built it. With [pypi-attestations](https://pypi.org/project/pypi-attestations/), in a venv:
 
 ```bash
-VERSION=$(sed -n "s/^VERSION = '\(.*\)'/\1/p" pyModbusTCP/constants.py)
-# no stored credential is ever used: no keyring (a token saved there long ago would be taken silently)
-export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
-twine upload -r testpypi dist/pymodbustcp-"$VERSION"*       # token of pyModbusTCP on TestPyPI
-twine upload -r testpypi dist/pymodbustcp_cli-"$VERSION"*   # token of pyModbusTCP-cli on TestPyPI
+pip install pypi-attestations
+pypi-attestations verify pypi --repository https://github.com/sourceperl/pyModbusTCP \
+    "pypi:pymodbustcp-$VERSION-py3-none-any.whl"
 ```
-
-Check result at https://test.pypi.org/project/pyModbusTCP/ and https://test.pypi.org/project/pyModbusTCP-cli/,
-then test the install in a new venv: the two packages from TestPyPI only (`--no-deps`: never a dependency from
-TestPyPI, where anyone can upload any name), pyserial from PyPI:
-
-```bash
-python -m venv /tmp/check-release
-/tmp/check-release/bin/pip install --index-url https://test.pypi.org/simple/ --no-deps \
-    "pyModbusTCP==$VERSION" "pyModbusTCP-cli==$VERSION"
-/tmp/check-release/bin/pip install "pyserial>=3.5,<4"
-/tmp/check-release/bin/pip check
-/tmp/check-release/bin/mbtcp-client --version
-rm -rf /tmp/check-release
-```
-
-TestPyPI may take a minute to list a new release: retry the install if it is not found at once.
-
-### upload archive and wheel to PyPI server
-
-The same files as on TestPyPI (never build again between the two uploads), with the tokens of PyPI:
-
-```bash
-twine upload -r pypi dist/pymodbustcp-"$VERSION"*       # token of pyModbusTCP on PyPI
-twine upload -r pypi dist/pymodbustcp_cli-"$VERSION"*   # token of pyModbusTCP-cli on PyPI
-```
-
-Check result at https://pypi.org/project/pyModbusTCP/ and https://pypi.org/project/pyModbusTCP-cli/.

@@ -1,0 +1,180 @@
+# Release of the two packages (pyModbusTCP and pyModbusTCP-cli) on TestPyPI, then on PyPI, with the Trusted
+# Publishing of PyPI: no API token anywhere. Each upload job gets a short-lived OpenID Connect token from GitHub
+# (id-token: write), that PyPI exchanges for an upload token valid a few minutes, for this repository, this workflow
+# file and this environment only (the trusted publishers set on PyPI and TestPyPI, see HOWTO-PyPi.md). The uploads also
+# publish the attestations of the files (PEP 740, signed with Sigstore): anyone can check that a file of PyPI was built
+# by this workflow, from this repository, at the commit of the tag.
+#
+# Started by the push of a tag vVERSION (VERSION of pyModbusTCP/constants.py, like v0.4.0a4). The files are built once,
+# checked, uploaded to TestPyPI, installed from it, and the same files are uploaded to PyPI after the approval of a
+# maintainer (required reviewers of the environment pypi). See HOWTO-PyPi.md.
+#
+# The actions are pinned by commit SHA, with the version in a comment, like in tests.yml (Dependabot updates them).
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# no job writes to the repository; the upload jobs add id-token: write for themselves only
+permissions:
+  contents: read  # the checkout only
+
+# one release at a time, never cancelled in the middle of the uploads
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # the 4 files (sdist and wheel of each package), built and checked by the release script, never by hand
+    name: Build and check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      with:
+        # the GITHUB_TOKEN is not kept in .git/config: no step needs to push
+        persist-credentials: false
+    - name: Set up Python
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+      with:
+        python-version: "3.13"
+
+    - name: Check the tag
+      env:
+        # the tag through an environment variable, never expanded in the script itself
+        TAG: ${{ github.ref_name }}
+      run: |
+        VERSION="$(sed -n "s/^VERSION = ['\"]\([^'\"]*\)['\"].*/\1/p" pyModbusTCP/constants.py)"
+        if [[ "$TAG" != "v$VERSION" ]]; then
+          echo "::error::the tag $TAG is not v$VERSION (VERSION of pyModbusTCP/constants.py)"
+          exit 1
+        fi
+        # a development version is never uploaded (see HOWTO-PyPi.md)
+        if [[ "$VERSION" == *.dev* ]]; then
+          echo "::error::$VERSION is a development version: never released"
+          exit 1
+        fi
+
+    - name: Install the dev tools
+      run: |
+        # pip: always the latest release; the tools: their exact version (requirements/dev.txt, Dependabot)
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements/dev.txt
+
+    - name: Test suite
+      run: |
+        # the tag may point to a commit that the job tests of tests.yml never saw (tests.yml runs on master)
+        python -m pip install --no-build-isolation ".[serial]"
+        pytest
+
+    - name: Build and check the two packages
+      run: |
+        # the release checks (date of CHANGES, pins of the docs, version not yet on PyPI or TestPyPI), twine check,
+        # cross requirements, install test of the wheels (-t)
+        tools/build_dist.sh -p python -o dist -t
+        # one directory per package: the library is uploaded first (pyModbusTCP-cli requires it)
+        mkdir dist/lib dist/cli
+        mv dist/pymodbustcp-* dist/lib/
+        mv dist/pymodbustcp_cli-* dist/cli/
+        ls -lR dist
+
+    - name: Keep the files for the upload jobs
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+      with:
+        name: dist
+        path: dist/
+        if-no-files-found: error
+
+  testpypi:
+    name: Upload to TestPyPI
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/pyModbusTCP/
+    permissions:
+      id-token: write  # Trusted Publishing: the OpenID Connect token of this job, for TestPyPI
+    steps:
+    - name: Get the files
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+      with:
+        name: dist
+        path: dist/
+    - name: Upload pyModbusTCP
+      uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
+      with:
+        repository-url: https://test.pypi.org/legacy/
+        packages-dir: dist/lib/
+    - name: Upload pyModbusTCP-cli
+      uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
+      with:
+        repository-url: https://test.pypi.org/legacy/
+        packages-dir: dist/cli/
+
+  check-testpypi:
+    # the release as a user gets it: the two packages from TestPyPI only (--no-deps: never a dependency from TestPyPI,
+    # where anyone can upload any name), pyserial from PyPI
+    name: Install from TestPyPI
+    needs: testpypi
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+    - name: Set up Python
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+      with:
+        python-version: "3.13"
+    - name: Install and run the commands
+      env:
+        TAG: ${{ github.ref_name }}
+      run: |
+        VERSION="${TAG#v}"
+        python -m venv /tmp/check-release
+        # TestPyPI may take a few minutes to list a new release
+        for attempt in 1 2 3 4 5 6 7 8 9 10; do
+          if /tmp/check-release/bin/pip install --index-url https://test.pypi.org/simple/ --no-deps \
+              "pyModbusTCP==$VERSION" "pyModbusTCP-cli==$VERSION"; then
+            break
+          fi
+          if [[ "$attempt" -eq 10 ]]; then
+            echo "::error::pyModbusTCP $VERSION not found on TestPyPI"
+            exit 1
+          fi
+          sleep 30
+        done
+        /tmp/check-release/bin/pip install "pyserial>=3.5,<4"
+        /tmp/check-release/bin/pip check
+        for cmd in mbtcp-server mbtcp-client mbtcp-tcp2rtu mbtcp-rtu2tcp mbtcp-rtu-scan; do
+          /tmp/check-release/bin/$cmd --version | grep -qF "$VERSION"
+        done
+        /tmp/check-release/bin/mbtcp-client --version
+
+  pypi:
+    # the same files as on TestPyPI (never built again), once a maintainer has approved the deployment (required
+    # reviewers of the environment pypi)
+    name: Upload to PyPI
+    needs: check-testpypi
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/project/pyModbusTCP/
+    permissions:
+      id-token: write  # Trusted Publishing: the OpenID Connect token of this job, for PyPI
+    steps:
+    - name: Get the files
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+      with:
+        name: dist
+        path: dist/
+    - name: Upload pyModbusTCP
+      uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
+      with:
+        packages-dir: dist/lib/
+    - name: Upload pyModbusTCP-cli
+      uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
+      with:
+        packages-dir: dist/cli/
