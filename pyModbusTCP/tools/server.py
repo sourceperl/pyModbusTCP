@@ -38,6 +38,7 @@ from ._common import (
     PORT_502_HELP,
     add_ipv6_host_prefix_arg,
     add_version_arg,
+    check_listen_args,
     ip_or_network,
     is_permission_error,
     positive_float,
@@ -133,7 +134,9 @@ def serve(server: ModbusServer, args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    check_listen_args(parser, args)
     setup_logging(args.debug)
     if not args.debug:
         # the library logs every session event at debug level only

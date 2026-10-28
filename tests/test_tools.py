@@ -739,6 +739,52 @@ def test_tcp2rtu_refused_requests_log_throttle(caplog: pytest.LogCaptureFixture)
         srv.stop()
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='needs a pseudo-terminal (POSIX only)')
+@pytest.mark.parametrize('args, expected', [
+    ([], {'host': 'localhost', 'ipv6': False, 'idle_timeout': 300.0}),
+    (['-6', '-H', '::1', '--idle-timeout', '12.5'], {'host': '::1', 'ipv6': True, 'idle_timeout': 12.5}),
+    (['--ipv6', '-H', '::'], {'host': '::', 'ipv6': True, 'idle_timeout': 300.0}),
+])
+def test_tcp2rtu_server_settings(args: list[str], expected: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+                                 caplog: pytest.LogCaptureFixture) -> None:
+    """-6/--ipv6 and --idle-timeout reach the server of the gateway (audit C4: it could only listen on IPv4)."""
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import tcp_to_rtu_gw
+    servers: list[ModbusServer] = []
+
+    class RecordedServer(ModbusServer):
+        def start(self) -> Any:
+            servers.append(self)
+            raise ModbusServer.NetworkError('not started (test)')
+
+    monkeypatch.setattr(tcp_to_rtu_gw, 'ModbusServer', RecordedServer)
+    master_fd, slave_fd = os.openpty()
+    try:
+        with caplog.at_level(logging.CRITICAL):
+            assert tcp_to_rtu_gw.main([*args, '-p', str(free_port()), os.ttyname(slave_fd)]) == 2
+    finally:
+        os.close(master_fd)
+        os.close(slave_fd)
+    assert len(servers) == 1
+    server = servers[0]
+    assert {name: getattr(server, name) for name in expected} == expected
+
+
+@pytest.mark.parametrize('tool', ['server', 'tcp_to_rtu_gw'])
+@pytest.mark.parametrize('host', ['::1', '::', 'fe80::1%eth0'])
+def test_ipv6_host_needs_ipv6_flag(tool: str, host: str, capsys: pytest.CaptureFixture[str]) -> None:
+    """An IPv6 -H address without -6: a clear message, not the "address family" error of the IPv4 socket."""
+    if tool != 'server':
+        pytest.importorskip('serial')
+    import importlib
+    module = importlib.import_module('pyModbusTCP.tools.' + tool)
+    args = ['-H', host] + ([] if tool == 'server' else ['/dev/null'])
+    with pytest.raises(SystemExit) as exc:
+        module.main(args)
+    assert exc.value.code == 2
+    assert f'-H {host} is an IPv6 address: add -6' in capsys.readouterr().err
+
+
 def test_tcp2rtu_invalid_allow(capsys: pytest.CaptureFixture[str]) -> None:
     pytest.importorskip('serial')
     from pyModbusTCP.tools import tcp_to_rtu_gw

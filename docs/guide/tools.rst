@@ -79,6 +79,8 @@ Examples
 
     # TCP clients of the 192.168.1.0/24 network can read (only) the RTU slaves of /dev/ttyUSB0
     mbtcp-tcp2rtu -H 0.0.0.0 -A 192.168.1.0/24 --read-only -b 19200 --parity E /dev/ttyUSB0
+    # the same for the IPv6 clients of 2001:db8:1:2::/64, the gateway listens on its IPv6 address (-6)
+    mbtcp-tcp2rtu -6 -H 2001:db8:1:2::10 -A 2001:db8:1:2::/64 --read-only -b 19200 --parity E /dev/ttyUSB0
 
     # an RTU master on /dev/ttyUSB0 reads the Modbus/TCP server 192.168.1.10 (the gateway is the RTU slave 30)
     mbtcp-rtu2tcp -a 30 -H 192.168.1.10 /dev/ttyUSB0

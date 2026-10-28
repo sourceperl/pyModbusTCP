@@ -181,6 +181,12 @@ def add_rs485_args(parser: argparse.ArgumentParser) -> None:
                             'default: driver value)')
 
 
+def check_listen_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Refuse an IPv6 listen address without -6: the IPv4 socket can't bind it (a cryptic "address family" error)."""
+    if ':' in args.host and not args.ipv6:
+        parser.error(f'-H {args.host} is an IPv6 address: add -6')
+
+
 def check_rs485_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     """Refuse a --rs485-* setting without --rs485 (it would be silently ignored)."""
     if args.rs485:

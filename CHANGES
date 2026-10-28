@@ -25,6 +25,8 @@ Revision history for pyModbusTCP
     - with max_connections reached, a new client takes the place of the most idle session (evict_idle=True, never a
       session processing a request, the limit per host checked before): connections held without requests can't
       keep the real clients out. evict_idle=False (--no-evict-idle for the tools) refuses the new clients.
+    - tools: mbtcp-tcp2rtu gets -6/--ipv6 (it could only listen on IPv4: --ipv6-host-prefix had no effect) and
+      --idle-timeout, like mbtcp-server. Both refuse an IPv6 -H address without -6 with a clear message.
     - the arguments of ModbusServer after no_block are keyword-only, no_block and ipv6 must be bools.
     - an empty host is refused (write '0.0.0.0' or '::' to listen on every interface), so is a legacy IPv4 form that
       bind() reads as another address ("0", "127.1", "192.168.010.1").

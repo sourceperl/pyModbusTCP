@@ -87,7 +87,8 @@ Modbus has no authentication: any client that can reach the gateway can drive
 every slave of the serial line. The gateway handles each request itself (it is
 the fallback handler of ModbusServer), so it applies its own filters:
 - By default the server only listens on localhost; use -H to listen on the
-  address of the network interface that needs it (or 0.0.0.0 for all of them).
+  address of the network interface that needs it (or 0.0.0.0 for all of them,
+  -6 for IPv6: like -6 -H ::1, or -6 -H :: for every interface).
 - -A/--allow (repeatable) restricts the clients to some IP addresses or
   networks (like -A 192.168.1.10 -A 10.0.0.0/24), others are disconnected.
 - Only the standard functions that read and write data are relayed by
@@ -120,7 +121,8 @@ monopolize it, nor a few of them:
   progress on it, its next ones get exception 0x0A at once;
 - --max-connections-per-host limits its number of TCP connections (default
   16), --max-connections the total (default 128): when it's reached, a new
-  client takes the place of the most idle session (--no-evict-idle: refused).
+  client takes the place of the most idle session (--no-evict-idle: refused);
+  a session without any request for --idle-timeout (default 300 s) is closed.
 With N hosts that send requests at the same time, each one gets 1/N of the
 serial line: a client timeout must be long enough for N requests.
 Refused requests are logged once, then once per 10 s at most (with their
@@ -202,6 +204,7 @@ from ._common import (
     add_ipv6_host_prefix_arg,
     add_rs485_args,
     add_version_arg,
+    check_listen_args,
     check_rs485_args,
     function_filter,
     ip_or_network,
@@ -833,8 +836,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog='mbtcp-tcp2rtu', description='Modbus/TCP to Modbus/RTU gateway',
                                      epilog='Port 502 without root: ' + PORT_502_HELP)
     parser.add_argument('device', type=str, help='serial device (like /dev/ttyUSB0)')
-    parser.add_argument('-H', '--host', type=str, default='localhost', help='listen address (default: localhost)')
+    parser.add_argument('-H', '--host', type=str, default='localhost',
+                        help='listen address (default: localhost), 0.0.0.0 for every IPv4 interface')
     parser.add_argument('-p', '--port', type=tcp_port, default=5020, help='TCP port (default: 5020)')
+    parser.add_argument('-6', '--ipv6', action='store_true', help='use IPv6 (like -6 -H ::1)')
     parser.add_argument('-A', '--allow', action='append', type=ip_or_network, metavar='IP_OR_NETWORK',
                         help='allowed client IP address or network (like 10.0.0.0/24), repeatable '
                              '(default: every client)')
@@ -855,6 +860,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--max-connections-per-host', type=positive_int, default=16,
                         help='max number of simultaneous connections of a client host (default: 16)')
     add_ipv6_host_prefix_arg(parser)
+    parser.add_argument('--idle-timeout', type=positive_float, default=300.0,
+                        help='close a client session without request after this delay in s (default: 300)')
     parser.add_argument('--allow-broadcast', action='store_true',
                         help='relay broadcast requests (unit id 0, write functions only) to every slave, answered '
                              'at once')
@@ -879,6 +886,7 @@ def main(argv: list[str] | None = None) -> int:
     add_rs485_args(parser)
     add_version_arg(parser)
     args = parser.parse_args(argv)
+    check_listen_args(parser, args)
     check_rs485_args(parser, args)
 
     # init logging
@@ -913,7 +921,8 @@ def main(argv: list[str] | None = None) -> int:
         # start modbus server: no local function, every request goes to the fallback that relays it
         logger.info('Start modbus server (%s, %d)', args.host, args.port)
         # note: the serial worker applies the function filter and the read-only mode itself (broadcast, MEI types...)
-        srv = ModbusServer(host=args.host, port=args.port, no_block=True, store=MemoryStore(size=0), functions={},
+        srv = ModbusServer(host=args.host, port=args.port, no_block=True, ipv6=args.ipv6, store=MemoryStore(size=0),
+                           functions={}, idle_timeout=args.idle_timeout,
                            fallback=serial_worker.relay_request,
                            allowed_hosts=args.allow, max_connections=args.max_connections,
                            max_connections_per_host=args.max_connections_per_host,
