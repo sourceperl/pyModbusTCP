@@ -13,6 +13,7 @@ from pyModbusTCP.constants import (
     EXP_DATA_ADDRESS,
     EXP_GATEWAY_PATH_UNAVAILABLE,
     EXP_ILLEGAL_FUNCTION,
+    EXP_SLAVE_DEVICE_FAILURE,
 )
 from pyModbusTCP.server import (
     STANDARD_FUNCTIONS,
@@ -447,6 +448,43 @@ class TestWrappers(unittest.TestCase):
             self.assertEqual(cm.exception.code, 6)
         with self.assertRaises(TypeError):
             StoreWrapper('not a store')  # type: ignore[arg-type]
+
+    def test_guard_fails_closed(self) -> None:
+        """Only True allows an access: a check that returns None (a forgotten return), 0, 1 or a string refuses it
+        with a TypeError, logged by the server; the client gets a "slave device failure", nothing is written."""
+        results: list[Any] = [None, 0, 1, '', 'yes', [True]]
+        for result in results:
+            with self.subTest(result=result):
+                def check(ctx: RequestContext, access: str, space: Space, address: int, count: int,
+                          r: Any = result) -> Any:
+                    return r
+
+                store = Guard(MemoryStore(16), check)
+                with self.assertRaisesRegex(TypeError, 'must return True or False'), \
+                        store.transaction(client_ctx()) as tx:
+                    tx.write(H, 0, [1])
+                self.assertEqual(store.app.holding_registers.read(0), [0])
+
+    def test_guard_forgotten_return_on_a_server(self) -> None:
+        """S4 of the audit: a check meant to allow the writes of the registers 0 to 9 only, without a return for the
+        other accesses, refuses them (it allowed everything)."""
+        def check(ctx: RequestContext, access: str, space: Space, address: int, count: int) -> bool:
+            if access == 'write' and space is H and address + count <= 10:
+                return True
+            return None  # type: ignore[return-value]
+
+        server = ModbusServer(host='127.0.0.1', port=0, no_block=True, store=Guard(MemoryStore(1000), check))
+        port = server.start()[1]
+        self.addCleanup(server.stop)
+        c = ModbusClient(host='127.0.0.1', port=port, timeout=5.0)
+        self.addCleanup(c.close)
+        self.assertTrue(c.write_single_register(5, 1))
+        with self.assertLogs('pyModbusTCP.server', level='ERROR'):
+            self.assertFalse(c.write_single_register(500, 1))
+        self.assertEqual(c.last_except, EXP_SLAVE_DEVICE_FAILURE)
+        self.assertFalse(c.write_single_coil(0, True))
+        self.assertEqual(server.store.app.holding_registers.read(500), [0])
+        self.assertEqual(server.store.app.coils.read(0), [False])
 
     def test_modbus_exception_codes(self) -> None:
         self.assertEqual(IllegalDataAddress().code, EXP_DATA_ADDRESS)
