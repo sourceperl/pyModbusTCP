@@ -16,7 +16,6 @@ from ..constants import (
     MODBUS_PORT,
     VERSION,
 )
-from ..utils import _to_bool
 from . import _errors, _validators
 from ._errors import ModbusExcept, NetworkError
 from ._functions import ClientFunctionsMixin
@@ -80,11 +79,11 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         self._port = _validators.validate_port(port)
         self._unit_id = _validators.validate_unit_id(unit_id)
         self._timeout = _validators.validate_timeout(timeout)
-        self._auto_open = _to_bool(auto_open, 'auto_open')
-        self._auto_close = _to_bool(auto_close, 'auto_close')
+        self._auto_open = _validators.validate_flag(auto_open, 'auto_open')
+        self._auto_close = _validators.validate_flag(auto_close, 'auto_close')
         self._connect_retries = _validators.validate_connect_retries(connect_retries)
         self._connect_retry_delay = _validators.validate_connect_retry_delay(connect_retry_delay)
-        self._tcp_no_delay = _to_bool(tcp_no_delay, 'tcp_no_delay')
+        self._tcp_no_delay = _validators.validate_flag(tcp_no_delay, 'tcp_no_delay')
         self._broadcast_interval = _validators.validate_broadcast_interval(broadcast_interval)
         # time of the last broadcast request (time.perf_counter()), for broadcast_interval
         self._last_broadcast = -math.inf
@@ -212,7 +211,7 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
 
     @auto_open.setter
     def auto_open(self, value: bool) -> None:
-        self._auto_open = _to_bool(value, 'auto_open')
+        self._auto_open = _validators.validate_flag(value, 'auto_open')
 
     @property
     def auto_close(self) -> bool:
@@ -221,7 +220,7 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
 
     @auto_close.setter
     def auto_close(self, value: bool) -> None:
-        self._auto_close = _to_bool(value, 'auto_close')
+        self._auto_close = _validators.validate_flag(value, 'auto_close')
 
     @property
     def broadcast_interval(self) -> float:
@@ -257,7 +256,7 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
 
     @tcp_no_delay.setter
     def tcp_no_delay(self, value: bool) -> None:
-        self._tcp_no_delay = _to_bool(value, 'tcp_no_delay')
+        self._tcp_no_delay = _validators.validate_flag(value, 'tcp_no_delay')
         # apply it at once on an open connection (like for the other settings, no need to reconnect)
         if self._sock_open:
             self._set_sock_tcp_no_delay(value=self.tcp_no_delay)

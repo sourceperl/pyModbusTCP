@@ -27,6 +27,17 @@ def check_regs_values(values: list[int], name: str) -> None:
         raise ValueError(f'{name} list contains out of range values')
 
 
+def validate_flag(value: object, name: str) -> bool:
+    """A flag (a setting or an option of a request): a bool only, like the flags of ModbusServer.
+
+    0/1, a numpy bool, a string or None are refused (TypeError): a flag is never guessed from another type. The
+    coil values are data, not flags: they also accept integers, like 0 and 1 (see utils._to_bool).
+    """
+    if not isinstance(value, bool):
+        raise TypeError(f'{name} must be a bool')
+    return value
+
+
 def validate_host(value: object) -> str:
     if not isinstance(value, str):
         raise TypeError('host must be a str')

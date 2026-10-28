@@ -10,6 +10,8 @@ Revision history for pyModbusTCP
     - stricter argument checks: TypeError/ValueError instead of a silent conversion or truncation (numpy booleans are
       no longer coil values), ModbusClient(host=...) refuses the legacy IPv4 forms ("127.1", "192.168.010.1"...).
     - the arguments of ModbusClient after auto_close are keyword-only, no_delay is renamed tcp_no_delay.
+    - the flags auto_open, auto_close, tcp_no_delay and broadcast= are bools only (TypeError for 0/1, a numpy bool or
+      None), like the flags of ModbusServer: one rule for every flag. Coil values still accept integers.
     - the request methods use the same argument names: address, count, value, values (write_address, write_values,
       read_address, read_count for write_read_multiple_registers()). The old names (bit_addr=, reg_nb=,
       regs_value=...) raise TypeError: give the values by position, or with the new names.

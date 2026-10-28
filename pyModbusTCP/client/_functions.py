@@ -38,7 +38,7 @@ from ._common import (
     MAX_WRITE_REGS,
 )
 from ._errors import InternalError, NetworkError
-from ._validators import check_addr_nb, check_regs_values
+from ._validators import check_addr_nb, check_regs_values, validate_flag
 from .device_id import DeviceIdentificationResponse
 
 # the functions that can be broadcast: they write data and need no reply (not 0x17, it reads too)
@@ -89,7 +89,7 @@ class ClientFunctionsMixin:
         pdu = bytes(pdu)
         if not 1 <= len(pdu) <= MAX_PDU_SIZE:
             raise ValueError(f'pdu length out of range (valid from 1 to {MAX_PDU_SIZE} bytes)')
-        if _to_bool(broadcast, 'broadcast'):
+        if validate_flag(broadcast, 'broadcast'):
             if pdu[0] not in BROADCAST_FUNCTION_CODES:
                 raise ValueError(f'function 0x{pdu[0]:02X} can\'t be broadcast (no reply: only a write function)')
             return pdu if self._broadcast_req(pdu) else None
@@ -307,7 +307,7 @@ class ClientFunctionsMixin:
         value_raw = 0xff00 if value else 0x0000
         # make request
         tx_pdu = struct.pack('>BHH', WRITE_SINGLE_COIL, address, value_raw)
-        if _to_bool(broadcast, 'broadcast'):
+        if validate_flag(broadcast, 'broadcast'):
             return self._broadcast_req(tx_pdu)
         return self._write_req(tx_pdu, address, value_raw)
 
@@ -333,7 +333,7 @@ class ClientFunctionsMixin:
             raise ValueError('value out of range (valid from 0 to 65535)')
         # make request
         tx_pdu = struct.pack('>BHH', WRITE_SINGLE_REGISTER, address, value)
-        if _to_bool(broadcast, 'broadcast'):
+        if validate_flag(broadcast, 'broadcast'):
             return self._broadcast_req(tx_pdu)
         return self._write_req(tx_pdu, address, value)
 
@@ -359,7 +359,7 @@ class ClientFunctionsMixin:
         tx_pdu = struct.pack('>BHHB', WRITE_MULTIPLE_COILS, address, len(values), len(pdu_coils_part))
         tx_pdu += pdu_coils_part
         # make request
-        if _to_bool(broadcast, 'broadcast'):
+        if validate_flag(broadcast, 'broadcast'):
             return self._broadcast_req(tx_pdu)
         return self._write_req(tx_pdu, address, len(values))
 
@@ -386,7 +386,7 @@ class ClientFunctionsMixin:
         tx_pdu = struct.pack('>BHHB', WRITE_MULTIPLE_REGISTERS, address, len(values), len(pdu_regs_part))
         tx_pdu += pdu_regs_part
         # make request
-        if _to_bool(broadcast, 'broadcast'):
+        if validate_flag(broadcast, 'broadcast'):
             return self._broadcast_req(tx_pdu)
         return self._write_req(tx_pdu, address, len(values))
 

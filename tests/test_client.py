@@ -123,6 +123,23 @@ class TestModbusClient(unittest.TestCase):
         with self.assertRaises(TypeError):
             ModbusClient(no_delay=False)  # type: ignore[call-arg]
         self.assertRaises(TypeError, ModbusClient, tcp_no_delay='yes')
+        # a flag is a bool only, like the flags of ModbusServer (audit C10): no 0/1, no None
+        for name in ('auto_open', 'auto_close', 'tcp_no_delay'):
+            bad_values: tuple[Any, ...] = (1, 0, None, 'yes')
+            for bad in bad_values:
+                kwargs: dict[str, Any] = {name: bad}
+                with self.subTest(name=name, value=bad), self.assertRaises(TypeError):
+                    ModbusClient(**kwargs)
+                c = ModbusClient()
+                with self.subTest(name=name, value=bad, setter=True), self.assertRaises(TypeError):
+                    setattr(c, name, bad)
+        c = ModbusClient(port=1)
+        bad_broadcast: Any = 1
+        with self.assertRaises(TypeError):
+            c.write_single_register(0, 1, broadcast=bad_broadcast)
+        self.assertRaises(TypeError, c.write_single_coil, 0, True, broadcast=None)
+        # coil values are data, not flags: integers still accepted (no server here: the request fails, no TypeError)
+        self.assertFalse(c.write_single_coil(0, 1))  # type: ignore[arg-type]
 
     def test_misc(self) -> None:
         """Check of misc default values."""

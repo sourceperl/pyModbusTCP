@@ -388,7 +388,9 @@ Like every allow list of pyModbusTCP, ``allowed_hosts`` is ``None`` for every cl
 client at all: the server then refuses every connection, and logs a warning at startup (an empty list from a
 configuration is often a mistake).
 
-The arguments after ``no_block`` are keyword-only: ``ModbusServer('192.168.1.10', 502, read_only=True)``.
+The arguments after ``no_block`` are keyword-only: ``ModbusServer('192.168.1.10', 502, read_only=True)``. A flag
+(``no_block``, ``ipv6``, ``read_only``, ``evict_idle``) is a ``bool`` only (``TypeError`` for ``1``, ``0`` or ``None``),
+like the flags of the client.
 
 An IPv6 client host is a /64 network by default: a host usually gets a whole /64 and can use any of its addresses,
 so counting by address (``ipv6_host_prefix=128``) only fits a network where a host can't choose its addresses (static
