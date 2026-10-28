@@ -18,7 +18,7 @@ mbtcp-tcp2rtu::
 
      serial line              this modbus gateway                     network
     -------------      -----------------------------------       -----------------
-     RTU master   -->  [ModbusSerialWorker] [ModbusClient]  -->  Modbus/TCP server
+     RTU master   -->  [RtuToTcpWorker]     [ModbusClient]  -->  Modbus/TCP server
                         from /dev/ttyUSB0    to tcp/502
 
 HOW A REQUEST IS PROCESSED
@@ -297,7 +297,7 @@ class _RelayJob:
     result: tuple[bytes | None, int] = field(default=(None, EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND))
 
 
-class SerialModbusWorker(SlaveSerialWorkerModel):
+class RtuToTcpWorker(SlaveSerialWorkerModel):
     """A specialized serial worker that maps RTU requests to a Modbus TCP client.
 
     The Modbus/TCP client is used by a relay thread only, one request at a time, in the order of the bus: the serial
@@ -440,13 +440,13 @@ class SerialModbusWorker(SlaveSerialWorkerModel):
             self.response.build(raw_pdu=exp_pdu, slave_address=req.slave_address)
             return
         # unicast request for the gateway: relayed to the server
-        resp_pdu, exp_status = self._relay_and_wait(req.pdu)
+        resp_pdu, exp_code = self._relay_and_wait(req.pdu)
         if resp_pdu:
             # regular response from Modbus/TCP client
             self.response.build(raw_pdu=resp_pdu, slave_address=req.slave_address)
         else:
             # exception response
-            exp_pdu = struct.pack('BB', req.function_code | 0x80, exp_status)
+            exp_pdu = struct.pack('BB', req.function_code | 0x80, exp_code)
             self.response.build(raw_pdu=exp_pdu, slave_address=req.slave_address)
 
 
@@ -510,9 +510,9 @@ def main(argv: list[str] | None = None) -> int:
         mbus_cli = ModbusClient(host=args.host, port=args.port, unit_id=args.unit_id, timeout=args.timeout)
 
         # init specialized serial worker
-        serial_worker = SerialModbusWorker(port=serial_port, mbus_cli=mbus_cli, slave_address=args.address,
-                                           allow_broadcast=args.allow_broadcast, end_of_frame=args.eof,
-                                           read_only=args.read_only, functions=args.functions)
+        serial_worker = RtuToTcpWorker(port=serial_port, mbus_cli=mbus_cli, slave_address=args.address,
+                                       allow_broadcast=args.allow_broadcast, end_of_frame=args.eof,
+                                       read_only=args.read_only, functions=args.functions)
         if serial_worker.read_only:
             logger.info('Read-only mode: only read functions are relayed')
         logger.info('Relayed functions: %s', serial_worker.functions.text())

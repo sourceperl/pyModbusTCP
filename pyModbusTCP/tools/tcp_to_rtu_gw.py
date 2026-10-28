@@ -16,7 +16,7 @@ the other and returns the answer to the client::
 
        network                   this modbus gateway                serial line
     --------------       ------------------------------------      -------------
-      TCP client    -->  [ModbusServer]  [ModbusSerialWorker]  -->   RTU slave
+      TCP client    -->  [ModbusServer]  [TcpToRtuWorker]      -->   RTU slave
                             tcp/5020       to /dev/ttyUSB0
 
 HOW A REQUEST IS PROCESSED
@@ -327,13 +327,13 @@ def response_matches(req_pdu: bytes, resp_pdu: bytes) -> bool:
     return True
 
 
-def find_response(raw: bytes, request: 'ModbusRTUFrame') -> bytes:
+def find_response(raw: bytes, request: 'CheckedRTUFrame') -> bytes:
     """Return the response of request in the bytes received, empty if there is none.
 
     Usually raw is one frame. It may also be two frames read as one (a late reply of a slave followed too closely
     by the response): the cut is searched where a prefix has a valid CRC.
     """
-    if ModbusRTUFrame(raw).is_response_to(request):
+    if CheckedRTUFrame(raw).is_response_to(request):
         return raw
     # incremental CRC of the prefixes: a cut is only tried after a prefix with a valid CRC (a frame end)
     crc = 0xFFFF
@@ -343,15 +343,15 @@ def find_response(raw: bytes, request: 'ModbusRTUFrame') -> bytes:
             crc = (crc >> 1) ^ 0xA001 if crc & 1 else crc >> 1
         if crc == 0 and index >= 4:
             for part in (raw[:index], raw[index:]):
-                if ModbusRTUFrame(part).is_response_to(request):
+                if CheckedRTUFrame(part).is_response_to(request):
                     return part
     return b''
 
 
-class ModbusRTUFrame(_rtu.ModbusRTUFrame):
+class CheckedRTUFrame(_rtu.ModbusRTUFrame):
     """A Modbus/RTU frame, that can be checked against a request."""
 
-    def is_response_to(self, request: 'ModbusRTUFrame') -> bool:
+    def is_response_to(self, request: 'CheckedRTUFrame') -> bool:
         """Check that frame is a valid response matching the given request.
 
         Guards against late/stray frames from another slave or another
@@ -377,8 +377,8 @@ class RtuQuery:
         self.completed = Event()
         # set when the client session stopped waiting: the worker skips the request (the line is not used for it)
         self.cancelled = False
-        self.request = ModbusRTUFrame()
-        self.response = ModbusRTUFrame()
+        self.request = CheckedRTUFrame()
+        self.response = CheckedRTUFrame()
         # time the request was queued (a broadcast that waited too long for the bus is dropped)
         self.queued_at = time.monotonic()
 
@@ -440,7 +440,7 @@ class FairQueue:
         return self.get(timeout=0)
 
 
-class ModbusSerialWorker(_rtu.SerialLink):
+class TcpToRtuWorker(_rtu.SerialLink):
     """A serial worker to manage I/O with RTU devices."""
 
     def __init__(self, port: Serial, timeout: float = 1.0, end_of_frame: float | None = None,
@@ -536,7 +536,7 @@ class ModbusSerialWorker(_rtu.SerialLink):
             self._last_bus_activity = time.perf_counter() + self.broadcast_delay
             logger.debug('RTU broadcast, bus silent for %.3f s', self.broadcast_delay)
             return b''
-        request_frame = ModbusRTUFrame(request)
+        request_frame = CheckedRTUFrame(request)
         deadline = time.monotonic() + self.timeout
         while (remaining := deadline - time.monotonic()) > 0:
             rx_raw = self._read_frame(remaining)
@@ -671,13 +671,13 @@ class ModbusSerialWorker(_rtu.SerialLink):
         # gateway filters: refused requests never reach the serial line
         unit_id = req.ctx.unit_id
         client = req.ctx.client
-        exp_status = self.is_allowed(unit_id, req.pdu)
-        if exp_status:
+        exp_code = self.is_allowed(unit_id, req.pdu)
+        if exp_code:
             self._refused_log.event('Request refused by the gateway filters: %(count)d request(s) (last: unit '
-                                    '%(unit_id)d, function 0x%(func_code)02X, exception 0x%(exp_status)02X, from '
-                                    '%(client)s)', unit_id=unit_id, func_code=req.pdu[0], exp_status=exp_status,
+                                    '%(unit_id)d, function 0x%(func_code)02X, exception 0x%(exp_code)02X, from '
+                                    '%(client)s)', unit_id=unit_id, func_code=req.pdu[0], exp_code=exp_code,
                                     client=client.address)
-            raise ModbusException(code=exp_status)
+            raise ModbusException(code=exp_code)
         # fair share of the serial line: a client host can't fill the queue
         host = host_key((client.address, client.port), self.ipv6_host_prefix)
         if not self._acquire_host_slot(host):
@@ -819,7 +819,7 @@ def broadcast_max_age(value: str) -> float:
     return age
 
 
-def log_access_settings(srv: ModbusServer, worker: ModbusSerialWorker) -> None:
+def log_access_settings(srv: ModbusServer, worker: TcpToRtuWorker) -> None:
     """Log the access control of the gateway at startup: the allowed clients and the relayed functions."""
     if srv.allowed_hosts is not None:
         logger.info('Allowed clients: %s', ', '.join(srv.allowed_hosts) or 'none')
@@ -909,12 +909,12 @@ def main(argv: list[str] | None = None) -> int:
             logger.info('RS-485 mode: %s', rs485.text())
 
         # init serial worker
-        serial_worker = ModbusSerialWorker(serial_port, args.timeout, args.eof,
-                                           allow_broadcast=args.allow_broadcast, read_only=args.read_only,
-                                           functions=args.functions, ipv6_host_prefix=args.ipv6_host_prefix,
-                                           broadcast_delay=args.broadcast_delay,
-                                           broadcast_buffer=args.broadcast_buffer,
-                                           broadcast_max_age=args.broadcast_max_age)
+        serial_worker = TcpToRtuWorker(serial_port, args.timeout, args.eof,
+                                       allow_broadcast=args.allow_broadcast, read_only=args.read_only,
+                                       functions=args.functions, ipv6_host_prefix=args.ipv6_host_prefix,
+                                       broadcast_delay=args.broadcast_delay,
+                                       broadcast_buffer=args.broadcast_buffer,
+                                       broadcast_max_age=args.broadcast_max_age)
         logger.debug('Interframe delay %.4f s, end of frame delay %.4f s',
                      serial_worker.interframe_delay, serial_worker.end_of_frame)
 

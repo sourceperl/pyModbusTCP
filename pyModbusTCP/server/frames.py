@@ -79,9 +79,9 @@ class PDU:
     def clear(self) -> None:
         self.raw = b''
 
-    def build_except(self, func_code: int, exp_status: int) -> PDU:
+    def build_except(self, func_code: int, exp_code: int) -> PDU:
         self.clear()
-        self.add_pack('BB', func_code + 0x80, exp_status)
+        self.add_pack('BB', func_code + 0x80, exp_code)
         return self
 
     def add_pack(self, fmt: str, *args: Any) -> None:
