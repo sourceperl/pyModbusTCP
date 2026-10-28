@@ -1241,7 +1241,7 @@ def test_rtu2tcp_relay(server: tuple[ModbusServer, int]) -> None:
         return answer
 
     try:
-        time.sleep(0.3)  # let the worker flush its input buffer
+        wait_input_flushed(worker)
         # read 1 holding register
         assert exchange(rtu_frame(30, bytes.fromhex('0300000001'))) == rtu_frame(30, bytes.fromhex('03021234'))
         # write 1 holding register
@@ -1261,6 +1261,16 @@ def test_rtu2tcp_relay(server: tuple[ModbusServer, int]) -> None:
         os.close(slave_fd)
 
 
+def wait_input_flushed(worker: Any, timeout: float = 10.0) -> None:
+    """Wait until a rtu2tcp worker has flushed the input buffer of its line, at its start: a frame written before is
+    lost. Not a fixed delay: a busy host (like a CI runner) may start the worker thread late, the first frame of a test
+    was then discarded (a broadcast lost: the read after it got the old value)."""
+    deadline = time.monotonic() + timeout
+    while worker._flush_pending:
+        assert time.monotonic() < deadline, 'the worker never flushed its input buffer'
+        time.sleep(0.01)
+
+
 @contextlib.contextmanager
 def rtu2tcp_gateway(tcp_port: int, **kwargs: Any) -> Generator[tuple[int, Any], None, None]:
     """A rtu2tcp gateway (slave 30) on a pseudo-terminal, relaying to tcp_port: yields (master fd, worker)."""
@@ -1274,7 +1284,7 @@ def rtu2tcp_gateway(tcp_port: int, **kwargs: Any) -> Generator[tuple[int, Any], 
     thread = threading.Thread(target=worker.run, daemon=True)
     thread.start()
     try:
-        time.sleep(0.3)  # let the worker flush its input buffer
+        wait_input_flushed(worker)
         yield master_fd, worker
     finally:
         worker.stop()
