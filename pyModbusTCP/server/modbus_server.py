@@ -433,9 +433,11 @@ class ModbusServer:
         request = session_data.request
         send_pdu = session_data.response.pdu
         func_code = request.pdu.func_code
-        # a request can't have the exception flag (bit 7) set, and an exception response must fit in a byte:
-        # answer "illegal function" with the same code (code | 0x80), the TCP session stays synchronized
-        if func_code > 0x7F:
+        # the function codes are 1 to 127 (see function()): 0 is not a function, and a request can't have the exception
+        # flag (bit 7) set (an exception response must fit in a byte); never given to a handler or to the fallback (a
+        # gateway would relay it): answer "illegal function" with the same code (code | 0x80), the TCP session stays
+        # synchronized
+        if not 0x01 <= func_code <= 0x7F:
             logger.debug('Request with an invalid function code 0x%02X from %s', func_code, client)
             send_pdu.build_except(func_code & 0x7F, EXP_ILLEGAL_FUNCTION)
             return

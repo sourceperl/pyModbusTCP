@@ -96,7 +96,8 @@ Revision history for pyModbusTCP
       a connection already reset (the request never reached the server) is still sent again once.
     - server: Modbus compliance (0x05, 0x0F, 0x10, 0x17, 0x2B/0x0E and its conformity level, MBAP length), a
       malformed request is answered with an exception, a handler response too short, too long or of another function
-      is replaced by a "slave device failure", listen on a link-local IPv6 address.
+      is replaced by a "slave device failure", listen on a link-local IPv6 address. A request of function code 0
+      gets "illegal function", like 0x80 to 0xFF: it was given to the fallback handler.
     - server: Request.reply() and unpack() use the byte order prefix of their format, no prefix is big endian
       (reply() dropped the prefix, unpack() used the order of the host).
     - server: read_only also refuses 0x15 and 0x16, a fallback handler only gets the read functions (a handler of the

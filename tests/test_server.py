@@ -1517,6 +1517,33 @@ def test_response_pdu_refused() -> None:
         server.stop()
 
 
+def test_invalid_function_code_never_reaches_the_fallback() -> None:
+    """A function code 0 (like 0x80 to 0xFF) is not a function: "illegal function", the fallback is never called.
+
+    The handlers are for the codes 1 to 127 only (function() refuses 0), but a request of code 0 was given to the
+    fallback (like a gateway that relays it).
+    """
+    fallback = mock.Mock(side_effect=lambda req: req.pdu)
+    server = ModbusServer(host='127.0.0.1', port=0, no_block=True, functions={}, fallback=fallback)
+    _, port = server.start()
+    try:
+        for pdu in (b'\x00', b'\x00\x00\x00\x00\x01', b'\x80\x00', b'\xff'):
+            with socket.create_connection(('127.0.0.1', port), timeout=5) as sock:
+                sock.sendall(b'\x00\x01\x00\x00' + (len(pdu) + 1).to_bytes(2, 'big') + b'\x01' + pdu)
+                assert sock.recv(9) == b'\x00\x01\x00\x00\x00\x03\x01' + bytes([pdu[0] | 0x80, 0x01]), pdu.hex()
+        fallback.assert_not_called()
+        # the client sees the exception of its request (function code 0 with the exception flag)
+        c = ModbusClient(host='127.0.0.1', port=port, timeout=2.0)
+        assert c.custom_request(b'\x00') is None and c.last_except == 0x01
+        # the valid codes still reach the fallback
+        assert c.custom_request(b'\x01\x00\x00\x00\x01') == b'\x01\x00\x00\x00\x01'
+        assert c.custom_request(b'\x7f') is None and c.last_except == 0x04  # a 1 byte response is refused
+        assert [call.args[0].function_code for call in fallback.call_args_list] == [0x01, 0x7F]
+        c.close()
+    finally:
+        server.stop()
+
+
 def test_flag_arguments() -> None:
     """no_block, ipv6 and read_only are bools only: 0/1, a string or None were taken for True or False in silence."""
     for name in ('no_block', 'ipv6', 'read_only'):
