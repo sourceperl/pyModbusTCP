@@ -168,6 +168,31 @@ class TestClientServer(unittest.TestCase):
         finally:
             del self.server.functions[0x41]
 
+    def test_handler_bad_response_log_flood(self) -> None:
+        """A handler response that can't be sent (DataFormatError) is logged with the same rate limit as the other
+        errors of user code: a client that triggers it in a loop can't flood the log."""
+        # a 1 byte PDU (the function code alone): refused by the server, "slave device failure"
+        self.server.functions[0x41] = lambda req: req.reply()
+        error_log = self.server._handler_error_log
+        error_log._last_time = None
+        try:
+            with self.assertLogs('pyModbusTCP.server', level='ERROR') as logs:
+                for _ in range(50):
+                    self.assertIsNone(self.client.custom_request(b'\x41\x00'))
+                    self.assertEqual(self.client.last_except, EXP_SLAVE_DEVICE_FAILURE)
+            self.assertEqual(len(logs.records), 1)
+            self.assertIn('1 error(s)', logs.records[0].getMessage())
+            self.assertIn('function 0x41', logs.records[0].getMessage())
+            # the next message, after the interval, gives the number of errors since the previous one
+            assert error_log._last_time is not None
+            error_log._last_time -= error_log.interval
+            with self.assertLogs('pyModbusTCP.server', level='ERROR') as logs:
+                self.assertIsNone(self.client.custom_request(b'\x41\x00'))
+            self.assertIn('50 error(s)', logs.records[0].getMessage())
+            self.assertTrue(self.client.is_open)
+        finally:
+            del self.server.functions[0x41]
+
     def test_unknown_function_still_illegal(self) -> None:
         """A function code without handler still gives an ILLEGAL_FUNCTION exception."""
         self.assertIsNone(self.client.custom_request(b'\x55\x00'))

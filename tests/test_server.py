@@ -1067,6 +1067,8 @@ class TestModbusServerSpecFrames(unittest.TestCase):
         self.server.functions[0x42] = lambda req: req.reply('>B', 300)
         self.server.functions[0x43] = lambda req: cast(bytes, None)
         for pdu in ('41 00', '42 00', '43 00'):
+            # the errors of user code are logged once per 10 s at most: a new interval for each one
+            self.server._handler_error_log._last_time = None
             with self.subTest(pdu), self.assertLogs('pyModbusTCP.server', level='ERROR'):
                 self.assertEqual(self.exchange(pdu), f'{bytes.fromhex(pdu)[0] | 0x80:02x}04')
         self.assertEqual(self.exchange('03 0000 0001'), '03020000')

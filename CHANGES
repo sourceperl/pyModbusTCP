@@ -101,7 +101,7 @@ Revision history for pyModbusTCP
     - server: read_only also refuses 0x15 and 0x16, a fallback handler only gets the read functions (a handler of the
       application that writes tests server.read_only); allowed_hosts set after the constructor was ignored.
     - security: port hijacking on Windows (SO_EXCLUSIVEADDRUSE); an error of user code is logged with a rate limit
-      (a client could fill the disk with tracebacks); bounded queue of the change events, in events and in values
+      (a client could fill the disk with tracebacks), a handler response that can't be sent too; bounded queue of the change events, in events and in values
       (MemoryStore.notify_queue_values: 10000 events of 1968 coils took 2 GB); mbtcp-server --log-changes logs a
       write of more than 8 values as one line; formula injection in the csv of mbtcp-client device-id (CWE-1236).
     - server: a space of MemoryStore can start at any address, with a range (MemoryStore(0,

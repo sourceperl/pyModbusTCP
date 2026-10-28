@@ -467,7 +467,10 @@ class ModbusServer:
         except DataFormatError as e:
             # the response can't be encoded (like a value out of its field), the request itself was fine and the TCP
             # stream is still in sync: answer with "slave device failure" instead of closing the session
-            logger.error('Unable to encode the response of function 0x%02X from %s: %s', func_code, client, e)
+            # (an error of user code, like below: a client that triggers it in a loop can't flood the log)
+            self._handler_error_log.event('Unable to encode the response of a request: %(count)d error(s) (last: '
+                                          'function 0x%(func_code)02X from %(client)s: %(error)s)',
+                                          func_code=func_code, client=client, error=e)
             send_pdu.build_except(func_code, EXP_SLAVE_DEVICE_FAILURE)
         except Error:
             # network error or other frame error: let the session handler close the connection
