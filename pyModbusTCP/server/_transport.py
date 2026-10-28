@@ -218,13 +218,19 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
         else:
             self._host_sessions.pop(key, None)
 
-    def request_started(self, request: Any) -> None:
-        """A session has received a whole request: it's processed and answered, the session can't be evicted."""
+    def request_started(self, request: Any) -> bool:
+        """A session has received a whole request: it's processed and answered, the session can't be evicted.
+
+        :returns: False if the session was evicted meanwhile (between the end of the receive and this call): its slot
+            is given to a new client, the request must not be processed (its response could never be sent)
+        """
         with self._sessions_lock:
             activity = self._session_activity.get(request)
-            if activity is not None:
-                activity[1] = time.monotonic()
-                activity[2] = True
+            if activity is None:
+                return False
+            activity[1] = time.monotonic()
+            activity[2] = True
+            return True
 
     def request_ended(self, request: Any) -> None:
         """The response of the request is sent: the session waits for the next one, it can be evicted."""
@@ -416,8 +422,10 @@ class ModbusRequestHandler(BaseRequestHandler):
                 req_deadline = None if request_timeout is None else self._last_deadline
                 session_data.request.pdu.raw = self._recv_all(session_data.request.mbap.length - 1, req_deadline,
                                                               'request timeout')
-                # a whole request: the session is busy (never evicted) until its response is sent
-                server.request_started(self.request)
+                # a whole request: the session is busy (never evicted) until its response is sent; a session evicted
+                # just before (its socket is shut down) never processes it: a write executed without a response
+                if not server.request_started(self.request):
+                    raise NetworkError('session evicted for a new client, request not processed')
                 try:
                     # update response MBAP fields with request data
                     session_data.set_response_mbap()

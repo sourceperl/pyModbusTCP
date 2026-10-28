@@ -873,6 +873,35 @@ class TestEvictIdle(_LiveServerTestCase):
             self.assertEqual(newcomer.recv(9), b'\x00\x02\x00\x00\x00\x03\x01\x41\x00')
         self.assertIsNotNone(self._closed_after(busy, 2.0))
 
+    def test_session_evicted_before_its_request_is_processed(self) -> None:
+        """A session evicted between the end of the receive of a request and its processing never processes it.
+
+        Its socket is shut down, its response can't be sent: the request (like a write) was executed anyway.
+        """
+        handler = mock.Mock(side_effect=lambda req: req.pdu)
+        server = self._start_server(max_connections=2, functions={0x41: handler})
+        tcp_server = server._tcp_server
+        assert tcp_server is not None
+        original = tcp_server.request_started
+
+        def evicted_first(request: Any) -> bool:
+            # a new client takes the slot of this session at this exact moment (the main thread, verify_request())
+            self.assertIsNotNone(tcp_server._evict_idle_session())
+            return original(request)
+
+        tcp_server.request_started = evicted_first  # type: ignore[method-assign]
+        sock = self._connect()
+        sock.sendall(b'\x00\x01\x00\x00\x00\x03\x01\x41\x00')
+        self.assertIsNotNone(self._closed_after(sock, 2.0), 'the evicted session is not closed')
+        handler.assert_not_called()
+        # the next requests (of sessions that are not evicted) are processed
+        tcp_server.request_started = original  # type: ignore[method-assign]
+        sock = self._connect()
+        sock.sendall(b'\x00\x02\x00\x00\x00\x03\x01\x41\x00')
+        sock.settimeout(5)
+        self.assertEqual(sock.recv(9), b'\x00\x02\x00\x00\x00\x03\x01\x41\x00')
+        handler.assert_called_once()
+
     def test_host_limit_checked_before_eviction(self) -> None:
         """A host at its limit is refused: it can't close the sessions of the others."""
         server = self._start_server(max_connections=2, max_connections_per_host=1)

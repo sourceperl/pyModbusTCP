@@ -107,6 +107,8 @@ Revision history for pyModbusTCP
       write of more than 8 values as one line; formula injection in the csv of mbtcp-client device-id (CWE-1236).
     - server: a space of MemoryStore can start at any address, with a range (MemoryStore(0,
       holding_registers=range(40_000, 41_000)): the holding registers 40000 to 40999 only); MemoryStore.addresses().
+    - server: a session evicted for a new client (evict_idle) just after it received a whole request never processes
+      it: the request (like a write) was executed, its response could not be sent.
     - server: the change notifications cost nothing without a listener (a write of 1968 coils: 44 us instead of
       960 us), a ChangeEvent keeps the ranges written (writes, WrittenRange) and computes its changes only when a
       listener reads them.
