@@ -425,8 +425,16 @@ class ModbusServer:
             response = handler(Request(pdu=request.pdu.raw, ctx=ctx, store=store, device_id=self.device_id))
             send_pdu.raw = _checked_response(response, func_code)
         except ModbusException as e:
-            logger.debug('Function 0x%02X from %s: exception 0x%02X (%s)', func_code, client, e.code, e)
-            send_pdu.build_except(func_code, e.code)
+            code = e.code
+            if isinstance(code, bool) or not isinstance(code, int) or not 1 <= code <= 0xFF:
+                # a code changed after the checks of ModbusException (like e.code = 300): never sent, never a reason
+                # to close the session
+                self._handler_error_log.event('Invalid Modbus exception code: %(count)d error(s) (last: %(code)r '
+                                              'for function 0x%(func_code)02X from %(client)s)', code=code,
+                                              func_code=func_code, client=client)
+                code = EXP_SLAVE_DEVICE_FAILURE
+            logger.debug('Function 0x%02X from %s: exception 0x%02X (%s)', func_code, client, code, e)
+            send_pdu.build_except(func_code, code)
         except PDUDecodeError as e:
             # request PDU too short or malformed: the TCP stream is still in sync, answer with "illegal data value"
             logger.debug('Malformed request for function 0x%02X: %s from %s', func_code, e, client)

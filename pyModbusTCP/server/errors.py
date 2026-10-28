@@ -42,18 +42,29 @@ class PDUDecodeError(DataFormatError):
 class ModbusException(Exception):
     """A Modbus exception response: the server answers the request with this exception code.
 
-    Use a subclass (IllegalDataAddress...) for the standard codes, or this class with any code (1 to 255).
+    Use a subclass (IllegalDataAddress...) for the standard codes, or this class with any code (1 to 255). A subclass
+    of the application sets its code as a class attribute (code = 0x80), checked at its definition (ValueError).
     """
 
     # the exception code of the subclasses
     code: int = EXP_SLAVE_DEVICE_FAILURE
 
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        """A subclass with an invalid code is refused at its definition, not at the first request that raises it."""
+        super().__init_subclass__(**kwargs)
+        _check_code(cls.code, f'the code of {cls.__name__}')
+
     def __init__(self, message: str = '', code: int | None = None) -> None:
         if code is not None:
-            if isinstance(code, bool) or not isinstance(code, int) or not 1 <= code <= 0xFF:
-                raise ValueError('a Modbus exception code is an int between 1 and 255')
-            self.code = code
+            self.code = _check_code(code, 'a Modbus exception code')
         super().__init__(message or EXP_TXT.get(self.code, f'exception 0x{self.code:02X}'))
+
+
+def _check_code(code: object, name: str) -> int:
+    """A Modbus exception code: an int between 1 and 255 (it's sent in one byte, 0 is not an exception)."""
+    if isinstance(code, bool) or not isinstance(code, int) or not 1 <= code <= 0xFF:
+        raise ValueError(f'{name} must be an int between 1 and 255, not {code!r}')
+    return code
 
 
 class IllegalFunction(ModbusException):

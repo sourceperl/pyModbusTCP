@@ -13,6 +13,7 @@ from pyModbusTCP.constants import (
     EXP_DATA_ADDRESS,
     EXP_GATEWAY_PATH_UNAVAILABLE,
     EXP_ILLEGAL_FUNCTION,
+    EXP_SLAVE_DEVICE_FAILURE,
 )
 from pyModbusTCP.server import (
     STANDARD_FUNCTIONS,
@@ -491,6 +492,17 @@ class TestWrappers(unittest.TestCase):
             with self.assertRaises(ValueError):
                 ModbusException(code=bad)
 
+    def test_modbus_exception_subclass_code(self) -> None:
+        """A subclass with an invalid code is refused at its definition (it closed the session of the client)."""
+        class Custom(ModbusException):
+            code = 0x80
+
+        self.assertEqual(Custom().code, 0x80)
+        bad_codes: tuple[Any, ...] = (0, 300, -1, True, '1', None)
+        for bad in bad_codes:
+            with self.subTest(code=bad), self.assertRaisesRegex(ValueError, 'the code of Bad must be an int'):
+                type('Bad', (ModbusException,), {'code': bad})
+
 
 class ServerTestCase(unittest.TestCase):
     def start(self, **kwargs: Any) -> ModbusServer:
@@ -642,6 +654,27 @@ class TestAddressRanges(ServerTestCase):
                        {'coils': '100'}, {'size': range(10)}):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 MemoryStore(**kwargs)
+
+
+class TestInvalidExceptionCode(ServerTestCase):
+    def test_code_changed_after_the_checks(self) -> None:
+        """A handler that raises an exception whose code was changed to an invalid one: "slave device failure",
+        logged, and the session goes on (S9 of the audit: the session was closed)."""
+        server = self.start()
+
+        @server.function(0x41)
+        def broken(req: Request) -> bytes:
+            e = ModbusException()
+            e.code = 300
+            raise e
+
+        c = self.client()
+        with self.assertLogs('pyModbusTCP.server', level='ERROR') as logs:
+            self.assertIsNone(c.custom_request(b'\x41'))
+        self.assertEqual(c.last_except, EXP_SLAVE_DEVICE_FAILURE)
+        self.assertIn('Invalid Modbus exception code', logs.output[0])
+        self.assertTrue(c.is_open)
+        self.assertEqual(c.read_holding_registers(0), [0])
 
 
 class TestFunctionRegistry(ServerTestCase):
