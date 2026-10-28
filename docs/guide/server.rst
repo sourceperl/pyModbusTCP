@@ -421,8 +421,13 @@ To answer the "Read Device Identification" function (0x2B/0x0E), give a
 
     from pyModbusTCP.server import DeviceIdentification, ModbusServer
 
-    device_id = DeviceIdentification(vendor_name=b'ACME', product_code=b'PLC-42', major_minor_revision=b'1.0')
+    device_id = DeviceIdentification(vendor_name=b'ACME', product_code=b'PLC-42', major_minor_revision=b'1.0',
+                                     objects_by_id={0x80: b'serial 1234'})  # extended objects, ids 0x80 to 0xFF
     server = ModbusServer(port=5020, device_id=device_id)
+
+``objects_by_id`` has the name of the dictionary of the client response
+(:class:`~pyModbusTCP.client.DeviceIdentificationResponse`); its former name ``objects_id`` still works, with a
+``DeprecationWarning``.
 
 Every object of the device identification can be read by any client: don't publish more than needed.
 

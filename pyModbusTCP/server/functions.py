@@ -221,8 +221,8 @@ def encapsulated_interface_transport(req: Request) -> bytes:
             object_id = first_id
         objects = device_id.items(start=object_id, end=last_id)
     conformity_level = device_id.conformity_level
-    more_follow = 0
-    next_obj_id = 0
+    more_follows = 0
+    next_object_id = 0
     head_size = 7
     data = b''
     number_of_objs = 0
@@ -230,12 +230,12 @@ def encapsulated_interface_transport(req: Request) -> bytes:
         block = struct.pack(f'BB{len(obj_value)}s', obj_id, len(obj_value), obj_value)
         # stop before an object that would exceed the max PDU size: the client asks the next one
         if head_size + len(data) + len(block) > MAX_PDU_SIZE:
-            more_follow = 0xff
-            next_obj_id = obj_id
+            more_follows = 0xff
+            next_object_id = obj_id
             break
         data += block
         number_of_objs += 1
-    return req.reply('>BBBBBB', mei_type, device_id_code, conformity_level, more_follow, next_obj_id,
+    return req.reply('>BBBBBB', mei_type, device_id_code, conformity_level, more_follows, next_object_id,
                      number_of_objs) + data
 
 

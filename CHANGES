@@ -77,6 +77,8 @@ Revision history for pyModbusTCP
       common settings first, read requests only), --all lists the other slaves of the bus.
     - server/tools: ipv6_host_prefix (--ipv6-host-prefix): the IPv6 network counted as one host by the limits.
     - typing: type hints on the whole package (py.typed). docs: Sphinx documentation rewritten, SECURITY.md.
+    - server: DeviceIdentification(objects_id=) is renamed objects_by_id=, the name of the client side
+      (DeviceIdentificationResponse.objects_by_id): objects_id still works, with a DeprecationWarning.
 
     Fixes:
 

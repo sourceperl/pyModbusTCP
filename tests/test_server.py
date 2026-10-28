@@ -68,12 +68,19 @@ class TestModbusServer(unittest.TestCase):
         # conformity level: the categories of the published objects (0x80: individual access supported)
         self.assertEqual(device_id.conformity_level, 0x83)
         self.assertEqual(DeviceIdentification().conformity_level, 0x82)
-        self.assertEqual(DeviceIdentification(objects_id={0x7F: b'r'}).conformity_level, 0x82)
-        self.assertEqual(DeviceIdentification(objects_id={0xFF: b'x'}).conformity_level, 0x83)
+        self.assertEqual(DeviceIdentification(objects_by_id={0x7F: b'r'}).conformity_level, 0x82)
+        self.assertEqual(DeviceIdentification(objects_by_id={0xFF: b'x'}).conformity_level, 0x83)
         # test __repr__
         device_id = DeviceIdentification(
-            product_name=b'server', objects_id={42: b'this'})
-        self.assertEqual(repr(device_id), "DeviceIdentification(product_name=b'server', objects_id={42: b'this'})")
+            product_name=b'server', objects_by_id={42: b'this'})
+        self.assertEqual(repr(device_id), "DeviceIdentification(product_name=b'server', objects_by_id={42: b'this'})")
+        # objects_id: the deprecated name of objects_by_id (the name of DeviceIdentificationResponse on the client side)
+        with self.assertWarns(DeprecationWarning):
+            device_id = DeviceIdentification(objects_id={0x80: b'old'})
+        self.assertEqual(device_id[0x80], b'old')
+        with self.assertRaises(TypeError), warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            DeviceIdentification(objects_by_id={0x80: b'new'}, objects_id={0x80: b'old'})
 
     def test_pdu_is_valid(self) -> None:
         """PDU min length is 2 bytes (function code + at least one data/except byte)."""
@@ -1090,7 +1097,7 @@ class TestReadDeviceIdentification(unittest.TestCase):
     def setUp(self) -> None:
         # basic objects 0 to 2, regular objects 3 to 6 (empty by default), extended objects 0x80 and 0x82
         self.device_id = DeviceIdentification(vendor_name=b'v', product_code=b'p', major_minor_revision=b'1',
-                                              objects_id={0x80: b'x', 0x82: b'z'})
+                                              objects_by_id={0x80: b'x', 0x82: b'z'})
         server = ModbusServer(host='127.0.0.1', port=0, no_block=True, device_id=self.device_id)
         host, port = server.start()
         self.addCleanup(server.stop)

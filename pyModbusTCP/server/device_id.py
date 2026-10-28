@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from threading import Lock
 
 from ..constants import MAX_PDU_SIZE
@@ -15,7 +16,8 @@ class DeviceIdentification:
 
     def __init__(self, vendor_name: bytes = b'', product_code: bytes = b'', major_minor_revision: bytes = b'',
                  vendor_url: bytes = b'', product_name: bytes = b'', model_name: bytes = b'',
-                 user_application_name: bytes = b'', objects_id: dict[int, bytes] | None = None) -> None:
+                 user_application_name: bytes = b'', objects_by_id: dict[int, bytes] | None = None,
+                 objects_id: dict[int, bytes] | None = None) -> None:
         """
         Constructor
 
@@ -33,7 +35,10 @@ class DeviceIdentification:
         :type model_name: bytes
         :param user_application_name: UserApplicationName regular object
         :type user_application_name: bytes
-        :param objects_id: Objects values by id as dict example: {42:b'value'} (optional)
+        :param objects_by_id: Objects values by id as dict example: {42:b'value'} (optional), the name of the client\
+            side (DeviceIdentificationResponse.objects_by_id)
+        :type objects_by_id: dict
+        :param objects_id: deprecated name of objects_by_id (DeprecationWarning)
         :type objects_id: dict
         """
         # private
@@ -47,9 +52,15 @@ class DeviceIdentification:
         self.product_name = product_name
         self.model_name = model_name
         self.user_application_name = user_application_name
-        # process objects_id dict (populate no name objects)
-        if isinstance(objects_id, dict):
-            for key, value in objects_id.items():
+        if objects_id is not None:
+            if objects_by_id is not None:
+                raise TypeError('objects_id is the deprecated name of objects_by_id: give only objects_by_id')
+            warnings.warn('DeviceIdentification(objects_id=) is deprecated, use objects_by_id=',
+                          DeprecationWarning, stacklevel=2)
+            objects_by_id = objects_id
+        # process objects_by_id dict (populate no name objects)
+        if isinstance(objects_by_id, dict):
+            for key, value in objects_by_id.items():
                 self[key] = value
 
     def __getitem__(self, key: int) -> bytes:
@@ -113,12 +124,12 @@ class DeviceIdentification:
                 objs_id_d_str += obj_id_item
             except KeyError:
                 pass
-        # format str: classname(params_name=value, ..., objects_id={42: 'value'})
+        # format str: classname(params_name=value, ..., objects_by_id={42: 'value'})
         class_args = named_params
         if objs_id_d_str:
             if class_args:
                 class_args += ', '
-            class_args += f'objects_id={{{objs_id_d_str}}}'
+            class_args += f'objects_by_id={{{objs_id_d_str}}}'
         return f'{self.__class__.__name__}({class_args})'
 
     @property

@@ -56,7 +56,7 @@ def build_device_id() -> DeviceIdentification:
         model_name=b'X1',
         user_application_name=b'Firmware V04.10.44',
         # extended (private) objects: a dict {object id: value}, ids 0x80 to 0xFF
-        objects_id={
+        objects_by_id={
             0x80: b'foo',
             0x81: f'started at {datetime.now():%Y-%m-%d %H:%M:%S}'.encode(),
         },
