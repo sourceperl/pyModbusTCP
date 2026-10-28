@@ -122,7 +122,9 @@ Revision history for pyModbusTCP
 
     Build: pyproject.toml with hatchling, Python 3.10 to 3.14. pyModbusTCP[cli]==X installs exactly
     pyModbusTCP-cli X, which requires exactly pyModbusTCP X. tools/build_dist.sh -o only removes the old packages of a
-    directory, it refuses a directory with other files (it was emptied).
+    directory, it refuses a directory with other files (it was emptied). ./init_dev_venv.sh -r only removes a venv:
+    it refuses a -d of the project or of one of its parents, or of a directory that is not a venv (it was removed),
+    and -p takes a relative path from the current directory, like tools/build_dist.sh.
 
 0.4.0a3 2026-10-27 (alpha)
 

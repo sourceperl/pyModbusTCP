@@ -6,10 +6,10 @@
 #   ./init_dev_venv.sh [-p PYTHON] [-d VENV_DIR] [-l] [-r] [-h]
 #
 # Options:
-#   -p PYTHON    Python interpreter to use (default: python3)
-#   -d VENV_DIR  virtual environment directory (default: venv)
+#   -p PYTHON    Python interpreter to use (default: python3), a relative path is relative to the current directory
+#   -d VENV_DIR  virtual environment directory, relative to the project root (default: venv)
 #   -l           library only: no pyserial and no mbtcp-* commands (pyModbusTCP-cli/)
-#   -r           recreate the venv if it already exists
+#   -r           recreate the venv if it already exists (only a venv is removed, never another directory)
 #   -h           show this help
 
 set -euo pipefail
@@ -40,6 +40,16 @@ while getopts "p:d:lrh" opt; do
     esac
 done
 
+# a relative path to the interpreter (like ../other/venv/bin/python): resolved from the current directory, before the
+# move to the project root (like tools/build_dist.sh); a command name (python3.13) is looked up in the PATH
+if [[ "$PYTHON" == */* ]]; then
+    if ! python_dir="$(cd "$(dirname "$PYTHON")" 2>/dev/null && pwd)"; then
+        echo "Error: interpreter '$PYTHON' not found" >&2
+        exit 1
+    fi
+    PYTHON="$python_dir/$(basename "$PYTHON")"
+fi
+
 # move to the project root (script directory)
 cd "$(dirname "$0")"
 # venv_bin
@@ -60,10 +70,36 @@ if ! command -v "$PYTHON" >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "==> Using Python: $($PYTHON --version) ($(command -v "$PYTHON"))"
+echo "==> Using Python: $("$PYTHON" --version) ($(command -v "$PYTHON"))"
 
+if [[ -z "$VENV_DIR" ]]; then
+    echo "Error: VENV_DIR must not be empty" >&2
+    exit 1
+fi
+if [[ -e "$VENV_DIR" && ! -d "$VENV_DIR" ]]; then
+    echo "Error: VENV_DIR '$VENV_DIR' is not a directory" >&2
+    exit 1
+fi
 if [[ -d "$VENV_DIR" ]]; then
-    if [[ "$RECREATE" -eq 1 ]]; then
+    # VENV_DIR is never the project or one of its parents (like -d . or -d ..): with -r, rm -rf would delete it
+    # (physical paths: a symbolic link to the project is the project)
+    venv_abs="$(cd "$VENV_DIR" && pwd -P)"
+    if [[ "$(pwd -P)/" == "${venv_abs%/}/"* ]]; then
+        echo "Error: VENV_DIR '$VENV_DIR' is the project directory or one of its parents: use a new directory," \
+             "like venv" >&2
+        exit 1
+    fi
+    # an existing directory is used (or removed by -r) only if it's a venv (pyvenv.cfg), or empty: never a directory
+    # of something else given by mistake (like -d tools)
+    if [[ ! -f "$VENV_DIR/pyvenv.cfg" && -n "$(ls -A "$VENV_DIR")" ]]; then
+        echo "Error: VENV_DIR '$VENV_DIR' exists and is not a virtual environment (no pyvenv.cfg): use a new," \
+             "empty or venv directory" >&2
+        exit 1
+    fi
+    if [[ ! -f "$VENV_DIR/pyvenv.cfg" ]]; then
+        # an empty directory: the venv is created in it (python -m venv accepts it)
+        :
+    elif [[ "$RECREATE" -eq 1 ]]; then
         echo "==> Removing existing venv: $VENV_DIR"
         rm -rf "$VENV_DIR"
     else
@@ -71,7 +107,7 @@ if [[ -d "$VENV_DIR" ]]; then
     fi
 fi
 
-if [[ ! -d "$VENV_DIR" ]]; then
+if [[ ! -f "$VENV_DIR/pyvenv.cfg" ]]; then
     echo "==> Creating venv: $VENV_DIR"
     "$PYTHON" -m venv --copies "$VENV_DIR"
 fi
