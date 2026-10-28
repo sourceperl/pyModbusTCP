@@ -925,6 +925,48 @@ class TestArgumentNames(unittest.TestCase):
             with self.subTest(method=method.__name__), self.assertRaisesRegex(ValueError, name):
                 method(**kwargs)
 
+    def test_bool_address_count_refused(self) -> None:
+        """An address, a count or an id is never a bool (True would be 1: a flag given by mistake), before any I/O.
+
+        The values written are data: a bool register value is still accepted (like a bool coil value).
+        """
+        calls: list[tuple[Any, dict[str, Any], str]] = [
+            (self.c.read_coils, {'address': True}, 'address'),
+            (self.c.read_discrete_inputs, {'address': 0, 'count': True}, 'count'),
+            (self.c.read_holding_registers, {'address': False, 'count': 1}, 'address'),
+            (self.c.read_input_registers, {'address': 0, 'count': True}, 'count'),
+            (self.c.read_device_identification, {'read_code': True}, 'read_code'),
+            (self.c.read_device_identification, {'object_id': False}, 'object_id'),
+            (self.c.write_single_coil, {'address': True, 'value': True}, 'address'),
+            (self.c.write_single_register, {'address': True, 'value': 1}, 'address'),
+            (self.c.write_multiple_coils, {'address': True, 'values': [True]}, 'address'),
+            (self.c.write_multiple_registers, {'address': True, 'values': [1]}, 'address'),
+            (self.c.write_read_multiple_registers,
+             {'write_address': True, 'write_values': [1], 'read_address': 0}, 'write_address'),
+            (self.c.write_read_multiple_registers,
+             {'write_address': 0, 'write_values': [1], 'read_address': True}, 'read_address'),
+            (self.c.write_read_multiple_registers,
+             {'write_address': 0, 'write_values': [1], 'read_address': 0, 'read_count': True}, 'read_count'),
+        ]
+        with mock.patch.object(self.c, '_req_pdu', side_effect=AssertionError('no request expected')):
+            for method, kwargs, name in calls:
+                with self.subTest(method=method.__name__, kwargs=kwargs), self.assertRaisesRegex(TypeError, name):
+                    method(**kwargs)
+        # int-like objects (with __index__, like a numpy integer) are still accepted, and so is a bool value (data)
+        sent: list[bytes] = []
+
+        def echo(tx_pdu: bytes, rx_min_len: int) -> bytes:
+            sent.append(tx_pdu)
+            return tx_pdu[:5]
+
+        class Index:
+            def __index__(self) -> int:
+                return 10
+
+        with mock.patch.object(self.c, '_req_pdu', side_effect=echo):
+            self.assertTrue(self.c.write_single_register(Index(), True))  # type: ignore[arg-type]
+        self.assertEqual(sent, [bytes.fromhex('06 000a 0001')])
+
     def test_old_names_refused(self) -> None:
         old: list[tuple[Any, dict[str, Any]]] = [
             (self.c.read_coils, {'bit_addr': 0, 'bit_nb': 1}),

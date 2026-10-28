@@ -457,6 +457,19 @@ def _to_int(value: Any, name: str) -> int:
         raise TypeError(f"{name} must be an int") from None
 
 
+def _to_index(value: Any, name: str) -> int:
+    """Return value as an int for an address, a number of items or an id (like _to_int), a bool is refused.
+
+    True would be the address (or the count) 1: a flag given in place of an address, by mistake. The values written
+    (data, like a register value) keep _to_int, they accept a bool.
+
+    :raises TypeError: for a bool, or a value that can't be used as an integer (str, float...)
+    """
+    if isinstance(value, bool):
+        raise TypeError(f"{name} must be an int, not a bool")
+    return _to_int(value, name)
+
+
 def _to_bool_list(values: Iterable[Any], name: str) -> list[bool]:
     """Return values as a list of bool from boolean-like integers (bool, int or any object with __index__).
 

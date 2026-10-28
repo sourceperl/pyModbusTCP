@@ -320,6 +320,13 @@ class TestArgConversion(unittest.TestCase):
         self.assertEqual(_to_bool_list([True, 0, 2], 'v'), [True, False, True])
         self.assertEqual(_to_bool_list(iter([1, 0]), 'v'), [True, False])
         self.assertEqual(_to_int(True, 'v'), 1)
+        # an address, a count or an id: never a bool
+        from pyModbusTCP.utils import _to_index
+        self.assertEqual(_to_index(7, 'v'), 7)
+        self.assertEqual(_to_index(IntLike(65535), 'v'), 65535)
+        for value in (True, False, 1.0, '1', None):
+            with self.subTest(func='_to_index', value=value), self.assertRaises(TypeError):
+                _to_index(value, 'v')
         self.assertEqual(_to_int_list([1, True, 65535], 'v'), [1, 1, 65535])
         for func, value in ((_to_bool, 1.0), (_to_bool, '1'), (_to_bool, None), (_to_int, 1.5), (_to_int, '1')):
             with self.subTest(func=func.__name__, value=value), self.assertRaises(TypeError):

@@ -23,7 +23,9 @@ The arguments after ``auto_close`` (``connect_retries``, ``connect_retry_delay``
 Invalid settings raise an exception at once (``ValueError`` for a bad value, ``TypeError`` for a bad type). A flag
 (``auto_open``, ``auto_close``, ``tcp_no_delay``, the ``broadcast`` argument of the write functions) is a ``bool``
 only, like the flags of the server: ``1``, ``0``, a numpy bool or ``None`` raise ``TypeError``. Coil values are data,
-not flags: they also accept integers.
+not flags: they also accept integers. The other way, an address, a number of items (``count``) or an identifier
+(``read_code``, ``object_id``) is an integer, never a ``bool`` (``TypeError``): the register values written (data)
+accept one.
 
 .. code-block:: python
 

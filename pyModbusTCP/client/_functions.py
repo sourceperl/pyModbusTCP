@@ -25,6 +25,7 @@ from ..utils import (
     _pack_bits,
     _to_bool,
     _to_bool_list,
+    _to_index,
     _to_int,
     _to_int_list,
     _unpack_bits,
@@ -174,8 +175,8 @@ class ClientFunctionsMixin:
         :rtype: list of bool or None
         """
         # check params
-        address = _to_int(address, 'address')
-        count = _to_int(count, 'count')
+        address = _to_index(address, 'address')
+        count = _to_index(count, 'count')
         check_addr_nb(address, count, MAX_READ_BITS, 'address', 'count')
         # make request
         return self._read_bits_req(READ_COILS, address, count)
@@ -191,8 +192,8 @@ class ClientFunctionsMixin:
         :rtype: list of bool or None
         """
         # check params
-        address = _to_int(address, 'address')
-        count = _to_int(count, 'count')
+        address = _to_index(address, 'address')
+        count = _to_index(count, 'count')
         check_addr_nb(address, count, MAX_READ_BITS, 'address', 'count')
         # make request
         return self._read_bits_req(READ_DISCRETE_INPUTS, address, count)
@@ -208,8 +209,8 @@ class ClientFunctionsMixin:
         :rtype: list of int or None
         """
         # check params
-        address = _to_int(address, 'address')
-        count = _to_int(count, 'count')
+        address = _to_index(address, 'address')
+        count = _to_index(count, 'count')
         check_addr_nb(address, count, MAX_READ_REGS, 'address', 'count')
         # make request
         return self._read_regs_req(READ_HOLDING_REGISTERS, address, count)
@@ -225,8 +226,8 @@ class ClientFunctionsMixin:
         :rtype: list of int or None
         """
         # check params
-        address = _to_int(address, 'address')
-        count = _to_int(count, 'count')
+        address = _to_index(address, 'address')
+        count = _to_index(count, 'count')
         check_addr_nb(address, count, MAX_READ_REGS, 'address', 'count')
         # make request
         return self._read_regs_req(READ_INPUT_REGISTERS, address, count)
@@ -244,8 +245,8 @@ class ClientFunctionsMixin:
         :rtype: DeviceIdentificationResponse or None
         """
         # check params
-        read_code = _to_int(read_code, 'read_code')
-        object_id = _to_int(object_id, 'object_id')
+        read_code = _to_index(read_code, 'read_code')
+        object_id = _to_index(object_id, 'object_id')
         if not 1 <= read_code <= 4:
             raise ValueError('read_code out of range (valid from 1 to 4)')
         if not 0 <= object_id <= 0xff:
@@ -303,7 +304,7 @@ class ClientFunctionsMixin:
         :rtype: bool
         """
         # check params
-        address = _to_int(address, 'address')
+        address = _to_index(address, 'address')
         value = _to_bool(value, 'value')
         if not 0 <= address <= 0xffff:
             raise ValueError('address out of range (valid from 0 to 65535)')
@@ -329,7 +330,7 @@ class ClientFunctionsMixin:
         :rtype: bool
         """
         # check params
-        address = _to_int(address, 'address')
+        address = _to_index(address, 'address')
         value = _to_int(value, 'value')
         if not 0 <= address <= 0xffff:
             raise ValueError('address out of range (valid from 0 to 65535)')
@@ -355,7 +356,7 @@ class ClientFunctionsMixin:
         :rtype: bool
         """
         # check params
-        address = _to_int(address, 'address')
+        address = _to_index(address, 'address')
         values = _to_bool_list(values, 'values')
         check_addr_nb(address, len(values), MAX_WRITE_BITS, 'address', 'number of values', 'write')
         # build PDU: header + coils part (pack all the bits in bytes at once)
@@ -381,7 +382,7 @@ class ClientFunctionsMixin:
         :rtype: bool
         """
         # check params
-        address = _to_int(address, 'address')
+        address = _to_index(address, 'address')
         values = _to_int_list(values, 'values')
         check_addr_nb(address, len(values), MAX_WRITE_REGS, 'address', 'number of values', 'write')
         check_regs_values(values, 'values')
@@ -410,10 +411,10 @@ class ClientFunctionsMixin:
         :rtype: list of int or None
         """
         # check params
-        write_address = _to_int(write_address, 'write_address')
+        write_address = _to_index(write_address, 'write_address')
         write_values = _to_int_list(write_values, 'write_values')
-        read_address = _to_int(read_address, 'read_address')
-        read_count = _to_int(read_count, 'read_count')
+        read_address = _to_index(read_address, 'read_address')
+        read_count = _to_index(read_count, 'read_count')
         check_addr_nb(write_address, len(write_values), MAX_WRITE_READ_REGS,
                       'write_address', 'number of values', 'write')
         check_addr_nb(read_address, read_count, MAX_READ_REGS, 'read_address', 'read_count')
