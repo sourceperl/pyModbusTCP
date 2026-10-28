@@ -29,7 +29,10 @@ HOW A REQUEST IS PROCESSED
 3. The frame is processed only if it is addressed to the slave address of the
    gateway (-a), or to address 0 (broadcast) when --allow-broadcast is set.
    Frames for other addresses are ignored: they are meant for other slaves
-   of the same bus.
+   of the same bus. So is a frame with an invalid function code (0, or 0x80
+   to 0xFF: the exception flag of a reply).
+   A function out of --functions gets exception 0x01 "Illegal Function" and is
+   never sent to the server (see ACCESS CONTROL).
 4. The PDU (function code + data) is kept unchanged and sent to the Modbus/TCP
    server (with unit id -u).
 5. The server answer PDU is wrapped in an RTU frame (slave address in front,
@@ -45,10 +48,26 @@ waits for the broadcasts received before it, then for its own response.
 A response that comes after the master has sent another frame (its timeout
 has elapsed) is not written: it would collide with this frame on the bus.
 
+ACCESS CONTROL
+--------------
+Any device wired on the serial line can talk to the gateway, and through it to
+the Modbus/TCP server. Like mbtcp-tcp2rtu, the gateway only relays the
+standard functions that read and write data by default: 0x01 to 0x06, 0x0F,
+0x10, 0x16, 0x17 and read device identification 0x2B/0x0E. The others get
+exception 0x01 (diagnostics 0x08, file records, the other MEI types of 0x2B,
+the functions of a vendor). --functions sets this list (like --functions
+1,2,3,4,6,16, or "all" with a warning at startup), --read-only only relays
+the read functions (0x01 to 0x04, 0x2B/0x0E) and ignores the broadcasts.
+A broadcast (with --allow-broadcast) is only relayed for a write function of
+this list (0x05, 0x06, 0x0F, 0x10, 0x15, 0x16): a read without answer has no
+meaning.
+
 ERRORS SEEN BY THE RTU MASTER
 -----------------------------
 - The Modbus/TCP server answers with a Modbus exception: the same exception
   code is returned to the master.
+- A function out of --functions (or --read-only): exception 0x01 "Illegal
+  Function", from the gateway itself.
 - The Modbus/TCP server is unreachable or doesn't answer before the timeout
   (-t): exception 0x0B "Gateway Target Device Failed To Respond".
 
@@ -110,10 +129,15 @@ from dataclasses import dataclass, field
 from threading import Event, Thread
 
 from ._common import (
+    BROADCAST_FUNCTION_CODES,
+    DEFAULT_FUNCTIONS,
+    READ_ONLY_FUNCTIONS,
     SERIAL_MISSING_MSG,
+    FunctionFilter,
     add_rs485_args,
     add_version_arg,
     check_rs485_args,
+    function_filter,
     positive_float,
     positive_int,
     setup_rs485,
@@ -134,6 +158,7 @@ except ModuleNotFoundError as _exc:
 from ..client import ModbusClient
 from ..constants import (
     EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND,
+    EXP_ILLEGAL_FUNCTION,
     MB_EXCEPT_ERR,
     MODBUS_PORT,
 )
@@ -280,14 +305,24 @@ class SerialModbusWorker(SlaveSerialWorkerModel):
     """
 
     def __init__(self, port: Serial, mbus_cli: ModbusClient, slave_address: int = 1, allow_broadcast: bool = False,
-                 end_of_frame: float | None = None) -> None:
+                 end_of_frame: float | None = None, read_only: bool = False,
+                 functions: FunctionFilter | None = None) -> None:
         # 0 is the broadcast address, 248 to 255 are reserved: the gateway would never answer
         if not 1 <= slave_address <= MAX_SLAVE_ADDRESS:
             raise ValueError(f'slave address must be between 1 and {MAX_SLAVE_ADDRESS}')
+        # the relayed functions, like mbtcp-tcp2rtu: read_only is a shortcut for READ_ONLY_FUNCTIONS (and no broadcast)
+        if read_only and functions is not None:
+            raise ValueError('read_only and functions are exclusive (read_only is a shortcut for a functions filter)')
+        if functions is not None and not isinstance(functions, FunctionFilter):
+            raise TypeError('functions must be a FunctionFilter (or None for the default one)')
         super().__init__(port, end_of_frame=end_of_frame)
         self.mbus_cli = mbus_cli
         self.slave_address = slave_address
         self.allow_broadcast = allow_broadcast
+        self.read_only = read_only
+        self.functions = READ_ONLY_FUNCTIONS if read_only else DEFAULT_FUNCTIONS if functions is None else functions
+        # requests refused by the filters: one message per 10 s at most (a master in a loop can't flood the log)
+        self._refused_log = LogThrottle(logger, level=logging.INFO)
         # requests for the relay thread (None: stop), in the order of the bus; only the serial loop puts in it
         self._jobs: queue.Queue[_RelayJob | None] = queue.Queue()
         self._relay_thread: Thread | None = None
@@ -368,30 +403,51 @@ class SerialModbusWorker(SlaveSerialWorkerModel):
         # network error, timeout, ...
         return None, EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
 
+    def _refused(self, reason: str) -> None:
+        req = self.request
+        self._refused_log.event('Frame not relayed (%(reason)s): %(count)d frame(s) (last: slave %(slave)d, function '
+                                '0x%(func_code)02X)', reason=reason, slave=req.slave_address,
+                                func_code=req.function_code)
+
     def handle_request(self) -> None:
         """Request handler implementing the TCP relay logic."""
         req = self.request
-        if req.slave_address == BROADCAST_ADDRESS:
-            # broadcast frame
-            if self.allow_broadcast:
-                # if config allow it, process a broadcast request (=> process it, but don't respond), without blocking
-                # the serial loop: the master doesn't wait, its next frames must be received on time
-                self._relay_broadcast(req.pdu)
-            else:
-                logger.debug('Broadcast frame ignored (see --allow-broadcast)')
-        elif req.slave_address == self.slave_address:
-            # process unicast request
-            resp_pdu, exp_status = self._relay_and_wait(req.pdu)
-            if resp_pdu:
-                # regular response from Modbus/TCP client
-                self.response.build(raw_pdu=resp_pdu, slave_address=req.slave_address)
-            else:
-                # exception response
-                exp_pdu = struct.pack('BB', (req.function_code | 0x80) & 0xFF, exp_status)
-                self.response.build(raw_pdu=exp_pdu, slave_address=req.slave_address)
-        else:
+        if req.slave_address not in (BROADCAST_ADDRESS, self.slave_address):
             # request for another slave of the bus
             logger.debug('Frame for slave %d ignored (gateway is slave %d)', req.slave_address, self.slave_address)
+            return
+        # function codes are 1 to 127: 0 or a code with the exception flag (0x80 to 0xFF, the reply of a slave) is not a
+        # request, never relayed nor answered
+        if not 0x01 <= req.function_code <= 0x7F:
+            self._refused('invalid function code')
+            return
+        if req.slave_address == BROADCAST_ADDRESS:
+            # broadcast frame: never answered; relayed only with --allow-broadcast, never in read-only mode, and only
+            # for a write function of the filter (no slave answers: a read has no meaning)
+            if not self.allow_broadcast:
+                logger.debug('Broadcast frame ignored (see --allow-broadcast)')
+            elif self.read_only or req.function_code not in BROADCAST_FUNCTION_CODES \
+                    or not self.functions.allows(req.pdu):
+                self._refused('broadcast of a function that is not a relayed write')
+            else:
+                # without blocking the serial loop: the master doesn't wait, its next frames must be received on time
+                self._relay_broadcast(req.pdu)
+            return
+        if not self.functions.allows(req.pdu):
+            # a function out of --functions (or --read-only): "illegal function", never sent to the server
+            self._refused('function out of --functions')
+            exp_pdu = struct.pack('BB', req.function_code | 0x80, EXP_ILLEGAL_FUNCTION)
+            self.response.build(raw_pdu=exp_pdu, slave_address=req.slave_address)
+            return
+        # unicast request for the gateway: relayed to the server
+        resp_pdu, exp_status = self._relay_and_wait(req.pdu)
+        if resp_pdu:
+            # regular response from Modbus/TCP client
+            self.response.build(raw_pdu=resp_pdu, slave_address=req.slave_address)
+        else:
+            # exception response
+            exp_pdu = struct.pack('BB', req.function_code | 0x80, exp_status)
+            self.response.build(raw_pdu=exp_pdu, slave_address=req.slave_address)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -401,7 +457,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('-a', '--address', type=slave_address, default=1,
                         help='slave address of the gateway, 1 to 247 (default: 1)')
     parser.add_argument('--allow-broadcast', action='store_true',
-                        help='relay broadcast frames (address 0) to the server')
+                        help='relay broadcast frames (address 0, write functions only) to the server')
+    functions = parser.add_mutually_exclusive_group()
+    functions.add_argument('--functions', type=function_filter, default=None, metavar='CODES',
+                           help='relayed functions, separated by commas, like "1,2,3,4,6,16,0x2B/0x0E" (0x2B with '
+                                'its MEI type, 0x0E if not given), or "all" (default: '
+                                f'{DEFAULT_FUNCTIONS.text()}); other functions get exception 0x01')
+    functions.add_argument('--read-only', action='store_true',
+                           help=f'only relay read functions ({READ_ONLY_FUNCTIONS.text()}), ignore broadcasts: a '
+                                'shortcut for --functions')
     parser.add_argument('-b', '--baudrate', type=positive_int, default=9600, help='serial rate (default: 9600)')
     parser.add_argument('--bytesize', type=int, choices=(7, 8), default=8, help='data bits (default: 8)')
     parser.add_argument('--parity', choices=('N', 'E', 'O'), default='N', help='parity (default: N)')
@@ -447,7 +511,14 @@ def main(argv: list[str] | None = None) -> int:
 
         # init specialized serial worker
         serial_worker = SerialModbusWorker(port=serial_port, mbus_cli=mbus_cli, slave_address=args.address,
-                                           allow_broadcast=args.allow_broadcast, end_of_frame=args.eof)
+                                           allow_broadcast=args.allow_broadcast, end_of_frame=args.eof,
+                                           read_only=args.read_only, functions=args.functions)
+        if serial_worker.read_only:
+            logger.info('Read-only mode: only read functions are relayed')
+        logger.info('Relayed functions: %s', serial_worker.functions.text())
+        if serial_worker.functions.codes is None:
+            logger.warning('Every function is relayed (--functions all): diagnostics, file records and vendor '
+                           'functions can restart, silence or reprogram the server')
         logger.debug('Interframe delay %.4f s, end of frame delay %.4f s',
                      serial_worker.interframe_delay, serial_worker.end_of_frame)
 

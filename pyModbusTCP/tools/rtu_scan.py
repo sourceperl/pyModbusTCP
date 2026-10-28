@@ -78,7 +78,14 @@ except ModuleNotFoundError as _exc:
         raise
     raise ModuleNotFoundError(SERIAL_MISSING_MSG, name='serial') from _exc
 
-from ._rtu import MIN_EOF_DELAY, SERIAL_IO_ERRORS, ModbusRTUFrame, hexdump, t35
+from ._rtu import (
+    MAX_RTU_FRAME,
+    MIN_EOF_DELAY,
+    SERIAL_IO_ERRORS,
+    ModbusRTUFrame,
+    hexdump,
+    t35,
+)
 
 logger = logging.getLogger('mbtcp-rtu-scan')
 
@@ -226,12 +233,16 @@ class Scanner:
         return True
 
     def read_frame(self, first_byte_timeout: float, end_of_frame: float) -> bytes:
-        """Wait for the first byte, then read up to a silence (the end of the frame)."""
+        """Wait for the first byte, then read up to a silence (the end of the frame), MAX_RTU_FRAME bytes at most.
+
+        A line that never goes silent (another master, a wrong baud rate on a busy bus) can't hold the scan: the read
+        stops at the size of the largest frame (the next probe flushes the rest).
+        """
         self.port.timeout = first_byte_timeout
         frame = bytearray(self.port.read(1))
         self.port.timeout = end_of_frame
-        while frame:
-            chunk = self.port.read(max(self.port.in_waiting, 1))
+        while frame and len(frame) < MAX_RTU_FRAME:
+            chunk = self.port.read(min(max(self.port.in_waiting, 1), MAX_RTU_FRAME - len(frame)))
             if not chunk:
                 break
             frame += chunk

@@ -13,7 +13,23 @@ from dataclasses import dataclass
 from types import FrameType
 from typing import TYPE_CHECKING
 
-from ..constants import VERSION
+from ..constants import (
+    ENCAPSULATED_INTERFACE_TRANSPORT,
+    MASK_WRITE_REGISTER,
+    MEI_TYPE_READ_DEVICE_ID,
+    READ_COILS,
+    READ_DISCRETE_INPUTS,
+    READ_FUNCTION_CODES,
+    READ_HOLDING_REGISTERS,
+    READ_INPUT_REGISTERS,
+    VERSION,
+    WRITE_FILE_RECORD,
+    WRITE_MULTIPLE_COILS,
+    WRITE_MULTIPLE_REGISTERS,
+    WRITE_READ_MULTIPLE_REGISTERS,
+    WRITE_SINGLE_COIL,
+    WRITE_SINGLE_REGISTER,
+)
 from ..server._common import HOST_IPV6_PREFIX
 from ..server._validators import parse_network
 
@@ -321,3 +337,106 @@ def is_permission_error(exc: BaseException) -> bool:
             return True
         current = current.__cause__
     return False
+
+
+# --- the functions relayed by the gateways ---
+
+# the functions that can be broadcast (unit id or slave address 0): writes only, no slave answers (a read has no
+# meaning)
+BROADCAST_FUNCTION_CODES = frozenset({WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER, WRITE_MULTIPLE_COILS,
+                                      WRITE_MULTIPLE_REGISTERS, WRITE_FILE_RECORD, MASK_WRITE_REGISTER})
+
+
+@dataclass(frozen=True)
+class FunctionFilter:
+    """The functions that a gateway relays (a whitelist: an unknown function may write), --functions and --read-only of
+    mbtcp-tcp2rtu (to the serial line) and mbtcp-rtu2tcp (to the Modbus/TCP server).
+
+    0x2B (encapsulated interface transport) is a family of functions: it is allowed by MEI type (0x0E: read device
+    identification, the other types, like CANopen 0x0D, can write).
+
+    :param codes: the allowed function codes (0x01 to 0x7F, 0x2B excluded), None for every function
+    :param mei_types: the allowed MEI types of the function 0x2B (ignored when codes is None)
+    """
+
+    codes: frozenset[int] | None
+    mei_types: frozenset[int] = frozenset()
+
+    def __post_init__(self) -> None:
+        if self.codes is not None:
+            for code in self.codes:
+                if not 0x01 <= code <= 0x7F or code == ENCAPSULATED_INTERFACE_TRANSPORT:
+                    raise ValueError(f'invalid function code 0x{code:02X} in a function filter')
+        for mei_type in self.mei_types:
+            if not 0x00 <= mei_type <= 0xFF:
+                raise ValueError(f'invalid MEI type {mei_type} in a function filter')
+
+    @classmethod
+    def parse(cls, text: str) -> 'FunctionFilter':
+        """A filter from its text: "all", or function codes separated by commas, in decimal or hexadecimal, a
+        function 0x2B with its MEI type: "1,2,3,4,0x06,0x10,0x2B/0x0E" (0x2B alone is 0x2B/0x0E).
+
+        :raises ValueError: with a message for the user
+        """
+        if text.strip().lower() == 'all':
+            return cls(None)
+        codes: set[int] = set()
+        mei_types: set[int] = set()
+        for item in text.split(','):
+            item = item.strip()
+            if not item:
+                raise ValueError(f'empty function code in {text!r}')
+            code_txt, _, mei_txt = item.partition('/')
+            try:
+                code = int(code_txt, 0)
+                mei_type = int(mei_txt, 0) if mei_txt else MEI_TYPE_READ_DEVICE_ID
+            except ValueError:
+                raise ValueError(f'{item!r} is not a function code (like 3, 0x10 or 0x2B/0x0E)') from None
+            if not 0x01 <= code <= 0x7F:
+                raise ValueError(f'function code {item!r} out of 1 to 127 (0x01 to 0x7F)')
+            if code == ENCAPSULATED_INTERFACE_TRANSPORT:
+                if not 0x00 <= mei_type <= 0xFF:
+                    raise ValueError(f'MEI type of {item!r} out of 0 to 255')
+                mei_types.add(mei_type)
+            elif mei_txt:
+                raise ValueError(f'{item!r}: only the function 0x2B has a MEI type')
+            else:
+                codes.add(code)
+        return cls(frozenset(codes), frozenset(mei_types))
+
+    def allows(self, pdu: bytes) -> bool:
+        """True if the request PDU is of an allowed function."""
+        if self.codes is None:
+            return True
+        if pdu[0] == ENCAPSULATED_INTERFACE_TRANSPORT:
+            return len(pdu) >= 2 and pdu[1] in self.mei_types
+        return pdu[0] in self.codes
+
+    def text(self) -> str:
+        """The filter for the log: "0x01, 0x02, 0x03, 0x2B/0x0E" or "every function"."""
+        if self.codes is None:
+            return 'every function'
+        items = [f'0x{code:02X}' for code in sorted(self.codes)]
+        items += [f'0x{ENCAPSULATED_INTERFACE_TRANSPORT:02X}/0x{mei:02X}' for mei in sorted(self.mei_types)]
+        return ', '.join(items) or 'no function'
+
+
+# the functions relayed by default: the standard functions that read and write data (bits and registers), and the
+# read device identification; not the diagnostics (0x08 can restart a slave or make it silent), the file records,
+# the other MEI types or the functions of a vendor (programming, firmware...)
+DEFAULT_FUNCTIONS = FunctionFilter(frozenset({
+    READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS,
+    WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER, WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS,
+    MASK_WRITE_REGISTER, WRITE_READ_MULTIPLE_REGISTERS}), frozenset({MEI_TYPE_READ_DEVICE_ID}))
+# the functions relayed in read-only mode (--read-only, a shortcut for this filter, broadcast refused)
+# (READ_FUNCTION_CODES, the reads of a read-only ModbusServer: its 0x2B is the read device identification only)
+READ_ONLY_FUNCTIONS = FunctionFilter(frozenset(READ_FUNCTION_CODES) - {ENCAPSULATED_INTERFACE_TRANSPORT},
+                                     frozenset({MEI_TYPE_READ_DEVICE_ID}))
+
+
+def function_filter(value: str) -> FunctionFilter:
+    """argparse type: the relayed functions ("all", or codes like "1,2,3,4,6,16,0x2B/0x0E")."""
+    try:
+        return FunctionFilter.parse(value)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e)) from None

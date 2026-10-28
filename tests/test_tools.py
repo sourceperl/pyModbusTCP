@@ -22,7 +22,7 @@ from pyModbusTCP.constants import VERSION
 from pyModbusTCP.server import DeviceIdentification, MemoryStore, ModbusServer, Space
 from pyModbusTCP.tools import _entry
 from pyModbusTCP.tools import client as cli_tool
-from pyModbusTCP.tools._common import is_permission_error
+from pyModbusTCP.tools._common import FunctionFilter, is_permission_error
 from pyModbusTCP.utils import crc16
 
 
@@ -461,7 +461,7 @@ def test_tcp2rtu_filters(kwargs: dict | str, expected: dict) -> None:  # type: i
     from pyModbusTCP.tools import tcp_to_rtu_gw
     port = serial.serial_for_url('loop://', baudrate=19200)
     if isinstance(kwargs, str):
-        kwargs = {'functions': tcp_to_rtu_gw.FunctionFilter.parse(kwargs)}
+        kwargs = {'functions': FunctionFilter.parse(kwargs)}
     worker = tcp_to_rtu_gw.ModbusSerialWorker(port, timeout=0.3, **kwargs)
     thread = threading.Thread(target=worker.loop, daemon=True)
     thread.start()
@@ -937,12 +937,8 @@ def test_gateway_invalid_args(tool: str, args: list[str], error: str, capsys: py
 def test_tcp2rtu_function_filter() -> None:
     """--functions: parse, match (0x2B by MEI type), log text; --read-only is a shortcut, exclusive with it."""
     pytest.importorskip('serial')
-    from pyModbusTCP.tools.tcp_to_rtu_gw import (
-        DEFAULT_FUNCTIONS,
-        READ_ONLY_FUNCTIONS,
-        FunctionFilter,
-        ModbusSerialWorker,
-    )
+    from pyModbusTCP.tools._common import DEFAULT_FUNCTIONS, READ_ONLY_FUNCTIONS
+    from pyModbusTCP.tools.tcp_to_rtu_gw import ModbusSerialWorker
     flt = FunctionFilter.parse(' 1, 0x03 ,16,0x2B, 43/13 ')
     assert flt == FunctionFilter(frozenset({1, 3, 16}), frozenset({0x0E, 0x0D}))
     assert flt.text() == '0x01, 0x03, 0x10, 0x2B/0x0D, 0x2B/0x0E'
@@ -1324,6 +1320,66 @@ def test_rtu2tcp_late_response_dropped(server: tuple[ModbusServer, int], caplog:
     assert any('Response dropped' in r.getMessage() for r in caplog.records)
 
 
+def test_rtu2tcp_filters() -> None:
+    """S10 of the audit: the gateway relays the functions of its filter only (the standard data functions by default,
+    like mbtcp-tcp2rtu); an invalid function code is never relayed nor answered, a broadcast only for a write."""
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import _rtu, rtu_to_tcp_gw
+    from pyModbusTCP.tools._common import DEFAULT_FUNCTIONS, READ_ONLY_FUNCTIONS
+
+    class EchoClient:
+        """A Modbus/TCP client whose server answers every request with its PDU."""
+        timeout = 2.0
+
+        def __init__(self) -> None:
+            self.sent: list[bytes] = []
+
+        def custom_request(self, pdu: bytes) -> bytes:
+            self.sent.append(pdu)
+            return pdu
+
+    def run(frames: list[tuple[int, str]], **kwargs: Any) -> tuple[list[str], list[str]]:
+        """Give the frames to a gateway (slave 30): returns the PDUs sent to the server and the answers (hex)."""
+        cli = EchoClient()
+        worker = rtu_to_tcp_gw.SerialModbusWorker(SilentSerial(), cli, slave_address=30,  # type: ignore[arg-type]
+                                                  **kwargs)
+        answers = []
+        try:
+            for slave, pdu_hex in frames:
+                worker.request = _rtu.ModbusRTUFrame(rtu_frame(slave, bytes.fromhex(pdu_hex)))
+                worker.response = _rtu.ModbusRTUFrame()
+                worker.handle_request()
+                answers.append(worker.response.pdu.hex() if worker.response.is_set else '')
+        finally:
+            worker.stop()
+            if worker._relay_thread is not None:
+                worker._relay_thread.join(5.0)
+        return [pdu.hex() for pdu in cli.sent], answers
+
+    assert rtu_to_tcp_gw.SerialModbusWorker(SilentSerial(), EchoClient()).functions == DEFAULT_FUNCTIONS  # type: ignore
+    # default filter: a read is relayed, a diagnostic gets "illegal function" from the gateway, invalid codes are
+    # ignored, never sent to the server
+    sent, answers = run([(30, '0300000001'), (30, '0800000000'), (30, '8302'), (30, '00'), (30, '2b0d00')])
+    assert sent == ['0300000001']
+    assert answers == ['0300000001', '8801', '', '', 'ab01']
+    # --functions all: the diagnostic is relayed, never an invalid code
+    sent, _ = run([(30, '0800000000'), (30, '8302')], functions=FunctionFilter(None))
+    assert sent == ['0800000000']
+    # --read-only: the reads only
+    sent, answers = run([(30, '0300000001'), (30, '0600000001')], read_only=True)
+    assert (sent, answers) == (['0300000001'], ['0300000001', '8601'])
+    assert rtu_to_tcp_gw.SerialModbusWorker(SilentSerial(), EchoClient(),  # type: ignore[arg-type]
+                                            read_only=True).functions == READ_ONLY_FUNCTIONS
+    # broadcasts (never answered): a write of the filter only, never in read-only mode
+    sent, answers = run([(0, '0600000001'), (0, '0300000001'), (0, '0800000000')], allow_broadcast=True)
+    assert (sent, answers) == (['0600000001'], ['', '', ''])
+    sent, _ = run([(0, '0600000001')], allow_broadcast=True, read_only=True)
+    assert sent == []
+    with pytest.raises(ValueError):
+        rtu_to_tcp_gw.SerialModbusWorker(SilentSerial(), EchoClient(), read_only=True,  # type: ignore[arg-type]
+                                         functions=DEFAULT_FUNCTIONS)
+
+
 # --- mbtcp-rtu-scan ---
 
 class SlavesSerial:
@@ -1395,6 +1451,32 @@ def run_rtu_scan(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(rtu_scan, 'Serial', lambda **_kwargs: port)
     status = rtu_scan.main(args + ['-t', '0.001', 'COM9'])
     return status, capsys.readouterr().out, port
+
+
+def test_rtu_scan_frame_bounded() -> None:
+    """S10 of the audit: a line that never goes silent can't hold the scan, a frame is MAX_RTU_FRAME bytes at most."""
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import rtu_scan
+    from pyModbusTCP.tools._rtu import MAX_RTU_FRAME
+
+    class EndlessSerial(SilentSerial):
+        """A line that always has bytes to read."""
+        in_waiting = 64
+
+        def read(self, size: int = 1) -> bytes:
+            return b'\x55' * size
+
+    scanner = rtu_scan.Scanner(EndlessSerial())  # type: ignore[arg-type]
+    assert len(scanner.read_frame(0.1, 0.01)) == MAX_RTU_FRAME
+
+
+@pytest.mark.parametrize('args', [['--functions', '1,3', '--read-only'], ['--functions', '0x80']])
+def test_rtu2tcp_invalid_filter_args(args: list[str], capsys: pytest.CaptureFixture[str]) -> None:
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import rtu_to_tcp_gw
+    with pytest.raises(SystemExit) as exc:
+        rtu_to_tcp_gw.main([*args, '/dev/null'])
+    assert exc.value.code == 2
 
 
 def test_rtu_scan_finds_slaves(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:

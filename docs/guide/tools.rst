@@ -108,6 +108,11 @@ broadcasts: the two options are exclusive. The log shows the relayed functions a
     # every function, like before 0.4.0a3 (a warning is logged at startup)
     mbtcp-tcp2rtu --functions all /dev/ttyUSB0
 
+``mbtcp-rtu2tcp`` has the same ``--functions`` and ``--read-only`` options, with the same default list: any device
+wired on the serial line can talk to the Modbus/TCP server through it. A function out of the list gets exception 0x01
+from the gateway and never reaches the server; a frame with an invalid function code is ignored; a broadcast (with
+``--allow-broadcast``) is only relayed for a write function of the list.
+
 Broadcast through mbtcp-tcp2rtu
 -------------------------------
 
@@ -310,6 +315,8 @@ The server and the TCP to RTU gateway are designed to be safe by default:
   TCP to RTU gateway shares the serial line between the client hosts: their requests are served in turn (round
   robin), with at most 2 requests per host waiting for the line or in progress;
 - the TCP to RTU gateway never writes a request with an invalid function code (0, or 0x80 to 0xFF) on the bus;
+- the RTU to TCP gateway applies the same function list (``--functions``, ``--read-only``) to the frames of the serial
+  line, and never relays an invalid function code to the server;
 - the delays (``-t``, ``-e``, ``-i``...) must be greater than 0 and at most one day, the serial rate greater than 0.
 
 See also :doc:`../security`.

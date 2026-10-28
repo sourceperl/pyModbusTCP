@@ -38,8 +38,9 @@ Revision history for pyModbusTCP
       closed.
     - server: the check function of a Guard must return True to allow an access: None (a forgotten return) or any
       other value refuses it ("illegal data address"), it no longer allows it.
-    - tools: mbtcp-tcp2rtu relays only the standard data functions by default (the others get exception 0x01),
-      "--functions all" relays every function as before.
+    - tools: mbtcp-tcp2rtu and mbtcp-rtu2tcp relay only the standard data functions by default (the others get
+      exception 0x01), "--functions all" relays every function as before. mbtcp-rtu2tcp: --functions, --read-only,
+      an invalid function code (0, 0x80 to 0xFF) is never relayed, a broadcast only for a write function.
     - utils: word_list_to_long() raises ValueError when the number of words is not a multiple of 2 (4 with
       long_long): the extra words were ignored.
     - examples: client_serial_gw.py and server_serial_gw.py are removed (replaced by the gateways of the tools).
@@ -58,6 +59,7 @@ Revision history for pyModbusTCP
       (RS-485 mode, pyserial), with "python -m pyModbusTCP.tools" or the commands of "pip install pyModbusTCP[cli]".
       mbtcp-tcp2rtu: whitelist of the relayed functions (--functions, --read-only), broadcasts (--allow-broadcast,
       with a bounded buffer and a maximum age).
+    - tools: mbtcp-rtu-scan reads a frame of 256 bytes at most (a line that never goes silent held the scan).
     - tools: mbtcp-rtu-scan finds the baud rate, the serial format and the address of Modbus/RTU slaves (the most
       common settings first, read requests only), --all lists the other slaves of the bus.
     - server/tools: ipv6_host_prefix (--ipv6-host-prefix): the IPv6 network counted as one host by the limits.
