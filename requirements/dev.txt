@@ -11,5 +11,3 @@ twine==7.0.0
 ruff==0.17.2
 # editable install without build isolation (pip install --no-build-isolation --editable ., backend hatchling)
 editables==0.6
-# examples/server_schedule.py (mypy of tools/code_audit.sh)
-schedule==1.2.2

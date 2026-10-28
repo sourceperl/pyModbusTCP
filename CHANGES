@@ -51,6 +51,9 @@ Revision history for pyModbusTCP
     - utils: word_list_to_long() raises ValueError when the number of words is not a multiple of 2 (4 with
       long_long): the extra words were ignored.
     - examples: client_serial_gw.py and server_serial_gw.py are removed (replaced by the gateways of the tools).
+    - examples: server_schedule.py starts or stops the server from the clock (06:00 to 18:00): launched out of the
+      service hours, it no longer serves until 18:00 and crashes at 06:00 (start() of a running server raises). It
+      no longer needs the schedule package (removed from the dev requirements).
 
     New features:
 

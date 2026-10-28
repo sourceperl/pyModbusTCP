@@ -225,7 +225,7 @@ audit() {
                     --extend-exclude="$excluded_csv"
                 ;;
             mypy)
-                # examples/ and pyModbusTCP-cli/ import packages that are not dev tools (schedule, hatchling)
+                # examples/ and pyModbusTCP-cli/ import packages that are not dev tools (hatchling)
                 run_check mypy "$PYTHON" -m mypy . \
                     --ignore-missing-imports \
                     --exclude "$MYPY_EXCLUDE"

@@ -50,7 +50,7 @@ Server
    * - :doc:`server_dynamic_port`
      - Let the operating system choose a free port (port=0) and read it back.
    * - :doc:`server_schedule`
-     - A server stopped every day from 18:00 to 06:00, with a life word updated every 10 seconds (needs the schedule package).
+     - A server stopped every day from 18:00 to 06:00, with a life word updated every 10 seconds.
    * - :doc:`server_mailbox`
      - A command mailbox: a mapped command register runs the command in the request, 0x17 gets its result at once.
    * - :doc:`server_multi_unit`
