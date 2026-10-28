@@ -276,6 +276,9 @@ class ClientFunctionsMixin:
                 pdu_offset += 2 + obj_len
                 # add result to request list
                 response.objects_by_id[obj_id] = obj_value
+            # nothing after the last object (more is not this reply, like another frame relayed by a gateway)
+            if pdu_offset != len(rx_pdu):
+                raise NetworkError(MB_FRAME_ERR, 'rx byte count mismatch')
             return response
         # handle error during request
         except InternalError as e:

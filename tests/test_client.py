@@ -383,7 +383,8 @@ class TestModbusClient(unittest.TestCase):
         self.assertTrue(any('illegal data address' in line for line in logs.output), logs.output)
 
     def test_read_device_identification_bad_reply(self) -> None:
-        """A device identification reply with a bad header or a truncated object is an error."""
+        """A device identification reply with a bad header, a truncated object or data after the last object is an
+        error."""
         bad_replies = {
             # MEI type is not 0x0E
             'mei type': b'\x2b\x0d\x01\x83\x00\x00\x00',
@@ -393,6 +394,10 @@ class TestModbusClient(unittest.TestCase):
             'object header': b'\x2b\x0e\x01\x83\x00\x00\x01\x00',
             # one object announced, value shorter than its length
             'object value': b'\x2b\x0e\x01\x83\x00\x00\x01\x00\x04ab',
+            # one object announced, more bytes after it (S7: they were ignored)
+            'trailing bytes': b'\x2b\x0e\x01\x83\x00\x00\x01\x00\x02abGARBAGE',
+            # no object announced, but some data
+            'data without object': b'\x2b\x0e\x01\x83\x00\x00\x00\x00',
         }
         for name, rx_pdu in bad_replies.items():
             with self.subTest(name):
