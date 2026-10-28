@@ -20,6 +20,7 @@ from pyModbusTCP.constants import (
     MB_FRAME_ERR,
     MB_NO_ERR,
     MB_RECV_ERR,
+    MB_RESOLVE_ERR,
     MB_TIMEOUT_ERR,
 )
 from pyModbusTCP.utils import _unpack_bits, set_bit
@@ -246,25 +247,25 @@ class TestModbusClient(unittest.TestCase):
             self.assertEqual(_decode_regs(raw, nb), ref_regs)
 
     def test_host_resolution_error(self) -> None:
-        """A name resolution failure must be reported like any connect error (no socket.gaierror raised)."""
+        """A name resolution failure is MB_RESOLVE_ERR (no socket.gaierror raised), not MB_CONNECT_ERR."""
         c = ModbusClient('localhost', 502, auto_open=True)
         with mock.patch('socket.getaddrinfo', side_effect=socket.gaierror(-2, 'Name or service not known')):
             self.assertFalse(c.open())
-            self.assertEqual(c.last_error, MB_CONNECT_ERR)
+            self.assertEqual(c.last_error, MB_RESOLVE_ERR)
             self.assertIsNone(c.read_coils(0))
-            self.assertEqual(c.last_error, MB_CONNECT_ERR)
+            self.assertEqual(c.last_error, MB_RESOLVE_ERR)
             self.assertFalse(c.is_open)
 
     def test_host_idna_encode_error(self) -> None:
-        """A name that the IDNA codec can't encode (UnicodeError) is a connect error too, never an exception."""
+        """A name that the IDNA codec can't encode (UnicodeError) is a resolution error too, never an exception."""
         c = ModbusClient('localhost', 502, auto_open=True)
         with mock.patch('socket.getaddrinfo', side_effect=UnicodeError('label too long')):
             self.assertFalse(c.open())
-            self.assertEqual(c.last_error, MB_CONNECT_ERR)
+            self.assertEqual(c.last_error, MB_RESOLVE_ERR)
             self.assertIsNone(c.read_holding_registers(0))
-            self.assertEqual(c.last_error, MB_CONNECT_ERR)
+            self.assertEqual(c.last_error, MB_RESOLVE_ERR)
             self.assertFalse(c.write_single_coil(0, True))
-            self.assertEqual(c.last_error, MB_CONNECT_ERR)
+            self.assertEqual(c.last_error, MB_RESOLVE_ERR)
 
     def test_open_resets_last_error(self) -> None:
         """A successful open() clears the error of a previous failed open()."""
@@ -273,7 +274,7 @@ class TestModbusClient(unittest.TestCase):
         self.addCleanup(c.close)
         with mock.patch('socket.getaddrinfo', side_effect=socket.gaierror(-2, 'Name or service not known')):
             self.assertFalse(c.open())
-        self.assertEqual(c.last_error, MB_CONNECT_ERR)
+        self.assertEqual(c.last_error, MB_RESOLVE_ERR)
         self.assertTrue(c.open())
         self.assertEqual(c.last_error, MB_NO_ERR)
 
@@ -834,7 +835,8 @@ class TestConnectRetry(unittest.TestCase):
             with mock.patch('pyModbusTCP.client._transport.socket.getaddrinfo',
                             side_effect=socket.gaierror(errno, 'dns error')) as getaddrinfo:
                 self.assertFalse(c.open())
-            self.assertEqual(c.last_error, MB_CONNECT_ERR)
+            self.assertEqual(c.last_error, MB_RESOLVE_ERR)
+            self.assertEqual(c.last_error_as_txt, 'name resolve error')
             self.assertEqual(getaddrinfo.call_count, attempts)
 
     def test_request_is_never_resent(self) -> None:

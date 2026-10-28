@@ -268,9 +268,13 @@ A request never raises an exception for a network or a Modbus error: a read retu
    * - ``MB_NO_ERR``
      - 0
      - No error: the last request succeeded.
+   * - ``MB_RESOLVE_ERR``
+     - 1
+     - The host name can't be resolved: unknown name, no DNS server (a temporary DNS failure is retried with
+       ``connect_retries``, an unknown name is not).
    * - ``MB_CONNECT_ERR``
      - 2
-     - The connection failed: unknown host name, server down, wrong port, firewall...
+     - The connection failed: server down, wrong port, firewall...
    * - ``MB_SEND_ERR``
      - 3
      - The request can't be sent.

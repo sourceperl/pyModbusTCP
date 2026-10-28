@@ -134,7 +134,7 @@ The values of :attr:`ModbusClient.last_error <pyModbusTCP.client.ModbusClient.la
      - no error
    * - ``MB_RESOLVE_ERR``
      - 1
-     - name resolve error (not set by ModbusClient: see MB_CONNECT_ERR)
+     - name resolve error
    * - ``MB_CONNECT_ERR``
      - 2
      - connect error

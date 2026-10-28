@@ -17,6 +17,8 @@ Revision history for pyModbusTCP
       regs_value=...) raise TypeError: give the values by position, or with the new names.
     - an invalid reply (MBAP header, function code, size or echo that don't match the request, extra data) sets
       last_error to MB_FRAME_ERR: MB_RECV_ERR is now a network error only. A device that pads its replies is refused.
+    - a host name that can't be resolved sets last_error to MB_RESOLVE_ERR (it was MB_CONNECT_ERR): a wrong name or a
+      DNS problem is told apart from a server that can't be reached.
 
     Breaking changes, server:
 

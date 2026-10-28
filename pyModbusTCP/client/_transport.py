@@ -15,6 +15,7 @@ from ..constants import (
     MB_CONNECT_ERR,
     MB_FRAME_ERR,
     MB_RECV_ERR,
+    MB_RESOLVE_ERR,
     MB_SEND_ERR,
     MB_SOCK_CLOSE_ERR,
     MB_TIMEOUT_ERR,
@@ -139,11 +140,12 @@ class ClientTransportMixin:
         try:
             addr_infos = socket.getaddrinfo(self.host, self.port, AF_UNSPEC, SOCK_STREAM)
         except (socket.gaierror, UnicodeError) as e:
-            # name resolution failure: report it like any other connect error (no exception for the caller)
+            # name resolution failure: MB_RESOLVE_ERR (no exception for the caller), told apart from a server that
+            # can't be reached (MB_CONNECT_ERR): a wrong name or a DNS problem, not a network one
             # (UnicodeError: a name that the IDNA codec can't encode, like a label too long once encoded)
             # only a temporary DNS failure (EAI_AGAIN) is worth a retry, an unknown name stays unknown
             retryable = isinstance(e, socket.gaierror) and e.errno == socket.EAI_AGAIN
-            raise NetworkError(MB_CONNECT_ERR, f'host name resolution error: {e}', retryable=retryable) from None
+            raise NetworkError(MB_RESOLVE_ERR, f'host name resolution error: {e}', retryable=retryable) from None
         # try each address in turn, keep the last failure reason for the error message
         last_err: OSError | None = None
         for af, sock_type, proto, _canon_name, sa in addr_infos:
