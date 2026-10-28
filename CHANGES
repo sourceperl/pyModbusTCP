@@ -92,7 +92,8 @@ Revision history for pyModbusTCP
       to 65535; utils: valid_host() edge cases (legacy IPv4 forms, length, NUL and non-ASCII chars).
 
     Build: pyproject.toml with hatchling, Python 3.10 to 3.14. pyModbusTCP[cli]==X installs exactly
-    pyModbusTCP-cli X, which requires exactly pyModbusTCP X.
+    pyModbusTCP-cli X, which requires exactly pyModbusTCP X. tools/build_dist.sh -o only removes the old packages of a
+    directory, it refuses a directory with other files (it was emptied).
 
 0.4.0a3 2026-10-27 (alpha)
 

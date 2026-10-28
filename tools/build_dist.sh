@@ -8,7 +8,7 @@
 #
 # Options:
 #   -p PYTHON    Python interpreter with build, twine and hatchling (default: python, the one of the active venv)
-#   -o OUT_DIR   output directory, emptied first (default: dist)
+#   -o OUT_DIR   output directory: new, empty, or with packages only, removed first (default: dist)
 #   -t           also test the install of the built wheels, in throwaway venvs (needs pyserial from PyPI)
 #   -c           check only, not a release (the CI): no check of the date of CHANGES, no lookup on PyPI/TestPyPI
 #   -h           show this help
@@ -74,10 +74,22 @@ if ! "$PYTHON" -c 'import build, twine, hatchling' 2>/dev/null; then
 fi
 
 OUT_DIR="${OUT_DIR:-$PWD/dist}"
-# OUT_DIR is emptied: never the root, the home or the project directory
-case "${OUT_DIR%/}" in
-    ""|"$HOME"|"$PWD") echo "Error: OUT_DIR '$OUT_DIR' would be emptied, use a dedicated directory" >&2; exit 1 ;;
-esac
+# the old packages of OUT_DIR are removed, nothing else: OUT_DIR must be a new or empty directory, or one with packages
+# only (*.whl, *.tar.gz: an older dist/), never a directory of something else given by mistake (like -o tools)
+if [[ -e "$OUT_DIR" && ! -d "$OUT_DIR" ]]; then
+    echo "Error: OUT_DIR '$OUT_DIR' is not a directory" >&2
+    exit 1
+fi
+if [[ -d "$OUT_DIR" ]]; then
+    # (find -mindepth/-maxdepth: GNU and BSD find; the dot files count too)
+    other="$(find "$OUT_DIR" -mindepth 1 -maxdepth 1 ! \( -type f \( -name '*.whl' -o -name '*.tar.gz' \) \) \
+             | head -n 1)"
+    if [[ -n "$other" ]]; then
+        echo "Error: OUT_DIR '$OUT_DIR' has other files than packages (like '$(basename "$other")'): use a new," \
+             "empty or dist directory" >&2
+        exit 1
+    fi
+fi
 
 # the version of both packages, read without importing the library
 VERSION="$(sed -n "s/^VERSION = ['\"]\([^'\"]*\)['\"].*/\1/p" pyModbusTCP/constants.py)"
@@ -107,7 +119,10 @@ if [[ -n "$stale" ]]; then
 fi
 
 # no stale file of an older version next to the new ones (twine upload dist/* would take them)
-rm -rf "$OUT_DIR" build "$CLI_DIR/build"
+if [[ -d "$OUT_DIR" ]]; then
+    find "$OUT_DIR" -mindepth 1 -maxdepth 1 -type f \( -name '*.whl' -o -name '*.tar.gz' \) -exec rm -f {} +
+fi
+rm -rf build "$CLI_DIR/build"
 mkdir -p "$OUT_DIR"
 
 echo "==> Building pyModbusTCP"
