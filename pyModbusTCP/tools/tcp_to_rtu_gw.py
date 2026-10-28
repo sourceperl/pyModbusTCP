@@ -14,10 +14,10 @@ The script is a Modbus/TCP *server* on the network side and a Modbus/RTU
 *master* on the serial side. It translates each request from one protocol to
 the other and returns the answer to the client::
 
-       network                   this modbus gateway                serial line
-    --------------       ------------------------------------      -------------
-      TCP client    -->  [ModbusServer]  [TcpToRtuWorker]      -->   RTU slave
-                            tcp/5020       to /dev/ttyUSB0
+       network                  this modbus gateway              serial line
+    --------------       --------------------------------       -------------
+      TCP client    -->  [ModbusServer]  [TcpToRtuWorker]  -->    RTU slave
+                            tcp/5020      to /dev/ttyUSB0
 
 HOW A REQUEST IS PROCESSED
 --------------------------
