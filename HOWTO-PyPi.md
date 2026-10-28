@@ -27,7 +27,8 @@ It builds the 4 files in `dist/`, runs `twine check`, checks that pyModbusTCP-cl
 that the `cli` extra of the library requires exactly this release of pyModbusTCP-cli (`tools/check_dist_requires.py`,
 the two requirements are set at build time by `hatch_metadata.py` and `pyModbusTCP-cli/hatch_metadata_cli.py`),
 that the first entry of `CHANGES` is `VERSION YYYY-MM-DD` (a placeholder date can't be fixed after the upload: the
-changelog is in the sdist), warns about the docs that pin another pre-release and about a version already on PyPI or
+changelog is in the sdist), that the docs pin this release (`pip install "pyModbusTCP[cli]==VERSION"`: a warning for a
+`.devN` version, whose docs pin the release it prepares), warns and about a version already on PyPI or
 TestPyPI, then (`-t`) tests the install of the wheels in throwaway venvs.
 
 Before a release, also run the test suite, `mypy --strict pyModbusTCP` and the docs build (`tools/build_docs.sh`).
@@ -37,7 +38,8 @@ Before a release, also run the test suite, `mypy --strict pyModbusTCP` and the d
 Set `VERSION` in `pyModbusTCP/constants.py` with a [PEP 440](https://peps.python.org/pep-0440/) version, and the same
 version (with the release date) at the top of `CHANGES`:
 
-- `0.4.0.dev0`: development version, never uploaded;
+- `0.4.0.dev0`: development version, never uploaded; between two pre-releases, the next one with `.dev0`
+  (`0.4.0a4.dev0` after `0.4.0a3`): the tree never claims a published version it differs from;
 - `0.4.0a1`, `0.4.0a2`...: alpha releases (the interface may still change), then `0.4.0b1`... and `0.4.0rc1`...;
 - `0.4.0`: final release.
 

@@ -28,8 +28,8 @@ The library has no dependency. Two optional extras add the :doc:`command line to
 .. note::
 
     This documentation describes version 0.4.0, only available as a pre-release (alpha) for now: pip installs the
-    stable 0.3.1 by default. Ask for the pre-release explicitly, with ``pip install pyModbusTCP==0.4.0a3`` (or
-    ``"pyModbusTCP[cli]==0.4.0a3"``), or with ``pip install --pre pyModbusTCP``.
+    stable 0.3.1 by default. Ask for the pre-release explicitly, with ``pip install pyModbusTCP==0.4.0a4`` (or
+    ``"pyModbusTCP[cli]==0.4.0a4"``), or with ``pip install --pre pyModbusTCP``.
 
 To install the development version from GitHub:
 

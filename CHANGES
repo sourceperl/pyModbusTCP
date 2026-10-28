@@ -2,7 +2,7 @@ Revision history for pyModbusTCP
 
 0.4.0a4 2026-xx-xx (alpha: the command line tools, their options and output, may still change before 0.4.0)
 
-    Summary of the changes since 0.3.1 (0.4.0a1 and 0.4.0a2 included). The details are in the documentation
+    Summary of the changes since 0.3.1 (0.4.0a1 to 0.4.0a3 included). The details are in the documentation
     (https://pymodbustcp.readthedocs.io/), the security choices in SECURITY.md.
 
     Breaking changes, client:

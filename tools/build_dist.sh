@@ -16,9 +16,10 @@
 # No isolated build environment: hatchling is taken from PYTHON (python -m build --no-isolation).
 # Checks: "twine check" on the 4 files (sdist and wheel of each package), the version of both packages is VERSION in
 # pyModbusTCP/constants.py, pyModbusTCP-cli requires exactly this release and the cli extra exactly this release of
-# pyModbusTCP-cli (tools/check_dist_requires.py), and a warning if VERSION is already on PyPI or TestPyPI (an
-# uploaded version can never be uploaded again). With -t: the library alone (no mbtcp-* command, no pyserial), then
-# with pyModbusTCP-cli (the 5 commands), each in a fresh venv.
+# pyModbusTCP-cli (tools/check_dist_requires.py), the pre-release pins of the docs name VERSION without its .devN
+# suffix (an error for a release), and a warning if VERSION is already on PyPI or TestPyPI (an uploaded version can
+# never be uploaded again). With -t: the library alone (no mbtcp-* command, no pyserial), then with pyModbusTCP-cli
+# (the 5 commands), each in a fresh venv.
 
 set -euo pipefail
 
@@ -28,7 +29,7 @@ INSTALL_TEST=0
 RELEASE=1
 
 usage() {
-    sed -n '3,21p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '3,22p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while getopts "p:o:tch" opt; do
@@ -110,11 +111,19 @@ if [[ "$RELEASE" -eq 1 && "$VERSION" != *.dev* ]]; then
         exit 1
     fi
 fi
-# the install commands of the docs pin a pre-release: they must name this one (warning only)
+# the install commands of the docs pin a pre-release: the one they document, VERSION without its .devN suffix (a
+# development version 0.4.0a4.dev0 documents 0.4.0a4). An error for a release (the docs are in the sdist and on
+# readthedocs), a warning otherwise
+PIN_VERSION="${VERSION%%.dev*}"
 stale="$(grep -rnoE '==[0-9]+\.[0-9]+\.[0-9]+(a|b|rc)[0-9]+' README.md "$CLI_DIR/README.md" docs --include='*.md' \
-         --include='*.rst' | grep -vF "==$VERSION" || true)"
+         --include='*.rst' | grep -vE "==${PIN_VERSION//./\\.}\$" || true)"
 if [[ -n "$stale" ]]; then
-    echo "Warning: pre-release pins other than $VERSION in the docs:" >&2
+    if [[ "$RELEASE" -eq 1 && "$VERSION" != *.dev* ]]; then
+        echo "Error: pre-release pins other than $PIN_VERSION in the docs:" >&2
+        echo "$stale" >&2
+        exit 1
+    fi
+    echo "Warning: pre-release pins other than $PIN_VERSION in the docs:" >&2
     echo "$stale" >&2
 fi
 
