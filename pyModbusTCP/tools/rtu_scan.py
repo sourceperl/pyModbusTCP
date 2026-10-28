@@ -42,7 +42,7 @@ slaves of the bus:
 $ mbtcp-rtu-scan -b 9600,19200 --parity E -a 1-10 --all /dev/ttyUSB0
 
 A slave with input registers only:
-$ mbtcp-rtu-scan -f 4 /dev/ttyUSB0
+$ mbtcp-rtu-scan -F 4 /dev/ttyUSB0
 
 Add -d (--debug) to log every RTU frame (Tx = request, Rx = answer). The
 RS-485 options are the ones of mbtcp-tcp2rtu (see its documentation).
