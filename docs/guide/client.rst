@@ -96,7 +96,7 @@ To retry a failed connection (a server that restarts, a link that comes back), s
 one after about :attr:`~.ModbusClient.connect_retry_delay` seconds, the delay doubled at each next one (up to 60 s,
 with a random jitter so that many clients don't retry in sync). This applies to :meth:`~.ModbusClient.open` and to
 the connections opened by ``auto_open``. An unknown host name is not retried. Only the connection is retried, not a
-failed request (apart from the single new send above, never for a request that can change something): a write sent
+failed request (apart from the single new send above, for a request that never reached the server): a write sent
 twice could be executed twice, the application decides what to do on a request error.
 
 .. code-block:: python

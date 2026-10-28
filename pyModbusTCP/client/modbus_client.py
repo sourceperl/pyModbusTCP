@@ -59,7 +59,8 @@ class ModbusClient(ClientFunctionsMixin, ClientTransportMixin):
         :param auto_close: auto TCP close
         :type auto_close: bool
         :param connect_retries: number of new connect attempts after a failed one (default 0: no retry), for
-            open() and the auto_open connections (only the connection is retried, a failed request is not)
+            open() and the auto_open connections (only the connection is retried, a failed request is not, apart from a\
+            single new send of a request that never reached the server, see the client guide)
         :type connect_retries: int
         :param connect_retry_delay: base delay in seconds before the first connect retry (default 0.5), doubled at
             each next retry (exponential backoff, capped at 60 s, with a random jitter)
