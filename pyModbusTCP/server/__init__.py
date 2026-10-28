@@ -38,6 +38,7 @@ from .store import (
     Space,
     SpaceAccess,
     Transaction,
+    WrittenRange,
 )
 from .wrappers import AccessControl, Guard, ReadOnly, StoreWrapper
 
@@ -45,4 +46,4 @@ __all__ = ['STANDARD_FUNCTIONS', 'AccessControl', 'AppAccess', 'Change', 'Change
            'DeviceIdentification', 'FunctionHandler', 'GatewayPathUnavailable', 'GatewayTargetFailed', 'Guard',
            'IllegalDataAddress', 'IllegalDataValue', 'IllegalFunction', 'MemoryStore', 'ModbusException',
            'ModbusServer', 'ReadOnly', 'RegistersAccess', 'Request', 'RequestContext', 'SlaveDeviceBusy',
-           'SlaveDeviceFailure', 'Space', 'SpaceAccess', 'StoreWrapper', 'Transaction', 'logger']
+           'SlaveDeviceFailure', 'Space', 'SpaceAccess', 'StoreWrapper', 'Transaction', 'WrittenRange', 'logger']

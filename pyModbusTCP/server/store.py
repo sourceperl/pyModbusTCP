@@ -15,7 +15,9 @@ The application accesses the store with store.app (no request context): store.ap
 
 from __future__ import annotations
 
+import itertools
 import logging
+import operator
 import queue
 import threading
 from abc import ABC, abstractmethod
@@ -80,17 +82,79 @@ class Change(NamedTuple):
     new: Any
 
 
-@dataclass(frozen=True)
-class ChangeEvent:
-    """The changes of one committed transaction (one client request, or one application access)."""
+class WrittenRange(NamedTuple):
+    """A range of addresses written in memory by a transaction: the values before and after the write.
 
-    ctx: RequestContext | None
-    changes: tuple[Change, ...]
+    Some values of the range may be unchanged (written with the value they had): see ChangeEvent.changes.
+    """
+
+    space: Space
+    address: int
+    old: tuple[Any, ...]
+    new: tuple[Any, ...]
+
+    def count_changed(self) -> int:
+        """The number of values of the range that changed (computed at C speed)."""
+        return sum(map(operator.ne, self.old, self.new))
+
+
+class ChangeEvent:
+    """The changes of one committed transaction (one client request, or one application access).
+
+    The event keeps the ranges written by the transaction (writes); the changes, value by value, are only computed
+    when a listener reads them (changes, of()), once: the store never pays for a detail nobody reads.
+    """
+
+    __slots__ = ('_changes', 'ctx', 'writes')
+
+    def __init__(self, ctx: RequestContext | None, changes: Iterable[Change] | None = None, *,
+                 writes: Iterable[WrittenRange] = ()) -> None:
+        """
+        :param ctx: the context of the client request, None for the application
+        :param changes: the changes value by value (default: computed from writes when they are read)
+        :param writes: the ranges written, in the order of the transaction
+        """
+        self.ctx = ctx
+        self.writes: tuple[WrittenRange, ...] = tuple(writes)
+        self._changes: tuple[Change, ...] | None = None if changes is None else tuple(changes)
+
+    def __repr__(self) -> str:
+        return f'ChangeEvent(ctx={self.ctx!r}, changes={self.changes!r})'
 
     @property
     def by_client(self) -> bool:
         """True for the changes of a client request, False for an application write."""
         return self.ctx is not None
+
+    @property
+    def changes(self) -> tuple[Change, ...]:
+        """The values changed by the transaction, each address at most once (its value before the transaction and
+        after it), in the order of their first change. A value written back to its first value is not a change."""
+        if self._changes is None and len(self.writes) == 1:
+            # the usual case (every standard function): one range, each address once, the changed ones found at C speed
+            space, address, olds, news = self.writes[0]
+            self._changes = tuple(Change(space, address + i, olds[i], news[i])
+                                  for i in itertools.compress(range(len(news)), map(operator.ne, olds, news)))
+        if self._changes is None:
+            first_last: dict[tuple[Space, int], list[Any]] = {}
+            for space, address, olds, news in self.writes:
+                for i, (old, new) in enumerate(zip(olds, news, strict=True)):
+                    entry = first_last.get((space, address + i))
+                    if entry is not None:
+                        entry[1] = new
+                    elif old != new:
+                        first_last[(space, address + i)] = [old, new]
+            # (a race of two threads computes it twice, with the same result)
+            self._changes = tuple(Change(space, address, old, new)
+                                  for (space, address), (old, new) in first_last.items() if old != new)
+        return self._changes
+
+    @property
+    def size(self) -> int:
+        """The number of values that the event holds (written values, or changes): its weight in memory."""
+        if self.writes:
+            return sum(len(written.new) for written in self.writes)
+        return len(self.changes)
 
     def of(self, space: Space) -> tuple[Change, ...]:
         """The changes in a data space."""
@@ -180,17 +244,17 @@ class _MemoryTransaction(Transaction):
     def __init__(self, store: MemoryStore, ctx: RequestContext | None) -> None:
         self.ctx = ctx
         self._store = store
-        # journal of the memory writes (space, address, previous values), to restore them on an exception
-        self._journal: list[tuple[Space, int, list[Any]]] = []
-        # (space, address) -> [first old value, last new value], in the order of the first change
-        self._changes: dict[tuple[Space, int], list[Any]] = {}
+        # journal of the memory writes (space, address, previous values, new values): restores the previous values
+        # on an exception, gives the ranges written to the listeners once committed (see ChangeEvent)
+        self._journal: list[tuple[Space, int, list[Any], list[Any]]] = []
 
     def read(self, space: Space, address: int, count: int = 1) -> list[Any]:
         values: list[Any] = []
-        memory = self._store._data[space]
+        memory, start = self._store._data[space], self._store._start[space]
         for mapping, seg_address, seg_count in self._store._segments(space, address, count):
             if mapping is None:
-                values.extend(memory[seg_address:seg_address + seg_count])
+                index = seg_address - start
+                values.extend(memory[index:index + seg_count])
             else:
                 values.extend(self._mapped_read(space, mapping, seg_address, seg_count))
         return values
@@ -217,7 +281,7 @@ class _MemoryTransaction(Transaction):
         for mapping, _, _ in segments:
             if mapping is not None and mapping.write is None:
                 raise IllegalDataAddress()
-        memory = self._store._data[space]
+        memory, start = self._store._data[space], self._store._start[space]
         offset = 0
         for mapping, seg_address, seg_count in segments:
             seg_values = values[offset:offset + seg_count]
@@ -226,53 +290,82 @@ class _MemoryTransaction(Transaction):
                 assert mapping.write is not None
                 mapping.write(seg_address, seg_values, self.ctx)
                 continue
-            old_values = memory[seg_address:seg_address + seg_count]
+            # the journal and the events give the Modbus addresses, the memory list starts at the first one
+            index = seg_address - start
+            old_values = memory[index:index + seg_count]
             # compare the whole slice at C speed: skip everything if nothing changes
             if old_values == seg_values:
                 continue
-            self._journal.append((space, seg_address, old_values))
-            for i, (old, new) in enumerate(zip(old_values, seg_values)):
-                if old != new:
-                    entry = self._changes.get((space, seg_address + i))
-                    if entry is None:
-                        self._changes[(space, seg_address + i)] = [old, new]
-                    else:
-                        entry[1] = new
-            memory[seg_address:seg_address + seg_count] = seg_values
+            # (no comparison value by value here: done by ChangeEvent.changes, only if a listener reads it)
+            self._journal.append((space, seg_address, old_values, seg_values))
+            memory[index:index + seg_count] = seg_values
 
     def _rollback(self) -> None:
-        for space, address, old_values in reversed(self._journal):
-            self._store._data[space][address:address + len(old_values)] = old_values
+        for space, address, old_values, _ in reversed(self._journal):
+            index = address - self._store._start[space]
+            self._store._data[space][index:index + len(old_values)] = old_values
         self._journal.clear()
-        self._changes.clear()
 
-    def _committed_changes(self) -> tuple[Change, ...]:
-        # a value written back to its first value is not a change
-        return tuple(Change(space, address, old, new) for (space, address), (old, new) in self._changes.items()
-                     if old != new)
+    def _committed_event(self) -> ChangeEvent | None:
+        """The change event of the committed transaction, None if it changed nothing."""
+        if not self._journal:
+            return None
+        event = ChangeEvent(self.ctx, writes=(WrittenRange(space, address, tuple(old), tuple(new))
+                                              for space, address, old, new in self._journal))
+        # a range is only journaled if it changes something: with a single range (every standard function), the
+        # event has a change. With several, they may cancel out (a value written back): checked here, rarely
+        if len(self._journal) > 1 and not event.changes:
+            return None
+        return event
+
+
+def _checked_size(value: object, name: str) -> int:
+    """A number of addresses: an int from 0 to 65536."""
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 0x10000:
+        raise ValueError(f'{name} must be an int between 0 and 65536 (or a range of addresses)')
+    return value
+
+
+def _checked_addresses(value: object, space: Space) -> range:
+    """The addresses of a space: a number of addresses from 0 (int), or a range of addresses in 0 to 65535."""
+    if isinstance(value, range):
+        if value.step != 1 or not 0 <= value.start <= value.stop <= 0x10000:
+            raise ValueError(f'the range of {space.value} must be a range of addresses in 0 to 65535, with a step '
+                             f'of 1, not {value!r}')
+        return value
+    return range(_checked_size(value, f'the size of {space.value}'))
 
 
 class MemoryStore(DataStore):
     """The default data store: the 4 Modbus data spaces in memory, thread-safe.
 
-    Each space has size addresses (65536 by default), the size of a space can be set by its own argument. A range
-    of addresses can be computed at each access instead (see map()), even beyond the size of its space.
+    Each space has size addresses from 0 (65536 by default). A space can have its own size, or its own range of
+    addresses: MemoryStore(0, holding_registers=range(40_000, 41_000)) is a store with the holding registers 40000 to
+    40999 only (a request out of this range gets an "illegal data address" exception). A range of addresses can also
+    be computed at each access (see map()), even out of the addresses of its space.
     """
 
     #: max number of change events waiting for the threaded listeners: a slow listener can't make the memory grow
     #: without limit (with clients that write faster than it), the events that don't fit are dropped and logged
     notify_queue_size: int = 10_000
+    #: max number of values (ChangeEvent.size, of all these events together) waiting for the threaded listeners: an
+    #: event holds up to 1968 values (a write of coils), so the number of events alone doesn't bound the memory. An
+    #: event that doesn't fit is dropped and logged, like above; an event larger than this limit is only queued when
+    #: nothing else waits
+    notify_queue_values: int = 200_000
 
-    def __init__(self, size: int = 0x10000, *, coils: int | None = None, discrete_inputs: int | None = None,
-                 holding_registers: int | None = None, input_registers: int | None = None,
+    def __init__(self, size: int = 0x10000, *, coils: int | range | None = None,
+                 discrete_inputs: int | range | None = None, holding_registers: int | range | None = None,
+                 input_registers: int | range | None = None,
                  default_bit: bool = False, default_word: int = 0) -> None:
         """Constructor
 
-        :param size: number of addresses of each space (default 65536, 0 for a store with mapped ranges only)
-        :param coils: number of coils, if different from size
-        :param discrete_inputs: number of discrete inputs, if different from size
-        :param holding_registers: number of holding registers, if different from size
-        :param input_registers: number of input registers, if different from size
+        :param size: number of addresses of each space, from 0 (default 65536, 0 for a store with mapped ranges only)
+        :param coils: the coils, if different from size: their number (from address 0), or their addresses as a
+            range (like range(100, 200): the coils 100 to 199)
+        :param discrete_inputs: the discrete inputs, if different from size (a number or a range, like coils)
+        :param holding_registers: the holding registers, if different from size (a number or a range, like coils)
+        :param input_registers: the input registers, if different from size (a number or a range, like coils)
         :param default_bit: startup value of the coils and the discrete inputs (default False)
         :param default_word: startup value of the registers (default 0)
         """
@@ -280,11 +373,15 @@ class MemoryStore(DataStore):
                  Space.HOLDING_REGISTERS: holding_registers, Space.INPUT_REGISTERS: input_registers}
         default_word = Space.HOLDING_REGISTERS.check_values([default_word])[0]
         self._data: dict[Space, list[Any]] = {}
-        for space, space_size in sizes.items():
-            space_size = size if space_size is None else space_size
-            if isinstance(space_size, bool) or not isinstance(space_size, int) or not 0 <= space_size <= 0x10000:
-                raise ValueError(f'the size of {space.value} must be an int between 0 and 65536')
-            self._data[space] = [bool(default_bit) if space.is_bit else default_word] * space_size
+        # the address of the first value of each space in memory (self._data[space][0])
+        self._start: dict[Space, int] = {}
+        for space, addresses in sizes.items():
+            if addresses is None:
+                addresses = range(_checked_size(size, 'size'))
+            else:
+                addresses = _checked_addresses(addresses, space)
+            self._start[space] = addresses.start
+            self._data[space] = [bool(default_bit) if space.is_bit else default_word] * len(addresses)
         self._maps: dict[Space, list[_Mapping]] = {space: [] for space in Space}
         self._lock = threading.Lock()
         # the transaction in progress in the current thread (a nested transaction joins it)
@@ -292,18 +389,28 @@ class MemoryStore(DataStore):
         self._listeners: list[_ListenerEntry] = []
         self._listeners_lock = threading.Lock()
         self._notify_queue: queue.Queue[tuple[Listener, ChangeEvent]] | None = None
+        # number of values in the events of the queue (see notify_queue_values), and its lock
+        self._queued_values = 0
+        self._queued_values_lock = threading.Lock()
         # dropped events: the first one is logged at once, then one message per 10 s at most
         self._dropped_log = LogThrottle(logger)
         # errors of the listeners (called on each write of a client): one message per 10 s at most
         self._listener_error_log = LogThrottle(logger, level=logging.ERROR)
 
     def __repr__(self) -> str:
-        sizes = ', '.join(f'{space.value}={len(data)}' for space, data in self._data.items())
-        return f'MemoryStore({sizes})'
+        # a space from 0 by its size, another one by its range of addresses (like the constructor arguments)
+        spaces = ', '.join(f'{space.value}={self.addresses(space) if self._start[space] else self.size(space)}'
+                           for space in Space)
+        return f'MemoryStore({spaces})'
 
     def size(self, space: Space) -> int:
         """The number of addresses of a space in memory (the mapped ranges are not counted)."""
         return len(self._data[space])
+
+    def addresses(self, space: Space) -> range:
+        """The addresses of a space in memory, like range(0, 65536) (the mapped ranges are not counted)."""
+        start = self._start[space]
+        return range(start, start + len(self._data[space]))
 
     # transactions
 
@@ -324,10 +431,12 @@ class MemoryStore(DataStore):
                 raise
             finally:
                 self._local.tx = None
-        # committed: notify the listeners, without the lock (they can use the store)
-        changes = tx._committed_changes()
-        if changes:
-            self._notify(ChangeEvent(ctx, changes))
+        # committed: notify the listeners, without the lock (they can use the store); no listener (the usual case):
+        # no event at all
+        if self._listeners:
+            event = tx._committed_event()
+            if event is not None:
+                self._notify(event)
 
     def _segments(self, space: Space, address: int, count: int) -> list[tuple[_Mapping | None, int, int]]:
         """Split a range in memory and mapped parts: [(mapping or None, address, count), ...].
@@ -336,11 +445,12 @@ class MemoryStore(DataStore):
         """
         if address < 0 or count < 0 or address + count > 0x10000:
             raise IllegalDataAddress()
-        memory_size = len(self._data[space])
+        memory_start = self._start[space]
+        memory_end = memory_start + len(self._data[space])
         maps = self._maps[space]
         # usual case: no mapped range in this space
         if not maps:
-            if address + count > memory_size:
+            if address < memory_start or address + count > memory_end:
                 raise IllegalDataAddress()
             return [(None, address, count)]
         segments: list[tuple[_Mapping | None, int, int]] = []
@@ -350,11 +460,11 @@ class MemoryStore(DataStore):
             if mapping is not None:
                 seg_end = min(end, mapping.end)
             else:
-                if current >= memory_size:
+                if not memory_start <= current < memory_end:
                     raise IllegalDataAddress()
                 # memory, until the end of the memory or the next mapped range
                 next_start = min((m.start for m in maps if m.start > current), default=end)
-                seg_end = min(end, memory_size, next_start)
+                seg_end = min(end, memory_end, next_start)
             segments.append((mapping, current, seg_end - current))
             current = seg_end
         return segments
@@ -396,8 +506,7 @@ class MemoryStore(DataStore):
             self._listeners.append(entry)
             if threaded and self._notify_queue is None:
                 self._notify_queue = queue.Queue(maxsize=self.notify_queue_size)
-                threading.Thread(target=self._notify_loop, args=(self._notify_queue, self._listener_error_log),
-                                 daemon=True,
+                threading.Thread(target=self._notify_loop, args=(self._notify_queue,), daemon=True,
                                  name='MemoryStore notifications').start()
 
         def unsubscribe() -> None:
@@ -420,22 +529,37 @@ class MemoryStore(DataStore):
             if not event.by_client and not entry.app_writes:
                 continue
             if entry.threaded and self._notify_queue is not None:
-                try:
-                    self._notify_queue.put_nowait((entry.listener, event))
-                except queue.Full:
+                if not self._enqueue(self._notify_queue, entry.listener, event):
                     # never block the client: the listener is too slow, this event is lost
                     self._dropped_log.event('Threaded listener too slow: %(count)d change event(s) dropped (queue '
-                                            'of %(size)d events full)', size=self.notify_queue_size)
+                                            'full: %(events)d events or %(values)d values at most)',
+                                            events=self.notify_queue_size, values=self.notify_queue_values)
             else:
                 _call_listener(entry.listener, event, self._listener_error_log)
 
-    @staticmethod
-    def _notify_loop(notify_queue: queue.Queue[tuple[Listener, ChangeEvent]], error_log: LogThrottle) -> None:
+    def _enqueue(self, notify_queue: queue.Queue[tuple[Listener, ChangeEvent]], listener: Listener,
+                 event: ChangeEvent) -> bool:
+        """Queue an event for a threaded listener, False if the queue is full (in events or in values)."""
+        size = event.size
+        with self._queued_values_lock:
+            # an event larger than the limit alone: only when nothing else waits (else it could never be delivered)
+            if self._queued_values and self._queued_values + size > self.notify_queue_values:
+                return False
+            try:
+                notify_queue.put_nowait((listener, event))
+            except queue.Full:
+                return False
+            self._queued_values += size
+            return True
+
+    def _notify_loop(self, notify_queue: queue.Queue[tuple[Listener, ChangeEvent]]) -> None:
         while True:
             listener, event = notify_queue.get()
             try:
-                _call_listener(listener, event, error_log)
+                _call_listener(listener, event, self._listener_error_log)
             finally:
+                with self._queued_values_lock:
+                    self._queued_values -= event.size
                 notify_queue.task_done()
 
 

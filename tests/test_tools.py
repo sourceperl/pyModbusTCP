@@ -328,6 +328,23 @@ def test_server_command() -> None:
         assert 'Read-only mode' in out
 
 
+def test_server_log_changes(caplog: pytest.LogCaptureFixture) -> None:
+    """--log-changes: one line per changed value of a small write, one line for a write of many values (1968 coils
+    is one line, never 1968: the log never grows faster than the requests)."""
+    from pyModbusTCP.server import ChangeEvent, RequestContext, WrittenRange
+    from pyModbusTCP.server.session import ClientInfo
+    from pyModbusTCP.tools import server as server_tool
+    ctx = RequestContext(client=ClientInfo('10.0.0.5', 50000), unit_id=1, function_code=0x0F)
+    many = WrittenRange(Space.COILS, 100, (False,) * 1968, (True,) * 1000 + (False,) * 968)
+    few = WrittenRange(Space.HOLDING_REGISTERS, 3, (0, 0, 7), (1, 1, 7))
+    inputs = WrittenRange(Space.INPUT_REGISTERS, 0, (0,), (1,))
+    with caplog.at_level(logging.INFO, logger='mbtcp-server'):
+        server_tool.log_changes(ChangeEvent(ctx, writes=(many, few, inputs)))
+    lines = [r.getMessage() for r in caplog.records if r.name == 'mbtcp-server']
+    assert lines == ['Coils @100..2067: 1968 written, 1000 changed (from 10.0.0.5)',
+                     'Holding register @3: 0 -> 1 (from 10.0.0.5)', 'Holding register @4: 0 -> 1 (from 10.0.0.5)']
+
+
 def test_server_serve_sigterm_handler() -> None:
     """serve() sets its SIGTERM handler like the gateways (stop_on_sigterm): restored on return, and none outside
     the main thread (signal.signal() raised ValueError there, the server never started)."""

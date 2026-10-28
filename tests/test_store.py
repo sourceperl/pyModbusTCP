@@ -5,6 +5,7 @@ import sys
 import threading
 import unittest
 from typing import Any
+from unittest import mock
 
 from pyModbusTCP.client import ModbusClient
 from pyModbusTCP.codec import ByteOrder
@@ -31,6 +32,7 @@ from pyModbusTCP.server import (
     StoreWrapper,
 )
 from pyModbusTCP.server.session import ClientInfo
+from pyModbusTCP.server.store import _MemoryTransaction
 from pyModbusTCP.utils import _to_bool_list
 
 H = Space.HOLDING_REGISTERS
@@ -183,6 +185,41 @@ class TestNotifications(unittest.TestCase):
         with store.transaction(ctx) as tx:
             tx.write(H, 0, [4, 2])
         self.assertEqual(len(events), 1)
+
+    def test_event_keeps_the_written_ranges(self) -> None:
+        """An event gives the ranges written (writes, old and new values of each), the changes are computed from them
+        only when read; ranges that cancel out (a value written back) give no event."""
+        store = MemoryStore(16)
+        events: list[ChangeEvent] = []
+        store.subscribe(events.append)
+        ctx = client_ctx(function_code=0x10)
+        with store.transaction(ctx) as tx:
+            tx.write(H, 2, [5, 0, 6])
+        self.assertEqual(len(events), 1)
+        (written,) = events[0].writes
+        self.assertEqual((written.space, written.address, written.old, written.new), (H, 2, (0, 0, 0), (5, 0, 6)))
+        self.assertEqual(written.count_changed(), 2)
+        self.assertEqual(events[0].size, 3)
+        self.assertEqual([(c.address, c.old, c.new) for c in events[0].changes], [(2, 0, 5), (4, 0, 6)])
+        # 2 ranges that cancel out: no event
+        with store.transaction(ctx) as tx:
+            tx.write(H, 2, [9])
+            tx.write(H, 2, [5])
+        self.assertEqual(len(events), 1)
+
+    def test_no_listener_no_event(self) -> None:
+        """Without a listener, a transaction builds no event (no cost for the changes nobody reads)."""
+        store = MemoryStore(16)
+        with mock.patch.object(_MemoryTransaction, '_committed_event') as committed_event:
+            store.app.holding_registers.write(0, [1, 2])
+            committed_event.assert_not_called()
+            unsubscribe = store.subscribe(lambda event: None, app_writes=True)
+            store.app.holding_registers.write(0, [3])
+            committed_event.assert_called_once()
+            unsubscribe()
+            store.app.holding_registers.write(0, [4])
+            committed_event.assert_called_once()
+        self.assertEqual(store.app.holding_registers.read(0, 2), [4, 2])
 
     def test_app_writes_on_demand(self) -> None:
         store = MemoryStore(16)
@@ -505,6 +542,73 @@ class TestServerWithStores(ServerTestCase):
                 ModbusServer(store=bad)  # type: ignore[arg-type]
 
 
+class TestAddressRanges(ServerTestCase):
+    """A space with its own range of addresses: MemoryStore(0, holding_registers=range(40_000, 41_000))."""
+
+    def test_store_with_a_range(self) -> None:
+        store = MemoryStore(0, holding_registers=range(40_000, 41_000), coils=range(10, 20), default_word=7)
+        self.assertEqual(store.addresses(H), range(40_000, 41_000))
+        self.assertEqual(store.size(H), 1000)
+        self.assertEqual(store.addresses(Space.INPUT_REGISTERS), range(0))
+        self.assertEqual(repr(store), 'MemoryStore(coils=range(10, 20), discrete_inputs=0, '
+                                      'holding_registers=range(40000, 41000), input_registers=0)')
+        regs = store.app.holding_registers
+        regs.write(40_998, [1, 2])
+        self.assertEqual(regs.read(40_997, 3), [7, 1, 2])
+        self.assertEqual(regs.read(40_000), [7])
+        regs.write_float32(40_500, 1.5)
+        self.assertEqual(regs.read_float32(40_500), 1.5)
+        for address, count in ((39_999, 1), (39_999, 2), (40_999, 2), (41_000, 1), (0, 1)):
+            with self.subTest(address=address, count=count), self.assertRaises(IllegalDataAddress):
+                regs.read(address, count)
+        with self.assertRaises(IllegalDataAddress):
+            regs.write(40_999, [1, 2])
+        self.assertEqual(regs.read(40_999), [2], 'nothing written by a refused write')
+        self.assertEqual(store.app.coils.read(10, 10), [False] * 10)
+        with self.assertRaises(IllegalDataAddress):
+            store.app.coils.read(9)
+
+    def test_rollback_and_events_use_the_modbus_addresses(self) -> None:
+        store = MemoryStore(0, holding_registers=range(40_000, 41_000))
+        events: list[ChangeEvent] = []
+        store.subscribe(events.append, app_writes=True)
+        with self.assertRaises(IllegalDataAddress), store.app.transaction() as tx:
+            tx.write(H, 40_010, [1, 2])
+            tx.read(H, 41_000)
+        self.assertEqual(store.app.holding_registers.read(40_010, 2), [0, 0], 'the write is cancelled')
+        self.assertEqual(events, [])
+        store.app.holding_registers.write(40_010, [3])
+        self.assertEqual([(c.address, c.old, c.new) for c in events[0].changes], [(40_010, 0, 3)])
+        self.assertEqual(events[0].writes[0].address, 40_010)
+
+    def test_mapped_range_next_to_a_range(self) -> None:
+        store = MemoryStore(0, holding_registers=range(40_000, 40_010))
+        store.map(H, 40_010, 2, read=lambda address, count, ctx: list(range(address, address + count)))
+        self.assertEqual(store.app.holding_registers.read(40_008, 4), [0, 0, 40_010, 40_011])
+        with self.assertRaises(IllegalDataAddress):
+            store.app.holding_registers.read(39_999, 2)
+
+    def test_server_with_a_range(self) -> None:
+        store = MemoryStore(0, holding_registers=range(40_000, 41_000))
+        self.start(store=store)
+        c = self.client()
+        self.assertTrue(c.write_multiple_registers(40_000, [1, 2, 3]))
+        self.assertEqual(c.read_holding_registers(40_000, 3), [1, 2, 3])
+        self.assertEqual(c.write_read_multiple_registers(40_999, [9], 40_998, 2), [0, 9])
+        for request in (lambda: c.read_holding_registers(39_999, 2), lambda: c.read_holding_registers(41_000),
+                        lambda: c.read_holding_registers(0), lambda: c.read_coils(40_000),
+                        lambda: c.write_single_register(41_000, 1)):
+            self.assertIn(request(), (None, False))
+            self.assertEqual(c.last_except, EXP_DATA_ADDRESS)
+
+    def test_invalid_ranges(self) -> None:
+        for kwargs in ({'holding_registers': range(-1, 10)}, {'holding_registers': range(0x10001)},
+                       {'coils': range(0, 10, 2)}, {'coils': range(10, 5)}, {'coils': 0x10001}, {'coils': True},
+                       {'coils': '100'}, {'size': range(10)}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                MemoryStore(**kwargs)
+
+
 class TestFunctionRegistry(ServerTestCase):
     def test_add_replace_and_remove_functions(self) -> None:
         server = self.start(store=MemoryStore(16))
@@ -583,7 +687,7 @@ class TestNotifyQueueBound(unittest.TestCase):
                 store.app.holding_registers.write(0, [value])
         # 1 event in the listener, 3 in the queue, the 6 others dropped (one log message)
         self.assertEqual(len(logs.output), 1)
-        self.assertIn('change event(s) dropped (queue of 3 events full)', logs.output[0])
+        self.assertIn('change event(s) dropped (queue full: 3 events or 200000 values at most)', logs.output[0])
         release.set()
         store.join_notifications()
         self.assertEqual(len(seen), 4)
@@ -592,3 +696,44 @@ class TestNotifyQueueBound(unittest.TestCase):
         store.app.holding_registers.write(0, [42])
         store.join_notifications()
         self.assertEqual(seen[-1], 42)
+
+    def test_slow_threaded_listener_bounded_in_changes(self) -> None:
+        """The values waiting for the threaded listeners are bounded too (notify_queue_values): a few events of
+        many values each (a write of 1968 coils) can't fill the memory before the bound in events."""
+        store = MemoryStore(4000)
+        store.notify_queue_values = 2000
+        started, release = threading.Event(), threading.Event()
+        seen: list[int] = []
+
+        def slow(event: ChangeEvent) -> None:
+            started.set()
+            release.wait(5.0)
+            seen.append(len(event.changes))
+
+        store.subscribe(slow, app_writes=True, threaded=True)
+        # an event larger than the bound alone is queued when nothing waits: it is in the listener
+        store.app.coils.write(0, [True] * 2500)
+        self.assertTrue(started.wait(5.0))
+        with self.assertLogs('pyModbusTCP.server', level='WARNING') as logs:
+            # 2500 changes still in the listener: these events wait in vain
+            store.app.coils.write(0, [False] * 1000)
+            store.app.holding_registers.write(0, [1])
+        # the first drop logged at once, the second one counted for the next message (one per 10 s at most)
+        self.assertEqual(len(logs.output), 1)
+        self.assertIn('queue full: 10000 events or 2000 values at most', logs.output[0])
+        release.set()
+        store.join_notifications()
+        self.assertEqual(seen, [2500])
+        self.assertEqual(store._queued_values, 0)
+        # under the bound (the event in the listener counts until its end): queued, then delivered in order
+        release.clear()
+        started.clear()
+        store.app.coils.write(3000, [True] * 900)
+        self.assertTrue(started.wait(5.0))
+        store.app.coils.write(3000, [False] * 900)
+        store.app.holding_registers.write(0, [2])
+        self.assertEqual(store._queued_values, 1801)
+        release.set()
+        store.join_notifications()
+        self.assertEqual(seen, [2500, 900, 900, 1])
+        self.assertEqual(store._queued_values, 0)

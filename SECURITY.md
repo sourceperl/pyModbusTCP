@@ -68,6 +68,7 @@ a firewall.
 | `idle_timeout` | `300` s | A connection without any request for this time is closed. |
 | `request_timeout` | `30` s | A request that has started must be fully received in this time (protection against a client that sends a partial frame and then stays silent). |
 | `MemoryStore.notify_queue_size` | `10000` | Max number of change events waiting for the threaded listeners (`subscribe(..., threaded=True)`): clients that write faster than a slow listener can't make the memory grow without limit. The events over it are dropped (logged, one message per 10 s at most). |
+| `MemoryStore.notify_queue_values` | `200000` | Max number of values written in these waiting events, all together (`ChangeEvent.size`): an event holds up to 1968 values (a write of coils), so the number of events alone doesn't bound the memory. The queue holds about 15 MB at most with the defaults. An event that doesn't fit is dropped, like above. |
 
 Each of these limits can be disabled with `None`: only do this on a trusted network.
 

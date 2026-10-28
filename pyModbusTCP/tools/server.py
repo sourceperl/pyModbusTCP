@@ -50,13 +50,32 @@ logger = logging.getLogger('mbtcp-server')
 DEFAULT_PORT = 5020
 
 
+# --log-changes: a range of more values than this is logged as one line (a write of 1968 coils would be 1968 lines:
+# a client could keep the log busy, and the server with it, with a few requests)
+LOG_CHANGES_DETAIL_MAX = 8
+_LOGGED_SPACES = {Space.COILS: 'Coil', Space.HOLDING_REGISTERS: 'Holding register'}
+
+
 def log_changes(event: ChangeEvent) -> None:
-    """Change listener: log every coil and holding register changed by a client request."""
+    """Change listener: log the coils and holding registers changed by a client request.
+
+    One line per changed value of a small range, one line per range of more than LOG_CHANGES_DETAIL_MAX values (its
+    addresses and the number of values changed): the log never grows faster than the requests, and a large write is
+    never compared value by value in Python.
+    """
     assert event.ctx is not None
-    for change in event.changes:
-        kind = 'Coil' if change.space is Space.COILS else 'Holding register'
-        logger.info('%s @%d: %s -> %s (from %s)', kind, change.address, change.old, change.new,
-                    event.ctx.client.address)
+    client = event.ctx.client.address
+    for written in event.writes:
+        kind = _LOGGED_SPACES.get(written.space)
+        if kind is None:
+            continue
+        if len(written.new) > LOG_CHANGES_DETAIL_MAX:
+            logger.info('%ss @%d..%d: %d written, %d changed (from %s)', kind, written.address,
+                        written.address + len(written.new) - 1, len(written.new), written.count_changed(), client)
+            continue
+        for offset, (old, new) in enumerate(zip(written.old, written.new, strict=True)):
+            if old != new:
+                logger.info('%s @%d: %s -> %s (from %s)', kind, written.address + offset, old, new, client)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -79,7 +98,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--idle-timeout', type=positive_float, default=300.0,
                         help='close a client session without request after this delay in s (default: 300)')
     parser.add_argument('--log-changes', action='store_true',
-                        help='log every change of a coil or a holding register done by a client')
+                        help='log the changes of the coils and holding registers done by the clients (a write of more '
+                             f'than {LOG_CHANGES_DETAIL_MAX} values: one line with their number)')
     parser.add_argument('-d', '--debug', action='store_true', help='debug mode (log every session event)')
     add_version_arg(parser)
     return parser

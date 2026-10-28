@@ -48,6 +48,9 @@ Change notifications
 .. autoclass:: Change
    :members:
 
+.. autoclass:: WrittenRange
+   :members:
+
 Application access
 ------------------
 

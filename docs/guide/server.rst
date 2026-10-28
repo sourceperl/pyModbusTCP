@@ -81,15 +81,24 @@ A register is a 16 bits unsigned int: a value out of 0 to 65535 raises a ``Value
 :class:`~pyModbusTCP.server.IllegalDataAddress`, and nothing is written.
 
 Each space has 65536 addresses by default. The sizes and the startup values are arguments of
-:class:`~pyModbusTCP.server.MemoryStore`:
+:class:`~pyModbusTCP.server.MemoryStore`. A space takes a number of addresses from 0, or a ``range`` of addresses
+when it doesn't start at 0:
 
 .. code-block:: python
 
     from pyModbusTCP.server import MemoryStore, ModbusServer
 
-    # 100 holding registers only: a client request beyond gets an "illegal data address" exception
+    # 100 holding registers only (0 to 99): a client request beyond gets an "illegal data address" exception
     store = MemoryStore(0, holding_registers=100)
     server = ModbusServer(port=5020, store=store, no_block=True)
+
+    # the holding registers 40000 to 40999 only, nothing else
+    store = MemoryStore(0, holding_registers=range(40_000, 41_000))
+    store.app.holding_registers.write(40_000, [1, 2, 3])
+
+The addresses are always the Modbus ones, for the clients and the application (``store.addresses(space)`` gives the
+range of a space). A device documentation in the Modicon notation (``40001`` for the first holding register) means
+the addresses from 0: ``40001`` to ``41000`` is ``holding_registers=1000``.
 
 Typed values
 ~~~~~~~~~~~~
@@ -142,9 +151,21 @@ values written in it, then goes on.
 Watch the changes
 -----------------
 
-To react to the writes of the clients, subscribe a listener to the store. It is called once per request that changed
-some values, after the transaction is committed, with a :class:`~pyModbusTCP.server.ChangeEvent`: the request context
-(client, unit id, function code) and the list of the changes.
+Three ways to follow what the clients write, from the lightest to the most detailed:
+
+- **React to a command** (a set point, a start order, a reset): map its address with a ``write`` function (see
+  `Computed values`_). It runs in the request, for these addresses only, and can refuse the value with a
+  :class:`~pyModbusTCP.server.ModbusException`. See the :doc:`../examples/server_mailbox` example.
+- **Keep the application in sync** (a scan loop, like a PLC): read the values with ``store.app`` at each cycle. The
+  server does nothing more for it.
+- **Log or audit the writes**, or react to any change: subscribe a listener, below. A store without listener builds
+  no event at all: the notifications cost nothing until something subscribes.
+
+A listener is called once per request that changed some values, after the transaction is committed, with a
+:class:`~pyModbusTCP.server.ChangeEvent`: the request context (client, unit id, function code), the ranges written
+(``event.writes``, a :class:`~pyModbusTCP.server.WrittenRange` per range: its values before and after) and the
+changes value by value (``event.changes``, ``event.of(space)``), computed from the ranges the first time a listener
+reads them.
 
 .. code-block:: python
 
@@ -163,10 +184,14 @@ some values, after the transaction is committed, with a :class:`~pyModbusTCP.ser
   A standard function writes each address once, but a custom function or an application transaction can write the
   same register several times: for 5, then 7, then 9, the event has one change from 5 to 9. If the register ends with
   its value from before the request (5, then 7, then 5 again), there is no change.
+- For a large write (up to 1968 coils), the ranges are cheaper than the changes: ``written.count_changed()`` counts the
+  values changed in a range at C speed, without a ``Change`` per value (``mbtcp-server --log-changes`` logs a range of
+  more than 8 values as one line this way).
 - ``subscribe(..., app_writes=True)`` also notifies the writes of the application (``event.ctx`` is then ``None``).
 - By default, the listener runs in the thread of the client session: the response waits for it, keep it short. With
   ``subscribe(..., threaded=True)``, it runs in a thread of the store, in order, and never delays the clients. The
-  events wait in a bounded queue (``MemoryStore.notify_queue_size``, 10000 events): if the listener can't keep up,
+  events wait in a bounded queue (``MemoryStore.notify_queue_size``, 10000 events, and
+  ``MemoryStore.notify_queue_values``, 200000 values written for all of them, a few MB): if the listener can't keep up,
   the events that don't fit are dropped, with a warning in the log (at most one per 10 s, with the count).
 - The listener runs without the lock: it can use the store (like writing an acknowledge). The value it writes is not in
   the response of the request that triggered it.
