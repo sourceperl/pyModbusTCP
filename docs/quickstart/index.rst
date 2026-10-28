@@ -16,7 +16,7 @@ The library has no dependency. Two optional extras add the :doc:`command line to
 
 .. code-block:: bash
 
-    pip install "pyModbusTCP[serial]"   # pyserial, for the Modbus TCP/RTU gateways
+    pip install "pyModbusTCP[serial]"   # pyserial, for the Modbus TCP/RTU gateways and the RTU scanner
     pip install "pyModbusTCP[cli]"      # the mbtcp-* commands in the PATH (with pyserial)
 
 .. tip::
