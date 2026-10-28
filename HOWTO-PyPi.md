@@ -6,30 +6,29 @@ credential: twine asks for an API token at each upload.
 
 ### build archive and wheel
 
-The two packages of the repository (the library and pyModbusTCP-cli) are built with hatchling (build backend set in
-their pyproject.toml, installed automatically by `build`) and always released together with the same version: the
-version of both is `VERSION` in `pyModbusTCP/constants.py`.
+The two packages of the repository (the library and pyModbusTCP-cli) are built with hatchling and always released
+together with the same version: the version of both is `VERSION` in `pyModbusTCP/constants.py`.
+
+Build them with `tools/build_dist.sh`, in the dev venv of `./init_dev_venv.sh`:
 
 ```bash
-pip install build
-python -m build --outdir dist .
-python -m build --outdir dist pyModbusTCP-cli
-twine check dist/*
-```
-
-Or all at once, with the release checks, in the dev venv of `./init_dev_venv.sh`:
-
-```bash
+source venv/bin/activate
 tools/build_dist.sh -t
 ```
 
-It builds the 4 files in `dist/`, runs `twine check`, checks that pyModbusTCP-cli requires exactly this release and
-that the `cli` extra of the library requires exactly this release of pyModbusTCP-cli (`tools/check_dist_requires.py`,
-the two requirements are set at build time by `hatch_metadata.py` and `pyModbusTCP-cli/hatch_metadata_cli.py`),
-that the first entry of `CHANGES` is `VERSION YYYY-MM-DD` (a placeholder date can't be fixed after the upload: the
-changelog is in the sdist), that the docs pin this release (`pip install "pyModbusTCP[cli]==VERSION"`: a warning for a
-`.devN` version, whose docs pin the release it prepares), warns and about a version already on PyPI or
-TestPyPI, then (`-t`) tests the install of the wheels in throwaway venvs.
+It builds without build isolation (`python -m build --no-isolation`): the build backend is the hatchling pinned in
+`requirements/ci.txt` (installed in the dev venv), the one of the CI. A plain `python -m build` would build in an
+isolated environment with the latest hatchling from PyPI, a version never tested here (and a compromised release would
+run at once). Don't build the packages by hand.
+
+It builds the 4 files in `dist/`, runs `twine check --strict`, checks that pyModbusTCP-cli requires exactly this
+release and that the `cli` extra of the library requires exactly this release of pyModbusTCP-cli
+(`tools/check_dist_requires.py`, the two requirements are set at build time by `hatch_metadata.py` and
+`pyModbusTCP-cli/hatch_metadata_cli.py`), that the first entry of `CHANGES` is `VERSION YYYY-MM-DD` (a placeholder date
+can't be fixed after the upload: the changelog is in the sdist) and that the docs pin this release
+(`pip install "pyModbusTCP[cli]==VERSION"`: only a warning for a `.devN` version, whose docs pin the release it
+prepares), warns about a version already on PyPI or TestPyPI, then (`-t`) tests the install of the wheels in
+throwaway venvs.
 
 Before a release, also run the test suite, `mypy --strict pyModbusTCP` and the docs build (`tools/build_docs.sh`).
 
