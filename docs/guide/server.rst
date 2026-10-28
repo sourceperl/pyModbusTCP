@@ -250,7 +250,7 @@ A wrapper is a store stacked on another one, that checks each access of a client
 - :class:`~pyModbusTCP.server.Guard`: a function ``check(ctx, access, space, address, count)`` returns ``True`` to
   allow an access, ``False`` to refuse it ("illegal data address"), or raises a
   :class:`~pyModbusTCP.server.ModbusException` for another code. Any other result (like ``None``, a forgotten
-  ``return``) refuses the access too: the client gets a "slave device failure" and the error is logged.
+  ``return``) refuses the access too ("illegal data address").
 - Derive :class:`~pyModbusTCP.server.StoreWrapper` and override its ``check()`` method for other rules.
 
 The rules only apply to the clients: the application (``store.app``) always has a full access. A refused access

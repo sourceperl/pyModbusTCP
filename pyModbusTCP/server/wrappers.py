@@ -128,9 +128,7 @@ class Guard(StoreWrapper):
     """Check each client access with a function: check(ctx, access, space, address, count).
 
     The function returns True to allow the access, False to refuse it ("illegal data address" exception), or raises a
-    ModbusException for another exception code. Any other result is a bug of the function, never an allowed access:
-    the access is refused with a TypeError (the client gets a "slave device failure", the error is logged). A function
-    that forgets a return (None) refuses everything, it never allows everything.
+    ModbusException for another exception code.
     """
 
     def __init__(self, store: DataStore, check: Callable[[RequestContext, Access, Space, int, int], bool]) -> None:
@@ -141,8 +139,4 @@ class Guard(StoreWrapper):
         allowed = self._check(ctx, access, space, address, count)
         if allowed is True:
             return
-        if allowed is False:
-            raise IllegalDataAddress(f'{access} of {space.value} @{address} refused')
-        # fail closed: only an explicit True allows an access
-        raise TypeError(f'the check function of a Guard must return True or False, not {allowed!r} '
-                        f'({access} of {space.value} @{address} refused)')
+        raise IllegalDataAddress(f'{access} of {space.value} @{address} refused')

@@ -34,8 +34,7 @@ Revision history for pyModbusTCP
     Breaking changes, other:
 
     - server: the check function of a Guard must return True to allow an access: None (a forgotten return) or any
-      other value refuses it with a TypeError (logged, "slave device failure" for the client), it no longer allows
-      it.
+      other value refuses it ("illegal data address"), it no longer allows it.
     - tools: mbtcp-tcp2rtu relays only the standard data functions by default (the others get exception 0x01),
       "--functions all" relays every function as before.
     - utils: word_list_to_long() raises ValueError when the number of words is not a multiple of 2 (4 with
