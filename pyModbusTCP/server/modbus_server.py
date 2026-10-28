@@ -63,7 +63,7 @@ class ModbusServer:
                  functions: Mapping[int, FunctionHandler] | None = None, fallback: FunctionHandler | None = None,
                  device_id: DeviceIdentification | None = None,
                  request_timeout: float | None = 30.0, idle_timeout: float | None = 300,
-                 max_connections: int | None = 64, max_connections_per_host: int | None = 16,
+                 max_connections: int | None = 128, max_connections_per_host: int | None = 16, evict_idle: bool = True,
                  read_only: bool = False, allowed_hosts: Iterable[str] | None = None,
                  ipv6_host_prefix: int = HOST_IPV6_PREFIX) -> None:
         """Initialize a Modbus TCP server.
@@ -109,9 +109,15 @@ class ModbusServer:
         :param idle_timeout: max time in seconds without any request from a client before closing its session,\
             None to disable (default is 300.0)
         :type idle_timeout: float or None
-        :param max_connections: max number of simultaneous client connections, the next ones are closed immediately,\
-            None for no limit (default is 64)
+        :param max_connections: max number of simultaneous client connections, None for no limit (default is 128).\
+            When it's reached, a new client takes the place of the most idle session (see evict_idle), else it's closed\
+            immediately
         :type max_connections: int or None
+        :param evict_idle: with max_connections reached, close the most idle session for a new client instead of\
+            refusing it: a session without any whole request first (the oldest), else the one with the oldest last\
+            request; never a session processing a request. The limit per host is checked before (a host at its\
+            limit is refused). False to refuse the new clients (default is True)
+        :type evict_idle: bool
         :param read_only: refuse the standard write functions (0x05, 0x06, 0x0F, 0x10, 0x15, 0x16 and 0x17) with an\
             "illegal function" exception, whatever their handler; the fallback handler only gets the read functions\
             (0x01 to 0x04, 0x2B/0x0E) (default is False). A function added or replaced by the application (see\
@@ -170,6 +176,7 @@ class ModbusServer:
         self.idle_timeout = idle_timeout
         self.max_connections = max_connections
         self.max_connections_per_host = max_connections_per_host
+        self.evict_idle = evict_idle
         self.ipv6_host_prefix = ipv6_host_prefix
         self.read_only = read_only
         self.allowed_hosts = allowed_hosts
@@ -270,6 +277,22 @@ class ModbusServer:
             self._max_connections = value
             if self._tcp_server is not None:
                 self._tcp_server.max_connections = value
+
+    @property
+    def evict_idle(self) -> bool:
+        """Get or set the eviction of the most idle session for a new client when max_connections is reached.
+
+        False: the new clients are refused. On a running server, it applies to the next connections.
+        """
+        return self._evict_idle
+
+    @evict_idle.setter
+    def evict_idle(self, value: bool) -> None:
+        value = _validators.validate_bool(value, 'evict_idle')
+        with self._start_stop_lock:
+            self._evict_idle = value
+            if self._tcp_server is not None:
+                self._tcp_server.evict_idle = value
 
     @property
     def max_connections_per_host(self) -> int | None:
@@ -373,11 +396,11 @@ class ModbusServer:
     def __repr__(self) -> str:
         r_str = ('ModbusServer(host=\'%s\', port=%d, no_block=%s, ipv6=%s, store=%r, functions=%s, fallback=%r, '
                  'device_id=%s, request_timeout=%s, idle_timeout=%s, max_connections=%s, max_connections_per_host=%s, '
-                 'ipv6_host_prefix=%d, read_only=%s, allowed_hosts=%s)')
+                 'evict_idle=%s, ipv6_host_prefix=%d, read_only=%s, allowed_hosts=%s)')
         r_str %= (self.host, self.port, self.no_block, self.ipv6, self._stores.get(None, self.stores),
                   sorted(self.functions), self.fallback, self.device_id, self.request_timeout, self.idle_timeout,
-                  self.max_connections, self.max_connections_per_host, self.ipv6_host_prefix, self.read_only,
-                  None if self.allowed_hosts is None else list(self.allowed_hosts))
+                  self.max_connections, self.max_connections_per_host, self.evict_idle, self.ipv6_host_prefix,
+                  self.read_only, None if self.allowed_hosts is None else list(self.allowed_hosts))
         return r_str
 
     def function(self, code: int) -> Callable[[FunctionHandler], FunctionHandler]:
@@ -508,6 +531,7 @@ class ModbusServer:
                 tcp_server.idle_timeout = self.idle_timeout
                 tcp_server.max_connections = self.max_connections
                 tcp_server.max_connections_per_host = self.max_connections_per_host
+                tcp_server.evict_idle = self.evict_idle
                 tcp_server.ipv6_host_prefix = self.ipv6_host_prefix
                 tcp_server.allowed_networks = self._allowed_networks
                 # set socket options

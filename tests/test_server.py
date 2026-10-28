@@ -7,6 +7,7 @@ import socket
 import struct
 import subprocess
 import sys
+import threading
 import time
 import unittest
 import warnings
@@ -234,7 +235,8 @@ class TestModbusServerLimits(_LiveServerTestCase):
         server = ModbusServer()
         self.assertEqual(server.request_timeout, 30.0)
         self.assertEqual(server.idle_timeout, 300.0)
-        self.assertEqual(server.max_connections, 64)
+        self.assertEqual(server.max_connections, 128)
+        self.assertIs(server.evict_idle, True)
         self.assertEqual(server.max_connections_per_host, 16)
 
     def test_params_check(self) -> None:
@@ -354,8 +356,8 @@ class TestModbusServerLimits(_LiveServerTestCase):
         self.assertEqual(len(self._request(sock)), self.RESP_LEN)
 
     def test_max_connections(self) -> None:
-        """Connections over max_connections are closed at once, slots are freed when a session end."""
-        self._start_server(max_connections=2)
+        """With evict_idle=False, connections over max_connections are closed at once, a session end frees a slot."""
+        self._start_server(max_connections=2, evict_idle=False)
         sock_1, sock_2 = self._connect(), self._connect()
         self.assertEqual(len(self._request(sock_1)), self.RESP_LEN)
         self.assertEqual(len(self._request(sock_2)), self.RESP_LEN)
@@ -749,7 +751,7 @@ class TestRuntimeSettings(_LiveServerTestCase):
         self.assertFalse(server.read_only)
 
     def test_limits_set_on_a_running_server(self) -> None:
-        server = self._start_server(max_connections=None, idle_timeout=None)
+        server = self._start_server(max_connections=None, idle_timeout=None, evict_idle=False)
         socks = [self._connect() for _ in range(2)]
         for sock in socks:
             self.assertEqual(len(self._request(sock)), self.RESP_LEN)
@@ -775,7 +777,8 @@ class TestRuntimeSettings(_LiveServerTestCase):
         bad_values: tuple[tuple[str, Any, type[Exception]], ...] = (
             ('max_connections', 0, ValueError), ('max_connections', True, TypeError),
             ('max_connections_per_host', -1, ValueError), ('request_timeout', 0, ValueError),
-            ('idle_timeout', float('inf'), ValueError), ('idle_timeout', '5', TypeError))
+            ('idle_timeout', float('inf'), ValueError), ('idle_timeout', '5', TypeError),
+            ('evict_idle', 1, TypeError), ('evict_idle', None, TypeError))
         for name, value, exc in bad_values:
             before = getattr(server, name)
             with self.subTest(name=name, value=value), self.assertRaises(exc):
@@ -784,6 +787,127 @@ class TestRuntimeSettings(_LiveServerTestCase):
         server.request_timeout = 5
         self.assertEqual(server.request_timeout, 5.0)
         self.assertIsInstance(server.request_timeout, float)
+
+
+class TestEvictIdle(_LiveServerTestCase):
+    """With max_connections reached, the most idle session is closed for a new client (evict_idle, audit S3)."""
+
+    def _served(self, sock: socket.socket) -> bool:
+        return len(self._request(sock)) == self.RESP_LEN
+
+    def test_never_active_session_evicted_first(self) -> None:
+        """A connection without any request is closed before an older client with requests."""
+        server = self._start_server(max_connections=3)
+        silent = self._connect()
+        # wait for its session: the next connections must not be accepted before it
+        deadline = time.monotonic() + 5.0
+        while len(server.active_sessions) < 1 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        sock_1, sock_2 = self._connect(), self._connect()
+        self.assertTrue(self._served(sock_1))
+        self.assertTrue(self._served(sock_2))
+        with self.assertLogs('pyModbusTCP.server', level='WARNING') as logs:
+            newcomer = self._connect()
+            self.assertTrue(self._served(newcomer), 'new client refused while a session is idle')
+        self.assertIn('idle session(s) closed', logs.records[0].getMessage())
+        self.assertIsNotNone(self._closed_after(silent, 2.0), 'the session without request is not closed')
+        for sock in (sock_1, sock_2, newcomer):
+            self.assertTrue(self._served(sock))
+        self.assertEqual(len(server.active_sessions), 3)
+
+    def test_oldest_request_evicted(self) -> None:
+        """Between active sessions, the one with the oldest last request is closed."""
+        self._start_server(max_connections=2)
+        old, recent = self._connect(), self._connect()
+        self.assertTrue(self._served(old))
+        time.sleep(0.05)
+        self.assertTrue(self._served(recent))
+        with self.assertLogs('pyModbusTCP.server', level='WARNING'):
+            self.assertTrue(self._served(self._connect()))
+        self.assertIsNotNone(self._closed_after(old, 2.0), 'the session with the oldest request is not closed')
+        self.assertTrue(self._served(recent))
+
+    def test_held_connections_dont_keep_a_client_out(self) -> None:
+        """Connections opened and held without requests (up to max_connections) can't keep a real client out."""
+        self._start_server(max_connections=8, max_connections_per_host=None)
+        held = [self._connect() for _ in range(8)]
+        with self.assertLogs('pyModbusTCP.server', level='WARNING'):
+            for _ in range(3):
+                self.assertTrue(self._served(self._connect()), 'a client is refused by held connections')
+        closed = [sock for sock in held if self._closed_after(sock, 0.5) is not None]
+        self.assertGreaterEqual(len(closed), 3)
+
+    def test_busy_session_never_evicted(self) -> None:
+        """A session processing a request is never closed: the new client is refused if every session is busy."""
+        release = threading.Event()
+        started = threading.Event()
+
+        def fallback(req: Request) -> bytes:
+            started.set()
+            release.wait(10)
+            return req.pdu
+
+        self.addCleanup(release.set)
+        self._start_server(max_connections=1, functions={}, fallback=fallback)
+        busy = self._connect()
+        busy.sendall(b'\x00\x01\x00\x00\x00\x03\x01\x41\x00')
+        self.assertTrue(started.wait(5))
+        with self.assertLogs('pyModbusTCP.server', level='WARNING') as logs:
+            self.assertIsNotNone(self._closed_after(self._connect(), 2.0), 'connection over the limit not closed')
+        self.assertIn('rejected', logs.records[0].getMessage())
+        release.set()
+        busy.settimeout(5)
+        self.assertEqual(busy.recv(9), b'\x00\x01\x00\x00\x00\x03\x01\x41\x00')
+        # once answered, the session is idle again: it makes room for the next client
+        with self.assertLogs('pyModbusTCP.server', level='WARNING'):
+            newcomer = self._connect()
+            newcomer.sendall(b'\x00\x02\x00\x00\x00\x03\x01\x41\x00')
+            newcomer.settimeout(5)
+            self.assertEqual(newcomer.recv(9), b'\x00\x02\x00\x00\x00\x03\x01\x41\x00')
+        self.assertIsNotNone(self._closed_after(busy, 2.0))
+
+    def test_host_limit_checked_before_eviction(self) -> None:
+        """A host at its limit is refused: it can't close the sessions of the others."""
+        server = self._start_server(max_connections=2, max_connections_per_host=1)
+        other = self._connect_from('127.0.0.2')
+        mine = self._connect()
+        self.assertTrue(self._served(other))
+        self.assertTrue(self._served(mine))
+        with self.assertLogs('pyModbusTCP.server', level='WARNING') as logs:
+            self.assertIsNotNone(self._closed_after(self._connect(), 2.0), 'a host over its limit is not refused')
+        self.assertIn('per host', logs.records[0].getMessage())
+        self.assertTrue(self._served(other))
+        self.assertTrue(self._served(mine))
+        self.assertEqual(len(server.active_sessions), 2)
+        # a third host is under its limit: it takes the place of the most idle session
+        with self.assertLogs('pyModbusTCP.server', level='WARNING'):
+            self.assertTrue(self._served(self._connect_from('127.0.0.3')))
+        self.assertIsNotNone(self._closed_after(other, 2.0), 'the most idle session is not closed')
+
+    def _connect_from(self, source_ip: str) -> socket.socket:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.addCleanup(sock.close)
+        try:
+            sock.bind((source_ip, 0))
+        except OSError:
+            self.skipTest(f'loopback address {source_ip} not available on this machine')
+        sock.settimeout(5)
+        sock.connect(('127.0.0.1', self.port))
+        return sock
+
+    def test_evict_idle_set_on_a_running_server(self) -> None:
+        server = self._start_server(max_connections=1)
+        first = self._connect()
+        self.assertTrue(self._served(first))
+        server.evict_idle = False
+        with self.assertLogs('pyModbusTCP.server', level='WARNING'):
+            self.assertIsNotNone(self._closed_after(self._connect(), 2.0), 'evict_idle=False not applied')
+        self.assertTrue(self._served(first))
+        server.evict_idle = True
+        with self.assertLogs('pyModbusTCP.server', level='WARNING'):
+            self.assertTrue(self._served(self._connect()))
+        self.assertIsNotNone(self._closed_after(first, 2.0))
+        self.assertIn('evict_idle=True', repr(server))
 
 
 class TestModbusServerSpecFrames(unittest.TestCase):

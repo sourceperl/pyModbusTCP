@@ -77,8 +77,10 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
     # listen backlog: the socketserver default (5) makes a burst of simultaneous connections wait for a TCP SYN
     # retransmission (1 s or more) as soon as the accept loop is a bit late
     request_queue_size: int = 128
-    # these 4 settings are set by ModbusServer.start(), then updated by its setters (see ModbusServer.__init__())
+    # these 5 settings are set by ModbusServer.start(), then updated by its setters (see ModbusServer.__init__())
     max_connections: int | None = None
+    # with max_connections reached, close the most idle session for a new client instead of refusing it
+    evict_idle: bool = False
     max_connections_per_host: int | None = None
     idle_timeout: float | None = None
     request_timeout: float | None = None
@@ -96,6 +98,10 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
         self._host_sessions: dict[str, int] = {}
         # socket -> its host key, computed at its start (removed with the same key, even after a change of prefix)
         self._session_keys: dict[socket.socket, str] = {}
+        # socket -> [time of its start, time of its last request (None: no request yet), True while a request is
+        # processed and answered], the times from time.monotonic(): the session to close for a new client
+        # (see _evict_idle_session())
+        self._session_activity: dict[socket.socket, list[Any]] = {}
         # IPv6 clients are counted by network of this prefix length (see host_key())
         self._ipv6_host_prefix = HOST_IPV6_PREFIX
         self._sessions_lock = Lock()
@@ -104,6 +110,7 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
         self._denied_log = LogThrottle(logger)
         self._rejected_log = LogThrottle(logger)
         self._host_rejected_log = LogThrottle(logger)
+        self._evicted_log = LogThrottle(logger)
         super().__init__(*args, **kwargs)
 
     def server_bind(self) -> None:
@@ -193,17 +200,60 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
             key = host_key(client_address, self._ipv6_host_prefix)
             self._session_keys[request] = key
             self._host_sessions[key] = self._host_sessions.get(key, 0) + 1
+            self._session_activity[request] = [time.monotonic(), None, False]
 
     def _remove_session(self, request: Any) -> None:
         with self._sessions_lock:
-            if self._active_sessions.pop(request, None) is None:
-                return
-            key = self._session_keys.pop(request)
-            remaining = self._host_sessions.get(key, 0) - 1
-            if remaining > 0:
-                self._host_sessions[key] = remaining
-            else:
-                self._host_sessions.pop(key, None)
+            self._forget_session(request)
+
+    def _forget_session(self, request: Any) -> None:
+        """Remove a session from the counters (with the sessions lock): at its end, or when it's evicted."""
+        if self._active_sessions.pop(request, None) is None:
+            return
+        self._session_activity.pop(request, None)
+        key = self._session_keys.pop(request)
+        remaining = self._host_sessions.get(key, 0) - 1
+        if remaining > 0:
+            self._host_sessions[key] = remaining
+        else:
+            self._host_sessions.pop(key, None)
+
+    def request_started(self, request: Any) -> None:
+        """A session has received a whole request: it's processed and answered, the session can't be evicted."""
+        with self._sessions_lock:
+            activity = self._session_activity.get(request)
+            if activity is not None:
+                activity[1] = time.monotonic()
+                activity[2] = True
+
+    def request_ended(self, request: Any) -> None:
+        """The response of the request is sent: the session waits for the next one, it can be evicted."""
+        with self._sessions_lock:
+            activity = self._session_activity.get(request)
+            if activity is not None:
+                activity[2] = False
+
+    def _evict_idle_session(self) -> Any:
+        """Close the most idle session for a new client: return its client address, None if every session is busy.
+
+        The sessions that never sent a whole request first (the oldest one), then the one whose last request is the
+        oldest; never a session that is processing or answering a request. A session waiting in the middle of a request
+        (a stalled one) is idle: its partial request is dropped.
+        """
+        with self._sessions_lock:
+            idle = [(activity[1] is not None, activity[1] if activity[1] is not None else activity[0], request)
+                    for request, activity in self._session_activity.items() if not activity[2]]
+            if not idle:
+                return None
+            _, _, victim = min(idle, key=lambda item: (item[0], item[1]))
+            client_address = self._active_sessions.get(victim)
+            # out of the counters at once: the slot is for the new client (the session thread ends on its own)
+            self._forget_session(victim)
+        try:
+            victim.shutdown(socket.SHUT_RDWR)
+        except OSError as e:
+            logger.debug('Session shutdown for %r: %r', client_address, e)
+        return client_address
 
     def verify_request(self, request: Any, client_address: Any) -> bool:
         # called by the main server thread, the only one that add sessions (so these checks are safe: the
@@ -214,12 +264,7 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
                                    '(last from %(client)r)', client=client_address)
             return False
         # each limit read once: another thread may change it (even to None) at any time
-        max_connections = self.max_connections
-        if max_connections is not None and self._sessions >= max_connections:
-            self._rejected_log.event('Maximum number of connections reached: %(count)d connection(s) rejected '
-                                     '(limit %(limit)d, last from %(client)r)', limit=max_connections,
-                                     client=client_address)
-            return False
+        # the limit per host first: a host at its limit is refused, it never closes the sessions of the others
         max_per_host = self.max_connections_per_host
         if max_per_host is not None:
             with self._sessions_lock:
@@ -230,6 +275,19 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
                                               'connection(s) rejected (limit %(limit)d, last from %(host)s)',
                                               limit=max_per_host, host=key)
                 return False
+        max_connections = self.max_connections
+        if max_connections is not None and self._sessions >= max_connections:
+            # the most idle session makes room for the new client (connections held without requests can't keep
+            # the others out), else the new client is refused
+            evicted = self._evict_idle_session() if self.evict_idle else None
+            if evicted is None:
+                self._rejected_log.event('Maximum number of connections reached: %(count)d connection(s) rejected '
+                                         '(limit %(limit)d, last from %(client)r)', limit=max_connections,
+                                         client=client_address)
+                return False
+            self._evicted_log.event('Maximum number of connections reached: %(count)d idle session(s) closed for a '
+                                    'new client (limit %(limit)d, last: %(evicted)r closed for %(client)r)',
+                                    limit=max_connections, evicted=evicted, client=client_address)
         return True
 
     def process_request(self, request: Any, client_address: Any) -> None:
@@ -358,12 +416,17 @@ class ModbusRequestHandler(BaseRequestHandler):
                 req_deadline = None if request_timeout is None else self._last_deadline
                 session_data.request.pdu.raw = self._recv_all(session_data.request.mbap.length - 1, req_deadline,
                                                               'request timeout')
-                # update response MBAP fields with request data
-                session_data.set_response_mbap()
-                # pass the current session data to request engine
-                server.engine(session_data)
-                # send the tx pdu with the last rx mbap (only length field change)
-                self._send_all(session_data.response.raw)
+                # a whole request: the session is busy (never evicted) until its response is sent
+                server.request_started(self.request)
+                try:
+                    # update response MBAP fields with request data
+                    session_data.set_response_mbap()
+                    # pass the current session data to request engine
+                    server.engine(session_data)
+                    # send the tx pdu with the last rx mbap (only length field change)
+                    self._send_all(session_data.response.raw)
+                finally:
+                    server.request_ended(self.request)
         except (Error, OSError) as e:
             # debug message
             logger.debug('Exception %r for %r', e, session_data.client)

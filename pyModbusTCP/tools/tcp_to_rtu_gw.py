@@ -119,7 +119,8 @@ monopolize it, nor a few of them:
 - a client host has at most 2 requests waiting for the serial line or in
   progress on it, its next ones get exception 0x0A at once;
 - --max-connections-per-host limits its number of TCP connections (default
-  16), --max-connections the total (default 64).
+  16), --max-connections the total (default 128): when it's reached, a new
+  client takes the place of the most idle session (--no-evict-idle: refused).
 With N hosts that send requests at the same time, each one gets 1/N of the
 serial line: a client timeout must be long enough for N requests.
 Refused requests are logged once, then once per 10 s at most (with their
@@ -845,8 +846,12 @@ def main(argv: list[str] | None = None) -> int:
     functions.add_argument('--read-only', action='store_true',
                            help=f'only relay read functions ({READ_ONLY_FUNCTIONS.text()}), refuse broadcasts: a '
                                 'shortcut for --functions')
-    parser.add_argument('--max-connections', type=positive_int, default=64,
-                        help='max number of simultaneous clients (default: 64)')
+    parser.add_argument('--max-connections', type=positive_int, default=128,
+                        help='max number of simultaneous clients (default: 128), when reached a new client takes '
+                             'the place of the most idle one')
+    parser.add_argument('--no-evict-idle', dest='evict_idle', action='store_false',
+                        help='refuse the new clients when --max-connections is reached (default: close the most '
+                             'idle session for them)')
     parser.add_argument('--max-connections-per-host', type=positive_int, default=16,
                         help='max number of simultaneous connections of a client host (default: 16)')
     add_ipv6_host_prefix_arg(parser)
@@ -912,6 +917,7 @@ def main(argv: list[str] | None = None) -> int:
                            fallback=serial_worker.relay_request,
                            allowed_hosts=args.allow, max_connections=args.max_connections,
                            max_connections_per_host=args.max_connections_per_host,
+                           evict_idle=args.evict_idle,
                            ipv6_host_prefix=args.ipv6_host_prefix)
         log_access_settings(srv, serial_worker)
         srv.start()

@@ -62,7 +62,8 @@ a firewall.
 
 | Option | Default | Effect |
 |---|---|---|
-| `max_connections` | `64` | Max number of simultaneous client connections, the next ones are closed at once (logged, one message per 10 s at most). |
+| `max_connections` | `128` | Max number of simultaneous client connections. When it's reached, a new client takes the place of the most idle session (`evict_idle`), else it's closed at once (logged, one message per 10 s at most). |
+| `evict_idle` | `True` | With `max_connections` reached, close the most idle session for a new client: a session that never sent a whole request first (the oldest one), else the one with the oldest last request; never a session processing a request. `max_connections_per_host` is checked before: a host at its limit is refused, it can't close the sessions of the others. Connections opened and held without requests can't keep the real clients out. `False` refuses the new clients (logged, one message per 10 s at most). |
 | `max_connections_per_host` | `16` | Max number of simultaneous connections of a client host (an IPv4 address, or an IPv6 network, see `ipv6_host_prefix`): a single host can't take every connection of `max_connections`. The next ones are closed at once (logged, one message per 10 s at most). Clients behind a NAT share the same address. |
 | `ipv6_host_prefix` | `64` | Prefix length of the IPv6 network counted as one host by `max_connections_per_host` (and by the fair share of `mbtcp-tcp2rtu`). A host usually gets a whole /64 and can use any address of it (SLAAC, temporary addresses): a longer prefix is easy to bypass. `128` counts each address apart, only for a network where a host can't choose its addresses (static addresses, no SLAAC, source address filtering on the switches); a shorter one (like `56`) counts a client with a whole /56 as one host, but also groups distinct clients of this network. The clients of one IPv6 LAN share a /64, like the clients behind a NAT. |
 | `idle_timeout` | `300` s | A connection without any request for this time is closed. |
@@ -74,8 +75,12 @@ Each of these limits can be disabled with `None`: only do this on a trusted netw
 
 These limits make a denial of service harder, they don't prevent it:
 
-- a few hosts can still take every connection (`max_connections` / `max_connections_per_host` hosts, 4 with the
-  defaults), and keep them with one request per `idle_timeout`;
+- a few hosts can still take every connection (`max_connections` / `max_connections_per_host` hosts, 8 with the
+  defaults) and keep them with frequent requests: with `evict_idle`, a session must be more active than the others to
+  stay, a held connection without requests is closed for the next client;
+- with `evict_idle`, a host below its limit can close the idle sessions of the others when the server is full, by
+  opening new connections: a client that keeps a connection open between rare requests must reconnect after a
+  closed connection (`ModbusClient` does it with `auto_open`, the default);
 - an IPv6 host is counted by /64 network (`ipv6_host_prefix`): a client with a larger prefix (a /56 or a /48, common
   for a customer of an ISP or a cloud provider) counts as many hosts;
 - there is no limit on the rate of the requests in a connection (thousands of requests per second).

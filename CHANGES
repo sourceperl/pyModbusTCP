@@ -20,8 +20,11 @@ Revision history for pyModbusTCP
 
     - DataBank and DataHandler are replaced by a data store (MemoryStore), see "Migrating from DataBank and
       DataHandler" in the server guide.
-    - secure defaults: idle_timeout (300 s), request_timeout (30 s), max_connections (64) and max_connections_per_host
+    - secure defaults: idle_timeout (300 s), request_timeout (30 s), max_connections (128) and max_connections_per_host
       (16), None disables them. start() raises NetworkError if already running.
+    - with max_connections reached, a new client takes the place of the most idle session (evict_idle=True, never a
+      session processing a request, the limit per host checked before): connections held without requests can't
+      keep the real clients out. evict_idle=False (--no-evict-idle for the tools) refuses the new clients.
     - the arguments of ModbusServer after no_block are keyword-only, no_block and ipv6 must be bools.
     - an empty host is refused (write '0.0.0.0' or '::' to listen on every interface), so is a legacy IPv4 form that
       bind() reads as another address ("0", "127.1", "192.168.010.1").

@@ -369,11 +369,20 @@ The server has several protections, all set in the :class:`~pyModbusTCP.server.M
         port=502,
         allowed_hosts=['192.168.1.0/24'],     # other clients are disconnected at once
         read_only=True,                       # the standard write functions get an "illegal function" exception
-        max_connections=16,                   # simultaneous clients (default: 64)
+        max_connections=16,                   # simultaneous clients (default: 128)
+        evict_idle=True,                      # when full, close the most idle session for a new client (default)
         max_connections_per_host=4,           # simultaneous connections of one client host (default: 16)
         ipv6_host_prefix=64,                  # an IPv6 client host is a /64 network (default), 128: by address
         idle_timeout=60,                      # close a session without request for 60 s (default: 300)
     )
+
+When ``max_connections`` is reached, a new client takes the place of the most idle session (``evict_idle=True``, the
+default): a session that never sent a whole request first (the oldest one), else the one with the oldest last request,
+never a session processing a request. Connections held open without requests can't keep the real clients out until
+``idle_timeout``. ``max_connections_per_host`` is checked before: a host at its limit is refused, it never closes the
+sessions of the others. A client that keeps a connection open between rare requests can find it closed when the server
+is full, and must reconnect (``ModbusClient`` does it with ``auto_open``, the default). ``evict_idle=False`` refuses
+the new clients instead.
 
 Like every allow list of pyModbusTCP, ``allowed_hosts`` is ``None`` for every client (the default) and ``[]`` for no
 client at all: the server then refuses every connection, and logs a warning at startup (an empty list from a
@@ -387,11 +396,11 @@ addresses, no SLAAC, source address filtering on the switches). The clients of o
 clients behind a NAT: raise ``max_connections_per_host`` for them.
 
 These settings can also be changed later, even while the server runs: ``allowed_hosts``, ``read_only``,
-``max_connections``, ``max_connections_per_host``, ``ipv6_host_prefix``, ``request_timeout`` and ``idle_timeout``
+``max_connections``, ``evict_idle``, ``max_connections_per_host``, ``ipv6_host_prefix``, ``request_timeout`` and ``idle_timeout``
 are properties, a new value is checked like the constructor argument (``ValueError`` or ``TypeError``, nothing
 changed) and applies at once.
 A new ``allowed_hosts`` filters the next connections and closes the sessions of the clients it no longer allows; a
-lower ``max_connections`` only refuses the next connections. ``allowed_hosts`` is a tuple: set a new value, never
+lower ``max_connections`` only refuses (or evicts for) the next connections, the sessions over it are kept. ``allowed_hosts`` is a tuple: set a new value, never
 change it in place.
 
 .. code-block:: python

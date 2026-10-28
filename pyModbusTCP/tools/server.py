@@ -15,7 +15,9 @@ Modbus/TCP has no authentication: any client that can reach the server can read 
 - -A/--allow (repeatable) restricts the clients to some IP addresses or networks.
 - --read-only refuses every write request (functions 0x05, 0x06, 0x0F, 0x10, 0x15, 0x16 and 0x17).
 - --max-connections-per-host (default 16) keeps a single client host from taking every connection of
-  --max-connections (default 64). An IPv6 client host is a /64 network (--ipv6-host-prefix).
+  --max-connections (default 128). An IPv6 client host is a /64 network (--ipv6-host-prefix). With
+  --max-connections reached, a new client takes the place of the most idle session (one that never sent a
+  request first), never of a session processing a request; --no-evict-idle refuses it instead.
 - The default port is 5020: port 502 is a privileged port on Unix systems. Never run this command as root (or
   with sudo) to listen on it, give the CAP_NET_BIND_SERVICE capability to the Python interpreter of a dedicated
   virtual environment instead (see the pyModbusTCP examples README).
@@ -90,8 +92,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help='allowed client IP address or network (like 10.0.0.0/24), repeatable '
                              '(default: every client)')
     parser.add_argument('--read-only', action='store_true', help='refuse every write request')
-    parser.add_argument('--max-connections', type=positive_int, default=64,
-                        help='max number of simultaneous clients (default: 64)')
+    parser.add_argument('--max-connections', type=positive_int, default=128,
+                        help='max number of simultaneous clients (default: 128), when reached a new client takes '
+                             'the place of the most idle one')
+    parser.add_argument('--no-evict-idle', dest='evict_idle', action='store_false',
+                        help='refuse the new clients when --max-connections is reached (default: close the most '
+                             'idle session for them)')
     parser.add_argument('--max-connections-per-host', type=positive_int, default=16,
                         help='max number of simultaneous connections of a client host (default: 16)')
     add_ipv6_host_prefix_arg(parser)
@@ -141,6 +147,7 @@ def main(argv: list[str] | None = None) -> int:
                               allowed_hosts=args.allow, read_only=args.read_only,
                               max_connections=args.max_connections,
                               max_connections_per_host=args.max_connections_per_host,
+                              evict_idle=args.evict_idle,
                               ipv6_host_prefix=args.ipv6_host_prefix,
                               idle_timeout=args.idle_timeout)
     except (TypeError, ValueError) as e:
