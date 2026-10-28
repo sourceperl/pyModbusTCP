@@ -1,131 +1,86 @@
 Revision history for pyModbusTCP
 
-0.4.0a4 2026-xx-xx (alpha: the command line tools, their options and output, may still change before 0.4.0)
+0.4.0a4 2026-10-28 (alpha: the command line tools, their options and output, may still change before 0.4.0)
 
     Summary of the changes since 0.3.1 (0.4.0a1 to 0.4.0a3 included). The details are in the documentation
     (https://pymodbustcp.readthedocs.io/), the security choices in SECURITY.md.
 
     Breaking changes, client:
 
-    - stricter argument checks: TypeError/ValueError instead of a silent conversion or truncation (numpy booleans are
-      no longer coil values), ModbusClient(host=...) refuses the legacy IPv4 forms ("127.1", "192.168.010.1"...).
+    - stricter argument checks: TypeError/ValueError instead of a silent conversion or truncation; the flags
+      (auto_open, auto_close, tcp_no_delay, broadcast=) are bools only, an address, a count or an id is never a bool,
+      coil values still accept integers.
+    - ModbusClient(host=...) refuses the legacy IPv4 forms ("127.1", "192.168.010.1"...).
     - the arguments of ModbusClient after auto_close are keyword-only, no_delay is renamed tcp_no_delay.
-    - the flags auto_open, auto_close, tcp_no_delay and broadcast= are bools only (TypeError for 0/1, a numpy bool or
-      None), like the flags of ModbusServer: one rule for every flag. Coil values still accept integers. An address,
-      a count, read_code or object_id is never a bool (TypeError, like the arguments of ModbusServer).
     - the request methods use the same argument names: address, count, value, values (write_address, write_values,
-      read_address, read_count for write_read_multiple_registers()). The old names (bit_addr=, reg_nb=,
-      regs_value=...) raise TypeError: give the values by position, or with the new names.
-    - an invalid reply (MBAP header, function code, size or echo that don't match the request, extra data) sets
-      last_error to MB_FRAME_ERR: MB_RECV_ERR is now a network error only. A device that pads its replies is refused.
-    - a host name that can't be resolved sets last_error to MB_RESOLVE_ERR (it was MB_CONNECT_ERR): a wrong name or a
-      DNS problem is told apart from a server that can't be reached.
+      read_address, read_count for write_read_multiple_registers()); the old names (bit_addr=, reg_nb=...) raise
+      TypeError.
+    - an invalid reply (header, function code, size, echo or extra data that don't match the request) sets
+      last_error to MB_FRAME_ERR, MB_RECV_ERR is a network error only.
+    - a host name that can't be resolved sets last_error to MB_RESOLVE_ERR (it was MB_CONNECT_ERR).
 
     Breaking changes, server:
 
     - DataBank and DataHandler are replaced by a data store (MemoryStore), see "Migrating from DataBank and
       DataHandler" in the server guide.
     - secure defaults: idle_timeout (300 s), request_timeout (30 s), max_connections (128) and max_connections_per_host
-      (16), None disables them. start() raises NetworkError if already running.
-    - with max_connections reached, a new client takes the place of the most idle session (evict_idle=True, never a
-      session processing a request, the limit per host checked before): connections held without requests can't
-      keep the real clients out. evict_idle=False (--no-evict-idle for the tools) refuses the new clients.
-    - tools: mbtcp-tcp2rtu gets -6/--ipv6 (it could only listen on IPv4: --ipv6-host-prefix had no effect) and
-      --idle-timeout, like mbtcp-server. Both refuse an IPv6 -H address without -6 with a clear message.
+      (16), None disables them; start() raises NetworkError if already running.
+    - with max_connections reached, a new client takes the place of the most idle session (evict_idle=True,
+      --no-evict-idle for the tools to refuse it instead).
     - the arguments of ModbusServer after no_block are keyword-only, no_block and ipv6 must be bools.
-    - an empty host is refused (write '0.0.0.0' or '::' to listen on every interface), so is a legacy IPv4 form that
-      bind() reads as another address ("0", "127.1", "192.168.010.1").
-    - allowed_hosts is a tuple of str. In an allow list (allowed_hosts, AccessControl, -A/--allow of the tools), an
-      entry with host bits set ("192.168.1.5/24"), a link-local entry or an entry with an interface is refused, an
-      IPv4-mapped entry is converted to IPv4.
-    - the typed shortcuts of the store take a byte_order (ByteOrder, default ABCD) instead of big_endian
-      (big_endian=False is ByteOrder.CDAB).
+    - an empty host or a legacy IPv4 form ("0", "127.1"...) is refused, use '0.0.0.0' or '::' for every interface;
+      a host given by name is resolved once by start(), and refused if it resolves to the wildcard address.
+    - allowed_hosts is a tuple of str; in an allow list (allowed_hosts, AccessControl, -A/--allow), an entry with host
+      bits set, a link-local entry or an entry with an interface is refused, an IPv4-mapped entry becomes IPv4.
+    - the typed shortcuts of the store take a byte_order (ByteOrder, default ABCD) instead of big_endian.
+    - a ModbusException subclass with a code out of 1 to 255 is refused at its definition (ValueError).
+    - the check function of a Guard must return True to allow an access: any other value (None included) refuses it.
 
-    Breaking changes, other:
+    Breaking changes, tools, utils and examples:
 
-    - server: a host given by name is resolved once by start() and refused if it resolves to the wildcard address
-      (0.0.0.0 or ::): the server listened on every interface, while an empty host or "0" is refused.
-    - server: a ModbusException subclass with a code out of 1 to 255 is refused at its definition (ValueError); a
-      code changed to an invalid value later gives a "slave device failure" (logged): the session of the client was
-      closed.
-    - server: the check function of a Guard must return True to allow an access: None (a forgotten return) or any
-      other value refuses it ("illegal data address"), it no longer allows it.
-    - tools: mbtcp-tcp2rtu and mbtcp-rtu2tcp relay only the standard data functions by default (the others get
-      exception 0x01), "--functions all" relays every function as before. mbtcp-rtu2tcp: --functions, --read-only,
-      an invalid function code (0, 0x80 to 0xFF) is never relayed, a broadcast only for a write function.
-    - tools: the short options mean the same thing in every tool: mbtcp-client -b/--byte-order becomes -B/--byte-order
-      (-b is the baud rate of the serial tools, the former -b gives a clear error), mbtcp-rtu-scan -f/--function
-      becomes -F/--function (-f is the output format of mbtcp-client).
+    - mbtcp-tcp2rtu and mbtcp-rtu2tcp relay only the standard data functions by default (the others get exception
+      0x01), "--functions all" relays every function.
+    - the short options mean the same thing in every tool: mbtcp-client -b/--byte-order becomes -B/--byte-order,
+      mbtcp-rtu-scan -f/--function becomes -F/--function.
+    - mbtcp-tcp2rtu gets -6/--ipv6 and --idle-timeout, like mbtcp-server; both refuse an IPv6 -H address without -6.
     - utils: word_list_to_long() raises ValueError when the number of words is not a multiple of 2 (4 with
-      long_long): the extra words were ignored.
-    - examples: client_serial_gw.py and server_serial_gw.py are removed (replaced by the gateways of the tools).
-    - examples: server_schedule.py starts or stops the server from the clock (06:00 to 18:00): launched out of the
-      service hours, it no longer serves until 18:00 and crashes at 06:00 (start() of a running server raises). It
-      no longer needs the schedule package (removed from the dev requirements).
+      long_long).
+    - examples: client_serial_gw.py and server_serial_gw.py are removed (replaced by the gateways of the tools),
+      server_schedule.py no longer needs the schedule package.
 
     New features:
 
-    - server: transactions (every request is atomic, 0x17 included), access rules (ReadOnly, AccessControl, Guard),
-      one store per unit id, read_only, allowed_hosts. The settings are properties, checked like in the constructor,
-      that apply at once to a running server.
-    - codec: Codec(DataType, ByteOrder) for 16/32/64 bits integers and IEEE floats, in 4 byte orders (8 for 64 bits
-      values with ByteOrder64), for the client and the store; a typed shortcut of the store for each DataType.
-    - client: context manager, tcp_no_delay, timeout for the whole request, broadcast (unit id 0, no reply, spaced by
-      broadcast_interval), connect retries with backoff (connect_retries, connect_retry_delay). auto_open reconnects
-      for the current request, is_open is False as soon as the server has closed the connection.
-    - tools: mbtcp-server, mbtcp-client (table, csv/json, typed values), mbtcp-tcp2rtu and mbtcp-rtu2tcp gateways
-      (RS-485 mode, pyserial), with "python -m pyModbusTCP.tools" or the commands of "pip install pyModbusTCP[cli]".
-      mbtcp-tcp2rtu: whitelist of the relayed functions (--functions, --read-only), broadcasts (--allow-broadcast,
-      with a bounded buffer and a maximum age).
-    - tools: mbtcp-rtu-scan reads a frame of 256 bytes at most (a line that never goes silent held the scan).
-    - tools: mbtcp-rtu-scan finds the baud rate, the serial format and the address of Modbus/RTU slaves (the most
-      common settings first, read requests only), --all lists the other slaves of the bus.
-    - server/tools: ipv6_host_prefix (--ipv6-host-prefix): the IPv6 network counted as one host by the limits.
-    - typing: type hints on the whole package (py.typed). docs: Sphinx documentation rewritten, SECURITY.md.
-    - server: DeviceIdentification(objects_id=) is renamed objects_by_id=, the name of the client side
-      (DeviceIdentificationResponse.objects_by_id): objects_id still works, with a DeprecationWarning.
+    - server: transactions (every request is atomic), access rules (ReadOnly, AccessControl, Guard), one store per unit
+      id, read_only, allowed_hosts, ipv6_host_prefix; the settings are properties that apply at once to a running
+      server. A space of MemoryStore can start at any address (MemoryStore(0, holding_registers=range(40_000,
+      41_000)), MemoryStore.addresses()); a ChangeEvent gives the ranges written (writes) and the changes.
+    - codec: Codec(DataType, ByteOrder) for 16/32/64 bits integers and IEEE floats, for the client and the store.
+    - client: context manager, timeout for the whole request, broadcast (unit id 0), connect retries with backoff
+      (connect_retries, connect_retry_delay).
+    - tools: mbtcp-server, mbtcp-client, the gateways mbtcp-tcp2rtu and mbtcp-rtu2tcp (RS-485 mode, function filter,
+      broadcasts) and mbtcp-rtu-scan (finds the serial settings and the address of RTU slaves), with
+      "python -m pyModbusTCP.tools" or the commands of "pip install pyModbusTCP[cli]".
+    - type hints on the whole package (py.typed), documentation rewritten, SECURITY.md.
+    - DeviceIdentification(objects_id=) is renamed objects_by_id= (objects_id still works, with a DeprecationWarning).
 
     Fixes:
 
-    - client: robustness (timeouts, invalid replies, transaction ids, is_open, write replies check), a link-local
-      IPv6 address is accepted with its interface only; a read device identification reply with data after its last
-      object is refused (MB_FRAME_ERR), like the other replies with extra data: a write reply longer than its echo
-      and an exception reply longer than 2 bytes too (they were accepted).
-    - client: a request reset while waiting for its reply on a reused connection is no longer sent again: the server
-      may have executed it, then reset the connection (a write executed twice). It fails with MB_RECV_ERR, whatever
-      its function (a read can clear a counter on some devices), the application decides. Only a send that fails on
-      a connection already reset (the request never reached the server) is still sent again once.
-    - server: Modbus compliance (0x05, 0x0F, 0x10, 0x17, 0x2B/0x0E and its conformity level, MBAP length), a
-      malformed request is answered with an exception, a handler response too short, too long or of another function
-      is replaced by a "slave device failure", listen on a link-local IPv6 address. A request of function code 0
-      gets "illegal function", like 0x80 to 0xFF: it was given to the fallback handler.
-    - server: Request.reply() and unpack() use the byte order prefix of their format, no prefix is big endian
-      (reply() dropped the prefix, unpack() used the order of the host).
-    - server: read_only also refuses 0x15 and 0x16, a fallback handler only gets the read functions (a handler of the
-      application that writes tests server.read_only); allowed_hosts set after the constructor was ignored.
-    - security: port hijacking on Windows (SO_EXCLUSIVEADDRUSE); an error of user code is logged with a rate limit
-      (a client could fill the disk with tracebacks), a handler response that can't be sent too; bounded queue of the change events, in events and in values
-      (MemoryStore.notify_queue_values: 10000 events of 1968 coils took 2 GB); mbtcp-server --log-changes logs a
-      write of more than 8 values as one line; formula injection in the csv of mbtcp-client device-id (CWE-1236).
-    - server: a space of MemoryStore can start at any address, with a range (MemoryStore(0,
-      holding_registers=range(40_000, 41_000)): the holding registers 40000 to 40999 only); MemoryStore.addresses().
-    - server: a session evicted for a new client (evict_idle) just after it received a whole request never processes
-      it: the request (like a write) was executed, its response could not be sent.
-    - server: the change notifications cost nothing without a listener (a write of 1968 coils: 44 us instead of
-      960 us), a ChangeEvent keeps the ranges written (writes, WrittenRange) and computes its changes only when a
-      listener reads them.
-    - tools: mbtcp-tcp2rtu no longer returns a late reply of a slave as the response of another request (a client
-      could read the value of another address) and has a fair queue by client host; mbtcp-rtu2tcp no longer blocks
-      the serial line while a broadcast is relayed. mbtcp-tcp2rtu: a malformed broadcast of 0x15 gets exception
-      0x03 and is never written (it was queued for the bus while the client got a "slave device failure").
-    - tools: stricter checks of the options (--max-connections, -u...); codec: decode() refuses a register out of 0
-      to 65535; utils: valid_host() edge cases (legacy IPv4 forms, length, NUL and non-ASCII chars).
+    - client: robustness (timeouts, invalid replies, transaction ids, is_open); a request reset while waiting for its
+      reply is no longer sent again (the server may have executed it); a link-local IPv6 address needs its interface.
+    - server: Modbus compliance (0x05, 0x0F, 0x10, 0x17, 0x2B/0x0E, MBAP length); a malformed request, a function
+      code 0 or an invalid handler response gets an exception response, the session goes on; Request.reply() and
+      unpack() keep the byte order of their format; read_only also refuses 0x15 and 0x16, a fallback handler only
+      gets the read functions; a session evicted for a new client never processes the request it just received.
+    - security: no port hijacking on Windows; the errors of user code are logged with a rate limit; the queue of the
+      change events is bounded (MemoryStore.notify_queue_size and notify_queue_values); mbtcp-server --log-changes
+      can't flood the log; no formula injection in the csv of mbtcp-client device-id.
+    - tools: mbtcp-tcp2rtu never takes a late reply of a slave for the response of another request, shares the serial
+      line fairly between the client hosts and never writes a malformed broadcast on the bus; mbtcp-rtu2tcp no
+      longer blocks the serial line during a broadcast; stricter checks of the options.
+    - codec: decode() refuses a register out of 0 to 65535; utils: valid_host() edge cases.
 
-    Build: pyproject.toml with hatchling, Python 3.10 to 3.14. pyModbusTCP[cli]==X installs exactly
-    pyModbusTCP-cli X, which requires exactly pyModbusTCP X. tools/build_dist.sh -o only removes the old packages of a
-    directory, it refuses a directory with other files (it was emptied). ./init_dev_venv.sh -r only removes a venv:
-    it refuses a -d of the project or of one of its parents, or of a directory that is not a venv (it was removed),
-    and -p takes a relative path from the current directory, like tools/build_dist.sh.
+    Packaging: pyproject.toml with hatchling, Python 3.10 to 3.14; pyModbusTCP[cli]==X installs exactly
+    pyModbusTCP-cli X, which requires exactly pyModbusTCP X. The files on PyPI come with their attestation (PEP 740).
 
 0.4.0a3 2026-10-27 (alpha)
 
