@@ -376,6 +376,30 @@ class TestModbusClient(unittest.TestCase):
                 self.assertEqual(c.last_error, MB_FRAME_ERR)
                 self.assertEqual(c.last_except, EXP_NONE)
 
+    def test_exception_reply_with_extra_data(self) -> None:
+        """An exception reply is 2 bytes (function code + exception code): more is an error, not a modbus exception."""
+        replies = {
+            'exception + 1 byte': b'\x00\x00\x00\x04\x01\x83\x02\xff',
+            'exception + 3 bytes': b'\x00\x00\x00\x06\x01\x83\x02\xde\xad\xbe',
+        }
+        for name, reply in replies.items():
+            with self.subTest(name):
+                def make_response(req: bytes, reply: bytes = reply) -> bytes:
+                    return req[:2] + reply
+                port = self._start_fake_server(make_response)
+                c = ModbusClient('127.0.0.1', port, timeout=2.0)
+                self.addCleanup(c.close)
+                self.assertIsNone(c.read_holding_registers(0))
+                self.assertEqual(c.last_error, MB_FRAME_ERR)
+                self.assertEqual(c.last_except, EXP_NONE)
+        # the exact size is a modbus exception
+        port = self._start_fake_server(lambda req: req[:2] + b'\x00\x00\x00\x03\x01\x83\x02')
+        c = ModbusClient('127.0.0.1', port, timeout=2.0)
+        self.addCleanup(c.close)
+        self.assertIsNone(c.read_holding_registers(0))
+        self.assertEqual(c.last_error, MB_EXCEPT_ERR)
+        self.assertEqual(c.last_except, EXP_DATA_ADDRESS)
+
     def test_mbap_length_out_of_range(self) -> None:
         """An MBAP length field out of the modbus range (2 to 254) is an error and closes the connection."""
         for length in (0, 1, 255, 0xffff):
@@ -531,6 +555,29 @@ class TestModbusClient(unittest.TestCase):
                     with mock.patch.object(c, '_req_pdu', side_effect=reply(addr_delta, qty_delta)):
                         result = call(c)
                     if (addr_delta, qty_delta) == (0, 0):
+                        self.assertIs(result, True)
+                        self.assertEqual(c.last_error, MB_NO_ERR)
+                    else:
+                        self.assertIs(result, False)
+                        self.assertEqual(c.last_error, MB_FRAME_ERR)
+
+    def test_write_reply_with_extra_data(self) -> None:
+        """A write reply must be exactly the echo (5 bytes): a padded reply is an error, like for the reads."""
+        calls: dict[str, Callable[[ModbusClient], bool]] = {
+            'write_single_coil': lambda c: c.write_single_coil(10, True),
+            'write_single_register': lambda c: c.write_single_register(10, 42),
+            'write_multiple_coils': lambda c: c.write_multiple_coils(10, [True, False, True]),
+            'write_multiple_registers': lambda c: c.write_multiple_registers(10, [1, 2, 3])}
+        for name, call in calls.items():
+            for extra in (b'', b'\x00', b'\xde\xad\xbe'):
+                with self.subTest(method=name, extra=extra):
+                    def fake_req_pdu(tx_pdu: bytes, rx_min_len: int, extra: bytes = extra) -> bytes:
+                        # the echo of the function code, the address and the value (or quantity) of the request
+                        return tx_pdu[:5] + extra
+                    c = ModbusClient()
+                    with mock.patch.object(c, '_req_pdu', side_effect=fake_req_pdu):
+                        result = call(c)
+                    if not extra:
                         self.assertIs(result, True)
                         self.assertEqual(c.last_error, MB_NO_ERR)
                     else:

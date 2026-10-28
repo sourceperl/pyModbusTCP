@@ -88,7 +88,8 @@ Revision history for pyModbusTCP
 
     - client: robustness (timeouts, invalid replies, transaction ids, is_open, write replies check), a link-local
       IPv6 address is accepted with its interface only; a read device identification reply with data after its last
-      object is refused (MB_FRAME_ERR), like the other replies with extra data.
+      object is refused (MB_FRAME_ERR), like the other replies with extra data: a write reply longer than its echo
+      and an exception reply longer than 2 bytes too (they were accepted).
     - client: a request reset while waiting for its reply on a reused connection is no longer sent again: the server
       may have executed it, then reset the connection (a write executed twice). It fails with MB_RECV_ERR, whatever
       its function (a read can clear a counter on some devices), the application decides. Only a send that fails on

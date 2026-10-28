@@ -418,6 +418,9 @@ class ClientTransportMixin:
                                f'function code mismatch (0x{rx_fc:02X} for a 0x{func_code:02X} request)')
         # check except status
         if rx_fc >= 0x80:
+            # an exception reply is the function code and the exception code, nothing else
+            if len(rx_pdu) != 2:
+                raise NetworkError(MB_FRAME_ERR, 'exception PDU length must be 2 bytes')
             exp_code = rx_pdu[1]
             raise ModbusExcept(exp_code)
         # check PDU length for specific request set in min_len (keep this after except checking)

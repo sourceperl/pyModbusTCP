@@ -150,6 +150,10 @@ class ClientFunctionsMixin:
         """Send a write request and check that the reply echoes the [address, value or quantity] of the request."""
         try:
             rx_pdu = self._req_pdu(tx_pdu=tx_pdu, rx_min_len=5)
+            # exactly [function code, address, value or quantity]: more is not this reply (like a padded one, or
+            # another frame relayed by a gateway), as for the reads
+            if len(rx_pdu) != 5:
+                raise NetworkError(MB_FRAME_ERR, 'rx byte count mismatch')
             resp_addr, resp_value = struct.unpack('>HH', rx_pdu[1:5])
             if resp_addr != addr or resp_value != value:
                 raise NetworkError(MB_FRAME_ERR, 'server reply does not match the request')
