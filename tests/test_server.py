@@ -487,6 +487,35 @@ class TestModbusServerLimits(_LiveServerTestCase):
                 self.assertRaises(OSError):
             ipv6_bind_address(('fe80::1%nosuchif', 502))
 
+    def test_named_host_resolved_once_never_the_wildcard(self) -> None:
+        """S11 of the audit: a host given by name that resolves to 0.0.0.0 or :: is refused by start() (it listened on
+        every interface); the name is resolved once, the address bound is the one checked."""
+        from pyModbusTCP.server._transport import named_host_address
+        for family, wildcard in ((socket.AF_INET, ('0.0.0.0', 502)), (socket.AF_INET6, ('::', 502, 0, 0))):
+            with self.subTest(wildcard=wildcard[0]), \
+                    mock.patch('socket.getaddrinfo', return_value=[(family, socket.SOCK_STREAM, 6, '', wildcard)]), \
+                    self.assertRaisesRegex(OSError, 'wildcard address'):
+                named_host_address(('plc-gw.example', 502), family)
+        sockaddr = ('192.0.2.10', 502)
+        with mock.patch('socket.getaddrinfo', return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, '', sockaddr)]):
+            self.assertEqual(named_host_address(('plc-gw.example', 502), socket.AF_INET), sockaddr)
+        # an IP address (the wildcard address written as such included) is bound as given, without resolution
+        with mock.patch('socket.getaddrinfo', side_effect=AssertionError('no resolution expected')):
+            for address in (('0.0.0.0', 502), ('127.0.0.1', 0), ('::', 502), ('fe80::1%2', 502, 0, 2)):
+                self.assertEqual(named_host_address(address, socket.AF_INET), address)
+        # start(): NetworkError, nothing listens
+        server = ModbusServer('plc-gw.example', 0, no_block=True)
+        wildcard_info = [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('0.0.0.0', 0))]
+        with mock.patch('socket.getaddrinfo', return_value=wildcard_info), \
+                self.assertRaisesRegex(ModbusServer.NetworkError, 'wildcard address'):
+            server.start()
+        self.assertFalse(server.is_running)
+        # a name of the host: its address
+        server = ModbusServer('localhost', 0, no_block=True)
+        host, _ = server.start()
+        self.addCleanup(server.stop)
+        self.assertEqual(host, '127.0.0.1')
+
     def test_ipv6_link_local_bind_uses_the_scope_id(self) -> None:
         """server_bind() of an IPv6 server gives the full link-local address (with its scope id) to bind()."""
         tcp_server = ModbusServer.CustomThreadingTCPServer.__new__(ModbusServer.CustomThreadingTCPServer)

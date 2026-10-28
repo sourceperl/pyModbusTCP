@@ -33,6 +33,8 @@ Revision history for pyModbusTCP
 
     Breaking changes, other:
 
+    - server: a host given by name is resolved once by start() and refused if it resolves to the wildcard address
+      (0.0.0.0 or ::): the server listened on every interface, while an empty host or "0" is refused.
     - server: a ModbusException subclass with a code out of 1 to 255 is refused at its definition (ValueError); a
       code changed to an invalid value later gives a "slave device failure" (logged): the session of the client was
       closed.

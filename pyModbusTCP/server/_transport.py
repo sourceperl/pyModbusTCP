@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import socket
 import sys
 import time
@@ -35,6 +36,32 @@ def ipv6_bind_address(server_address: Any) -> Any:
         return server_address
     infos = socket.getaddrinfo(host, port, socket.AF_INET6, socket.SOCK_STREAM, 0, socket.AI_NUMERICHOST)
     return infos[0][4]
+
+
+def named_host_address(server_address: Any, family: int) -> Any:
+    """The address for the bind() of a host given by name ("localhost", "plc-gw.local"): resolved here, once, and
+    never the wildcard address. An IP address (in its standard form, see the validation of ModbusServer.host) is
+    returned as is.
+
+    bind() would resolve the name itself, and listen on every interface for a name that resolves to 0.0.0.0 or ::
+    (a hosts file, a DNS answer), while an empty host or "0" is refused: the result is checked, and the address checked
+    is the one bound (resolved once).
+
+    :raises OSError: (socket.gaierror) for an unknown name, or for a name that resolves to the wildcard address
+    """
+    host, port = server_address[0], server_address[1]
+    if not isinstance(host, str):
+        return server_address
+    try:
+        ipaddress.ip_address(host.partition('%')[0])
+        return server_address
+    except ValueError:
+        pass
+    sockaddr = socket.getaddrinfo(host, port, family, socket.SOCK_STREAM)[0][4]
+    if ipaddress.ip_address(str(sockaddr[0]).partition('%')[0]).is_unspecified:
+        raise OSError(f'host {host!r} resolves to the wildcard address {sockaddr[0]} (every interface): write it as an '
+                      'IP address to listen on every interface')
+    return sockaddr
 
 
 class CustomThreadingTCPServer(ThreadingTCPServer):
@@ -85,6 +112,7 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         if self.address_family == socket.AF_INET6:
             self.server_address = ipv6_bind_address(self.server_address)
+        self.server_address = named_host_address(self.server_address, self.address_family)
         super().server_bind()
 
     @property
