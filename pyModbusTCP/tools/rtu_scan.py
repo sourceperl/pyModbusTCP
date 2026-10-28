@@ -8,7 +8,7 @@ It needs pyserial: pip install "pyModbusTCP[serial]" (installed with pyModbusTCP
 WHAT IT DOES
 ------------
 For a slave whose settings are unknown: the tool is a Modbus/RTU master that
-sends a read request (holding register 0 by default, -f for another read
+sends a read request (holding register 0 by default, -F for another read
 function) with each baud rate and serial format, from the most common to the
 least common, to each slave address in ascending order (1 to 247). Any valid
 answer, an exception included (a slave without holding register 0 answers
@@ -355,7 +355,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
                         metavar='ADDRESSES',
                         help=f'slave addresses, in the order to try, like 1-10,247 (default: 1-{MAX_SLAVE_ADDRESS})')
     functions = ', '.join(f'{code} {name}s' for code, name in FUNCTIONS.items())
-    parser.add_argument('-f', '--function', type=int, choices=list(FUNCTIONS), default=DEFAULT_FUNCTION,
+    parser.add_argument('-F', '--function', type=int, choices=list(FUNCTIONS), default=DEFAULT_FUNCTION,
                         help=f'read function of the requests: {functions} (default: {DEFAULT_FUNCTION})')
     parser.add_argument('-t', '--timeout', type=positive_float, default=DEFAULT_TIMEOUT,
                         help=f'response time of a slave in s (default: {DEFAULT_TIMEOUT})')

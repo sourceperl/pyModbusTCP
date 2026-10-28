@@ -46,7 +46,7 @@ ByteOrder           Alias                   Meaning                     FLOAT32 
 ==================  ======================  ==========================  ========================
 
 For a 64 bits value, ``CDAB`` reverses the order of the 4 registers. To find the order of a device, read a known
-value with each order (``mbtcp-client read-holding 0 -T float32 -b CDAB``, see :doc:`tools`).
+value with each order (``mbtcp-client read-holding 0 -T float32 -B CDAB``, see :doc:`tools`).
 
 A few devices store a 64 bits value in another order, like two 32 bits values in word swap. For these rare cases, a
 codec of a 64 bits type also takes a :class:`~pyModbusTCP.codec.ByteOrder64`, the 8 orders of the 8 bytes (``A`` to

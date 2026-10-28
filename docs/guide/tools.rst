@@ -71,8 +71,8 @@ Examples
     mbtcp-client -p 5020 write-coil 10 on
 
     # float32 values on 2 registers, the first register holds the least significant word (CDAB)
-    mbtcp-client -p 5020 write-registers 20 3.14 -2.5 -T float32 -b CDAB
-    mbtcp-client -p 5020 read-holding 20 -n 2 -T float32 -b CDAB
+    mbtcp-client -p 5020 write-registers 20 3.14 -2.5 -T float32 -B CDAB
+    mbtcp-client -p 5020 read-holding 20 -n 2 -T float32 -B CDAB
 
     # read a device every second, show the frames
     mbtcp-client -H 192.168.1.10 -d read-input-regs 0 -n 2 -i 1
@@ -263,7 +263,7 @@ device. ``read-holding``, ``read-input-regs``, ``write-registers`` and ``write-r
 
 - ``-T/--type``: ``uint16`` (default), ``int16`` (1 register), ``uint32``, ``int32``, ``float32`` (2 registers),
   ``uint64``, ``int64``, ``float64`` (4 registers, IEEE 754 for the floats);
-- ``-b/--byte-order``: the order of the bytes on the registers, in the notation of most Modbus software, ``A``
+- ``-B/--byte-order``: the order of the bytes on the registers, in the notation of most Modbus software, ``A``
   being the most significant byte of the value.
 
 ==========  ===============================  ===================
@@ -281,7 +281,7 @@ values (``-n 2 -T float32`` reads 4 registers) and the table shows each value wi
 
 .. code-block:: none
 
-    $ mbtcp-client -p 5020 read-holding 20 -n 2 -T float32 -b CDAB
+    $ mbtcp-client -p 5020 read-holding 20 -n 2 -T float32 -B CDAB
     read-holding · localhost:5020 · unit 1 · 2 float32 CDAB @ 20..23 · 1.9 ms
 
       Offset  Address  Addr hex  Value         Hex  Registers

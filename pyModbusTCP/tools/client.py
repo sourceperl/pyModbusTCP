@@ -18,20 +18,20 @@ $ mbtcp-client -H 192.168.1.10 write-registers 10 1 2 3
 $ mbtcp-client -H 192.168.1.10 write-coil 5 on
 $ mbtcp-client -H 192.168.1.10 write-read 0 20 22 1 -n 4     # write @0..2, then read @0..3 in one request
 $ mbtcp-client -H 192.168.1.10 read-holding 0 -n 2 -T float32         # 2 float32 values: registers @0..3
-$ mbtcp-client -H 192.168.1.10 write-registers 0 3.14 -T float32 -b CDAB   # a float32, word swapped
+$ mbtcp-client -H 192.168.1.10 write-registers 0 3.14 -T float32 -B CDAB   # a float32, word swapped
 $ mbtcp-client -H 192.168.1.10 device-id
 
 Values accept the decimal, hexadecimal (0x...), octal (0o...) and binary (0b...) notations. Coil values accept
 1/0, on/off, true/false and yes/no (any case).
 
-VALUES ON SEVERAL REGISTERS (-T/--type, -b/--byte-order)
+VALUES ON SEVERAL REGISTERS (-T/--type, -B/--byte-order)
 --------------------------------------------------------
 read-holding, read-input-regs, write-registers and write-read read and write typed values: uint16, int16 (1
 register), uint32, int32, float32 (2 registers), uint64, int64, float64 (4 registers). -n then counts the values,
 not the registers.
 
 The Modbus specification only defines 16 bits registers (big endian): each device chooses how it stores a value
-on several registers. -b/--byte-order uses the notation of most Modbus software, A being the most significant byte:
+on several registers. -B/--byte-order uses the notation of most Modbus software, A being the most significant byte:
 
     ABCD  big endian (default): the first register holds the most significant word
     CDAB  word swap: the first register holds the least significant word (common on PLCs)
@@ -77,7 +77,7 @@ import sys
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TextIO
+from typing import Any, TextIO
 
 from ..client import ModbusClient
 from ..codec import ByteOrder, Codec, DataType
@@ -138,6 +138,14 @@ def bool_value(value: str) -> bool:
     raise argparse.ArgumentTypeError(f'{value!r} is not a coil value (use {_COIL_WORDS_TXT})')
 
 
+class _RenamedOption(argparse.Action):
+    """A former option, renamed: refused with the new name (its "const")."""
+
+    def __call__(self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any,
+                 option_string: str | None = None) -> None:
+        parser.error(f'{option_string} is renamed {self.const}')
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog='mbtcp-client', description='Modbus/TCP client for the command line',
                                      epilog='Exit status: 0 success, 1 request failed, 2 invalid parameter, '
@@ -164,9 +172,12 @@ def build_parser() -> argparse.ArgumentParser:
     typed.add_argument('-T', '--type', choices=[t.value for t in DataType], default=None,
                        help='type of the values: uint16 (default), int16, uint32, int32, float32 (2 registers), '
                             'uint64, int64, float64 (4 registers)')
-    typed.add_argument('-b', '--byte-order', choices=[o.value for o in ByteOrder], default=None,
+    typed.add_argument('-B', '--byte-order', choices=[o.value for o in ByteOrder], default=None,
                        help='order of the bytes of a value on the registers, A is the most significant byte: '
                             'ABCD big endian (default), CDAB word swap, BADC byte swap, DCBA little endian')
+    # the former short option of --byte-order (before 0.4.0a4): a clear error, -b is the baud rate of the serial tools
+    typed.add_argument('-b', action=_RenamedOption, nargs='?', help=argparse.SUPPRESS,
+                       const='-B/--byte-order')
 
     # read requests
     reads = (('read-coils', 'read coils (function 0x01)', 2000),

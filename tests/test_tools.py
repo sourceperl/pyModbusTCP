@@ -112,15 +112,15 @@ def test_client_write_read(server: tuple[ModbusServer, int], capsys: pytest.Capt
 
 
 def test_client_typed_values(server: tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
-    """-T/--type and -b/--byte-order: values on several registers."""
+    """-T/--type and -B/--byte-order: values on several registers."""
     import json
     srv, port = server
     base = ['-H', '127.0.0.1', '-p', str(port)]
     regs = srv.store.app.holding_registers
-    assert run_client(capsys, base + ['write-registers', '10', '3.14', '-2.5', '-T', 'float32', '-b', 'CDAB'])[0] == 0
+    assert run_client(capsys, base + ['write-registers', '10', '3.14', '-2.5', '-T', 'float32', '-B', 'CDAB'])[0] == 0
     assert regs.read(10, 4) == [0xF5C3, 0x4048, 0x0000, 0xC020]
     # -n counts the values; plain: the address of the first register of each value
-    cmd = ['read-holding', '10', '-n', '2', '-T', 'float32', '-b', 'CDAB']
+    cmd = ['read-holding', '10', '-n', '2', '-T', 'float32', '-B', 'CDAB']
     assert run_client(capsys, base + cmd)[1] == '10 3.14\n12 -2.5\n'
     assert run_client(capsys, base + cmd + ['--hex'])[1] == '10 0x4048F5C3\n12 0xC0200000\n'
     lines = run_client(capsys, base + cmd + ['-f', 'csv'])[1].splitlines()
@@ -131,8 +131,8 @@ def test_client_typed_values(server: tuple[ModbusServer, int], capsys: pytest.Ca
     out = run_client(capsys, base + cmd + ['-f', 'table'])[1]
     assert '2 float32 CDAB @ 10..13' in out
     assert ['0', '10', '0x000A', '3.14', '0x4048F5C3', 'F5C3', '4048'] in [line.split() for line in out.splitlines()]
-    # -b alone: uint16, byte swapped
-    assert run_client(capsys, base + ['read-holding', '11', '-b', 'BADC', '--hex'])[1] == '11 0x4840\n'
+    # -B alone: uint16, byte swapped
+    assert run_client(capsys, base + ['read-holding', '11', '-B', 'BADC', '--hex'])[1] == '11 0x4840\n'
     # 64 bits, a negative value after "--" (it looks like an option)
     assert run_client(capsys, base + ['write-registers', '20', '-T', 'float64', '--', '-1e-3'])[0] == 0
     assert run_client(capsys, base + ['read-input-regs', '20', '-T', 'float64'])[0] == 0  # input registers: empty
@@ -142,7 +142,7 @@ def test_client_typed_values(server: tuple[ModbusServer, int], capsys: pytest.Ca
                                                 '-f', 'json'])[1])
     assert obj['address'] == 30 and obj['values'] == ['nan', 1.0, 0.0]
     assert obj['written'] == {'address': 30, 'values': ['nan', 1.0]}
-    out = run_client(capsys, base + ['write-read', '30', '7', '-T', 'int32', '-b', 'DCBA', '-f', 'table'])[1]
+    out = run_client(capsys, base + ['write-read', '30', '7', '-T', 'int32', '-B', 'DCBA', '-f', 'table'])[1]
     assert '1 written @ 30..31' in out and '1 int32 DCBA @ 30..31 read' in out
     assert regs.read(30, 2) == [0x0700, 0x0000]  # 00 00 00 07 in the DCBA order
     # invalid parameters: exit status 2, with the usage of the command
@@ -154,6 +154,15 @@ def test_client_typed_values(server: tuple[ModbusServer, int], capsys: pytest.Ca
                         (['write-read', '0', '1', '-T', 'float64', '-n', '32'], 'between 1 and 31')):
         status, _, err = run_client(capsys, base + args)
         assert status == 2 and error in err and f'usage: mbtcp-client {args[0]}' in err, args
+
+
+def test_client_former_byte_order_option(capsys: pytest.CaptureFixture[str]) -> None:
+    """-b is renamed -B/--byte-order (-b is the baud rate of the serial tools): a clear error, not a silent default."""
+    for args in (['read-holding', '0', '-b', 'CDAB'], ['write-registers', '0', '1', '-b']):
+        with pytest.raises(SystemExit) as exc:
+            cli_tool.main(['-p', '1', *args])
+        assert exc.value.code == 2
+        assert '-b is renamed -B/--byte-order' in capsys.readouterr().err
 
 
 def test_client_coils(server: tuple[ModbusServer, int], capsys: pytest.CaptureFixture[str]) -> None:
@@ -940,7 +949,7 @@ def test_tcp2rtu_cancelled_request_is_not_sent() -> None:
     ('rtu_scan', ['-a', '10-2'], 'empty range'),
     ('rtu_scan', ['--parity', 'N,X'], 'invalid parity'),
     ('rtu_scan', ['--stopbits', '1.5'], 'invalid stop bits'),
-    ('rtu_scan', ['-f', '5'], '-f/--function'),
+    ('rtu_scan', ['-F', '5'], '-F/--function'),
     ('rtu_scan', ['-t', '0'], '-t/--timeout'),
     ('rtu_scan', ['--rs485-rts-tx', 'low'], '--rs485-rts-tx needs --rs485'),
     ('tcp_to_rtu_gw', ['-t', '-1'], '-t/--timeout'),
@@ -1547,8 +1556,8 @@ def test_rtu_scan_finds_slaves(capsys: pytest.CaptureFixture[str], monkeypatch: 
 
 
 def test_rtu_scan_options(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
-    """-b, --parity, -a and -f restrict the scan, in the given order; --stopbits 2 also tries 8E2 and 8O2."""
-    status, out, port = run_rtu_scan(capsys, monkeypatch, ['-b', '19200', '--parity', 'E', '-a', '20,17', '-f', '1'])
+    """-b, --parity, -a and -F restrict the scan, in the given order; --stopbits 2 also tries 8E2 and 8O2."""
+    status, out, port = run_rtu_scan(capsys, monkeypatch, ['-b', '19200', '--parity', 'E', '-a', '20,17', '-F', '1'])
     assert status == 0
     assert out.splitlines()[0].startswith('probe request: read coils (function 0x01) of coil 0,')
     assert 'slave found at address 17 (19200 8E1), answer: coil 0 = 1' in out.splitlines()
