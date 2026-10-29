@@ -60,7 +60,8 @@ ERRORS SEEN BY THE TCP CLIENT
 - Request refused by the gateway filters (see ACCESS CONTROL): Modbus exception
   0x01 "Illegal Function" (a function out of --functions or --read-only, an
   invalid function code: 0 or 0x80 to 0xFF, or a broadcast of a function
-  that is not a write) or 0x0A "Gateway
+  that is not a write), 0x03 "Illegal Data Value" (a request of a standard
+  function that is not exactly the size of its fields) or 0x0A "Gateway
   Path Unavailable" (unit id 0 without --allow-broadcast, or reserved unit id
   248 to 255).
 - No valid answer from the slave before the timeout (-t): Modbus exception
@@ -105,6 +106,15 @@ the fallback handler of ModbusServer), so it applies its own filters:
   --functions, the two options are exclusive.
 - A request with an invalid function code (0, or 0x80 to 0xFF: the exception
   flag of a reply) is never written on the bus: exception 0x01.
+- A request of a standard function (0x01 to 0x07, 0x0B, 0x0C, 0x0F to 0x11,
+  0x14 to 0x18, 0x2B/0x0E) is written on the bus only if it has exactly the
+  size of its fields (with --functions all too): exception 0x03 otherwise.
+  The bytes after a request would be in the same RTU frame, and a slave that
+  ends a frame by its size (instead of the silence of 3.5 chars) would take
+  them for the next frame: a hidden request, to any slave, for any function
+  (like a write behind a read with --read-only). The other functions
+  (diagnostics 0x08, vendor functions...) have no size known to the gateway:
+  only relay them to slaves that you trust with them.
 - Broadcast requests (unit id 0) are a write to every slave of the bus: they
   are refused unless --allow-broadcast is set (and refused with --read-only).
   Unit ids 248 to 255 are reserved on a serial line and always refused.
@@ -226,14 +236,21 @@ except ModuleNotFoundError as _exc:
 
 from ..constants import (
     ENCAPSULATED_INTERFACE_TRANSPORT,
+    EXP_DATA_VALUE,
     EXP_GATEWAY_PATH_UNAVAILABLE,
     EXP_ILLEGAL_FUNCTION,
+    GET_COMM_EVENT_COUNTER,
+    GET_COMM_EVENT_LOG,
     MASK_WRITE_REGISTER,
     MEI_TYPE_READ_DEVICE_ID,
     READ_COILS,
     READ_DISCRETE_INPUTS,
+    READ_EXCEPTION_STATUS,
+    READ_FIFO_QUEUE,
+    READ_FILE_RECORD,
     READ_HOLDING_REGISTERS,
     READ_INPUT_REGISTERS,
+    REPORT_SERVER_ID,
     WRITE_FILE_RECORD,
     WRITE_MULTIPLE_COILS,
     WRITE_MULTIPLE_REGISTERS,
@@ -307,6 +324,59 @@ def is_write_file_record(pdu: bytes) -> bool:
     return True
 
 
+def is_read_file_record(pdu: bytes) -> bool:
+    """Check the format of a Read File Record (0x14) request PDU: a byte count of 0x07 to 0xF5 that matches the
+    data, made of sub-requests of 7 bytes, each of reference type 6."""
+    if len(pdu) < 2 or not 0x07 <= pdu[1] <= 0xF5 or len(pdu) != 2 + pdu[1] or pdu[1] % 7:
+        return False
+    return all(pdu[offset] == 0x06 for offset in range(2, len(pdu), 7))
+
+
+# the standard functions whose request PDU has a fixed size (function code included): the read and write functions,
+# and the functions of the serial line without data (read exception status, comm event counter and log, report
+# server id)
+FIXED_SIZE_REQUESTS = {
+    READ_COILS: 5, READ_DISCRETE_INPUTS: 5, READ_HOLDING_REGISTERS: 5, READ_INPUT_REGISTERS: 5,
+    WRITE_SINGLE_COIL: 5, WRITE_SINGLE_REGISTER: 5, MASK_WRITE_REGISTER: 7,
+    READ_EXCEPTION_STATUS: 1, GET_COMM_EVENT_COUNTER: 1, GET_COMM_EVENT_LOG: 1, REPORT_SERVER_ID: 1,
+    READ_FIFO_QUEUE: 3,
+}
+# the standard functions whose request PDU ends with a byte count and its data -> the index of the byte count
+BYTE_COUNT_REQUESTS = {WRITE_MULTIPLE_COILS: 5, WRITE_MULTIPLE_REGISTERS: 5, WRITE_READ_MULTIPLE_REGISTERS: 9}
+# size of a read device identification request (0x2B/0x0E): MEI type, read device id code, object id
+READ_DEVICE_ID_REQUEST_SIZE = 4
+
+
+def request_size_ok(pdu: bytes) -> bool:
+    """Check the size of a request PDU of a standard function: exactly its fields, no byte missing, no byte after them.
+
+    The PDU is written on the serial line as is, in one RTU frame with a valid CRC at its end. A slave that finds the
+    end of a frame by its size (from the function code and the byte count), instead of the silence of 3.5 chars, would
+    take the bytes after the request for the next frame: a request to any slave, for any function, hidden behind an
+    allowed one (like a write behind a read with --read-only, a diagnostics 0x08 behind a 0x03). Such a request never
+    reaches the serial line.
+
+    The functions whose size is unknown to the gateway (diagnostics 0x08, the other MEI types of 0x2B, the functions of
+    a vendor...) are accepted as is: they are only relayed if --functions allows them.
+
+    :param pdu: request PDU (function code first)
+    :returns: True if the request can be written on the serial line
+    """
+    func_code = pdu[0]
+    if func_code in FIXED_SIZE_REQUESTS:
+        return len(pdu) == FIXED_SIZE_REQUESTS[func_code]
+    if func_code in BYTE_COUNT_REQUESTS:
+        index = BYTE_COUNT_REQUESTS[func_code]
+        return len(pdu) > index and len(pdu) == index + 1 + pdu[index]
+    if func_code == READ_FILE_RECORD:
+        return is_read_file_record(pdu)
+    if func_code == WRITE_FILE_RECORD:
+        return is_write_file_record(pdu)
+    if func_code == ENCAPSULATED_INTERFACE_TRANSPORT and pdu[1:2] == bytes([MEI_TYPE_READ_DEVICE_ID]):
+        return len(pdu) == READ_DEVICE_ID_REQUEST_SIZE
+    return True
+
+
 def response_matches(req_pdu: bytes, resp_pdu: bytes) -> bool:
     """Check the content of a response PDU against its request PDU (same function code, already checked).
 
@@ -314,7 +384,7 @@ def response_matches(req_pdu: bytes, resp_pdu: bytes) -> bool:
     be told apart from the expected one by its content. For the standard functions, the response has a size set by
     the request (functions 0x01 to 0x04, 0x17) or echoes a part of it (0x05, 0x06, 0x0F, 0x10, 0x16, 0x2B/0x0E).
     The other functions are accepted as is (their content is unknown to the gateway), and so is a request too short
-    to be decoded (the slave answers it with an exception).
+    to be decoded (never written on the serial line by the gateway, see request_size_ok()).
 
     :param req_pdu: request PDU (function code first)
     :param resp_pdu: response PDU (function code first)
@@ -680,6 +750,10 @@ class TcpToRtuWorker(_rtu.SerialLink):
         # the relayed functions (--functions, --read-only): a whitelist, 0x2B by MEI type
         if not self.functions.allows(pdu):
             return EXP_ILLEGAL_FUNCTION
+        # a standard function: exactly the size of its request, the bytes after it would be a hidden frame for a
+        # slave that ends a frame by its size (see request_size_ok()), even with --functions all
+        if not request_size_ok(pdu):
+            return EXP_DATA_VALUE
         return 0
 
     def relay_request(self, req: Request) -> bytes:

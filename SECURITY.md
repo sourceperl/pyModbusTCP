@@ -147,6 +147,15 @@ function, with a warning at startup), `--read-only` is a shortcut for the read f
 A request with an invalid function code (0, or 0x80 to 0xFF: the exception flag of a reply) gets the exception 0x01
 (illegal function) and is never written on the serial line.
 
+A request of a standard function (0x01 to 0x07, 0x0B, 0x0C, 0x0F to 0x11, 0x14 to 0x18, 0x2B/0x0E) must have exactly
+the size of its fields, with `--functions all` too: a missing byte, or a byte after them, gets the exception 0x03
+(illegal data value) and is never written on the serial line. The PDU of a request is written in one RTU frame, with a
+CRC at its end: a slave that ends a frame by its size (from the function code and the byte count, not by the silence
+of 3.5 chars, like some small firmwares) would take the bytes after a request for the next frame, a hidden request to
+any slave, for any function (a write behind a read with `--read-only`, a diagnostics 0x08 behind a 0x03). The
+functions whose size is unknown to the gateway (diagnostics 0x08, the other MEI types of 0x2B, the vendor functions)
+are relayed as is when `--functions` allows them: only allow them for slaves that you trust with them.
+
 Broadcast requests (unit id 0, only with `--allow-broadcast`) have a small buffer: a few of them wait for the line
 (`--broadcast-buffer`, 4 by default, 8 at most: half of the queue, the other requests keep their place), the next
 ones get the exception 0x06 (slave device busy) at once. A broadcast that waited more than `--broadcast-max-age`

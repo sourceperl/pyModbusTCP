@@ -37,12 +37,27 @@ Function codes
    * - ``WRITE_SINGLE_REGISTER``
      - 0x06
      - Write Single Register
+   * - ``READ_EXCEPTION_STATUS``
+     - 0x07
+     - Read Exception Status (serial line only, not implemented)
+   * - ``GET_COMM_EVENT_COUNTER``
+     - 0x0B
+     - Get Comm Event Counter (serial line only, not implemented)
+   * - ``GET_COMM_EVENT_LOG``
+     - 0x0C
+     - Get Comm Event Log (serial line only, not implemented)
    * - ``WRITE_MULTIPLE_COILS``
      - 0x0F
      - Write Multiple Coils
    * - ``WRITE_MULTIPLE_REGISTERS``
      - 0x10
      - Write Multiple Registers
+   * - ``REPORT_SERVER_ID``
+     - 0x11
+     - Report Server ID (serial line only, not implemented)
+   * - ``READ_FILE_RECORD``
+     - 0x14
+     - Read File Record (not implemented)
    * - ``WRITE_FILE_RECORD``
      - 0x15
      - Write File Record (not implemented: see below)
@@ -52,6 +67,9 @@ Function codes
    * - ``WRITE_READ_MULTIPLE_REGISTERS``
      - 0x17
      - Read/Write Multiple Registers
+   * - ``READ_FIFO_QUEUE``
+     - 0x18
+     - Read FIFO Queue (not implemented)
    * - ``ENCAPSULATED_INTERFACE_TRANSPORT``
      - 0x2B
      - Encapsulated Interface Transport (with ``MEI_TYPE_READ_DEVICE_ID``, 0x0E: Read Device Identification)
@@ -59,8 +77,9 @@ Function codes
 The tuples of codes:
 
 - ``SUPPORTED_FUNCTION_CODES``: the functions implemented by the client and the server of the package, all the codes
-  of the table but 0x15 and 0x16 (``ModbusClient.custom_request()`` sends any other code, a handler of the server
-  answers it).
+  of the table but 0x07, 0x0B, 0x0C, 0x11, 0x14 to 0x16 and 0x18 (``ModbusClient.custom_request()`` sends any other
+  code, a handler of the server answers it). These codes are known for ``read_only`` (0x15, 0x16) and for the size of
+  a request relayed by ``mbtcp-tcp2rtu`` to the serial line.
 - ``WRITE_FUNCTION_CODES``: the standard functions that write data, 0x05, 0x06, 0x0F, 0x10, 0x15, 0x16 and 0x17.
   ``ModbusServer(read_only=True)`` refuses them whatever their handler: 0x15 and 0x16 are not implemented, but a
   handler of the application (or a gateway) could answer them.

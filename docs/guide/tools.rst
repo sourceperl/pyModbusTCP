@@ -101,6 +101,11 @@ until a power cycle), the file records 0x14 and 0x15, the other MEI types of 0x2
 ``0x2B/0x0E``). ``--read-only`` is a shortcut for the read functions (0x01 to 0x04, 0x2B/0x0E) that also refuses the
 broadcasts: the two options are exclusive. The log shows the relayed functions at startup.
 
+A request of a standard function (0x01 to 0x07, 0x0B, 0x0C, 0x0F to 0x11, 0x14 to 0x18, 0x2B/0x0E) is relayed only if
+it has exactly the size of its fields, with ``--functions all`` too: else it gets exception 0x03 (illegal data value).
+Bytes after a request would be on the bus in the same frame, and a slave that ends a frame by its size (not by the
+silence of 3.5 chars) would take them for another request, of any function (see :doc:`../security`).
+
 .. code-block:: bash
 
     # the reads, and the writes of registers only
@@ -316,7 +321,8 @@ The server and the TCP to RTU gateway are designed to be safe by default:
 - ``--max-connections-per-host`` (default 16) keeps a single client host from taking every connection, and the
   TCP to RTU gateway shares the serial line between the client hosts: their requests are served in turn (round
   robin), with at most 2 requests per host waiting for the line or in progress;
-- the TCP to RTU gateway never writes a request with an invalid function code (0, or 0x80 to 0xFF) on the bus;
+- the TCP to RTU gateway never writes a request with an invalid function code (0, or 0x80 to 0xFF) on the bus, nor
+  a request of a standard function with a byte missing or bytes after its fields (a hidden frame for some slaves);
 - the RTU to TCP gateway applies the same function list (``--functions``, ``--read-only``) to the frames of the serial
   line, and never relays an invalid function code to the server;
 - the delays (``-t``, ``-e``, ``-i``...) must be greater than 0 and at most one day, the serial rate greater than 0.

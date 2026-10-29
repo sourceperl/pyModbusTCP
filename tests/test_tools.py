@@ -881,6 +881,82 @@ def test_tcp2rtu_invalid_function_codes(read_only: bool) -> None:
         thread.join(5.0)
 
 
+def test_tcp2rtu_request_size_ok() -> None:
+    """A request of a standard function has exactly the size of its fields: no byte missing, no byte after them."""
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools.tcp_to_rtu_gw import request_size_ok
+    cases = [
+        # fixed size: the reads, the single writes, mask write register
+        ('0300000001', True), ('030000000100', False), ('03000000', False), ('0100000010', True),
+        ('0600010005', True), ('0600010005deadbeef', False), ('05000100', False), ('16000a00ff0000', True),
+        ('16000a00ff000000', False),
+        # the functions of the serial line without data, read FIFO queue
+        ('07', True), ('0700', False), ('0b', True), ('0c', True), ('11', True), ('1100', False),
+        ('180001', True), ('18000100', False),
+        # byte count and its data
+        ('0f000000030105', True), ('0f00000003010500', False), ('0f000000030205', False), ('0f0000000301', False),
+        ('0f00000003', False), ('10000000020400010002', True), ('1000000002040001000200', False),
+        ('1000000005', False), ('170000000300100001020001', True), ('17000000030010000102000100', False),
+        ('1700000003001000', False),
+        # file records: their own format
+        ('14070600010000000a', True), ('14070600010000000a00', False), ('14070500010000000a', False),
+        ('150906000100000001abcd', True), ('150906000100000001abcdef', False),
+        # read device identification: MEI type, read code, object id
+        ('2b0e0100', True), ('2b0e010000', False), ('2b0e01', False),
+        # a size unknown to the gateway: as is (diagnostics, another MEI type, a vendor function)
+        ('0800000000', True), ('08000012345678', True), ('2b0d0102030405', True), ('41', True), ('41010203', True),
+    ]
+    for pdu, expected in cases:
+        assert request_size_ok(bytes.fromhex(pdu)) is expected, pdu
+
+
+@pytest.mark.parametrize('kwargs', [{'read_only': True}, {}, {'functions': 'all'}])
+def test_tcp2rtu_no_hidden_frame(kwargs: dict[str, Any]) -> None:
+    """The bytes after a request never reach the serial line: exception 0x03 (illegal data value).
+
+    The PDU of a request is written in one RTU frame, with a CRC at its end. A slave that ends a frame by its size
+    (and not by the silence of 3.5 chars) would take bytes after a request for the next frame: here a write to the
+    slave 5 behind a read of the slave 1, through a read-only gateway.
+    """
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import tcp_to_rtu_gw
+    if kwargs.get('functions') == 'all':
+        kwargs = {'functions': FunctionFilter.parse('all')}
+    serial_port = RecordingSerial()
+    worker = tcp_to_rtu_gw.TcpToRtuWorker(serial_port, timeout=0.1, **kwargs)  # type: ignore[arg-type]
+    thread = threading.Thread(target=worker.loop, daemon=True)
+    thread.start()
+    srv = ModbusServer(host='127.0.0.1', port=0, no_block=True, functions={}, fallback=worker.relay_request)
+    _, tcp_port = srv.start()
+    try:
+        read = bytes.fromhex('0300000001')
+        # the CRC that ends the frame of the read for the slave 1, then the frame of a write for the slave 5
+        hidden = rtu_frame(1, read)[-2:] + rtu_frame(5, bytes.fromhex('060000beef'))
+        for pdu in (read + hidden, read + b'\x00', bytes.fromhex('2b0e0100') + hidden, read[:4]):
+            assert raw_request(tcp_port, pdu) == bytes([pdu[0] | 0x80, 0x03]), pdu.hex()
+        assert serial_port.written == []
+        # the same request without the extra bytes reaches the line (no answer from the slave: exception 0x0B)
+        assert raw_request(tcp_port, read) == b'\x83\x0b'
+        assert serial_port.written == [rtu_frame(1, read)]
+    finally:
+        worker.stop()
+        srv.stop()
+        thread.join(5.0)
+
+
+def test_tcp2rtu_broadcast_no_hidden_frame() -> None:
+    """A broadcast with bytes after its fields (or missing ones) is refused (0x03), never written on the bus."""
+    pytest.importorskip('serial')
+    port = TimedSerial()
+    with broadcast_gateway(port, broadcast_delay=0.0) as tcp_port:
+        with ModbusClient(host='127.0.0.1', port=tcp_port, unit_id=0, timeout=3.0) as c:
+            for pdu in ('060001000adeadbeef', '1000000005', '0f00007fff', '10000000020400010002ff', '16000a00ff000000'):
+                assert c.custom_request(bytes.fromhex(pdu)) is None and c.last_except == 0x03, pdu
+            assert c.custom_request(bytes.fromhex('060001000a')) == bytes.fromhex('060001000a')
+        wait_writes(port, 1)
+        assert [frame for _, frame in port.writes] == [rtu_frame(0, bytes.fromhex('060001000a'))]
+
+
 def test_tcp2rtu_fair_queue_round_robin() -> None:
     """The requests are served in turn by client host, each host in the order of its requests."""
     pytest.importorskip('serial')

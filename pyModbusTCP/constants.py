@@ -1,7 +1,7 @@
 """ pyModbusTCP package constants definition """
 
 # Package version
-VERSION = '0.4.0a4'
+VERSION = '0.4.0a5.dev0'
 # Modbus/TCP
 MODBUS_PORT = 502
 # Modbus function code
@@ -11,13 +11,20 @@ READ_HOLDING_REGISTERS = 0x03
 READ_INPUT_REGISTERS = 0x04
 WRITE_SINGLE_COIL = 0x05
 WRITE_SINGLE_REGISTER = 0x06
+READ_EXCEPTION_STATUS = 0x07
+GET_COMM_EVENT_COUNTER = 0x0B
+GET_COMM_EVENT_LOG = 0x0C
 WRITE_MULTIPLE_COILS = 0x0F
 WRITE_MULTIPLE_REGISTERS = 0x10
+REPORT_SERVER_ID = 0x11
+READ_FILE_RECORD = 0x14
 WRITE_FILE_RECORD = 0x15
 MASK_WRITE_REGISTER = 0x16
 WRITE_READ_MULTIPLE_REGISTERS = 0x17
+READ_FIFO_QUEUE = 0x18
 ENCAPSULATED_INTERFACE_TRANSPORT = 0x2B
-# the functions implemented by the client and the server (not 0x15 and 0x16: only known for read_only)
+# the functions implemented by the client and the server (not 0x07, 0x0B, 0x0C, 0x11 and 0x14 to 0x16, 0x18: only known
+# for read_only and for the size of a request relayed by mbtcp-tcp2rtu)
 SUPPORTED_FUNCTION_CODES = (READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS,
                             WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER, WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS,
                             WRITE_READ_MULTIPLE_REGISTERS, ENCAPSULATED_INTERFACE_TRANSPORT)
