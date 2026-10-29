@@ -725,6 +725,34 @@ class TestRuntimeSettings(_LiveServerTestCase):
         server.allowed_hosts = None
         self.assertEqual(len(self._request(sock)), self.RESP_LEN)
 
+    def test_allowed_hosts_set_while_a_client_connects(self) -> None:
+        """A whitelist set between the check of a new connection and the start of its session: never a session.
+
+        The check of verify_request() saw the old whitelist, and the session was not yet in the snapshot of the
+        sessions to close: the client no longer allowed was served.
+        """
+        from pyModbusTCP.server._transport import CustomThreadingTCPServer
+        checked, go_on = threading.Event(), threading.Event()
+        verify_request = CustomThreadingTCPServer.verify_request
+
+        def slow_verify_request(tcp_server: CustomThreadingTCPServer, request: Any, client_address: Any) -> bool:
+            allowed = verify_request(tcp_server, request, client_address)
+            checked.set()
+            go_on.wait(5.0)
+            return allowed
+
+        with mock.patch.object(CustomThreadingTCPServer, 'verify_request', slow_verify_request):
+            server = self._start_server(allowed_hosts=['127.0.0.1'])
+            sock = self._connect()
+            self.assertTrue(checked.wait(5.0))
+            # allowed by the check, then out of the new whitelist before its session starts
+            server.allowed_hosts = ['10.1.2.3']
+            with self.assertLogs('pyModbusTCP.server', level='WARNING') as logs:
+                go_on.set()
+                self.assertEqual(self._request(sock), b'', 'a client no longer allowed is served')
+            self.assertIn('host not in allowed hosts', '\n'.join(logs.output))
+            self.assertEqual(server.active_sessions, [])
+
     def test_allowed_hosts_value_and_checks(self) -> None:
         server = ModbusServer(allowed_hosts=['192.168.1.10'])
         # a tuple: a change in place (like append()) fails instead of being silently ignored

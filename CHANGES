@@ -21,6 +21,9 @@ Revision history for pyModbusTCP
       function, hidden behind an allowed one, like a write behind a read with --read-only, or a diagnostics 0x08 behind
       a 0x03 with the default --functions. A broadcast of a standard write with a byte missing or bytes in excess is
       no longer answered as a success.
+    - server: a new allowed_hosts set while a client was connecting (between the check of its connection and the start
+      of its session) let this client in, even if the new whitelist refused it: its session was not yet among the
+      sessions to close. The whitelist is checked again when the session starts.
     - client: close() reads and drops the replies not read yet (like the replies of a gateway to broadcasts), so the
       connection ends with a FIN, not a RST. On Windows, a RST made the server lose the requests it had received and
       not yet read: the last broadcasts sent just before a close() could be lost.

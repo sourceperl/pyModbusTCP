@@ -194,13 +194,25 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
                 self._session_keys[request] = key
                 self._host_sessions[key] = self._host_sessions.get(key, 0) + 1
 
-    def _add_session(self, request: Any, client_address: Any) -> None:
+    def _add_session(self, request: Any, client_address: Any) -> bool:
+        """Add a session, if the whitelist still allows its client.
+
+        The whitelist is checked again here, with the sessions lock: verify_request() checked it before, but a new
+        whitelist (ModbusServer.allowed_hosts setter) may have been set since then, and its
+        shutdown_disallowed_sessions() could not see this session yet (it takes its snapshot with this lock). So
+        either this check sees the new whitelist, or the session is in the snapshot and is shut down.
+
+        :returns: False if the client is no longer allowed (no session added)
+        """
         with self._sessions_lock:
+            if not self.is_allowed(client_address):
+                return False
             self._active_sessions[request] = client_address
             key = host_key(client_address, self._ipv6_host_prefix)
             self._session_keys[request] = key
             self._host_sessions[key] = self._host_sessions.get(key, 0) + 1
             self._session_activity[request] = [time.monotonic(), None, False]
+            return True
 
     def _remove_session(self, request: Any) -> None:
         with self._sessions_lock:
@@ -261,13 +273,17 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
             logger.debug('Session shutdown for %r: %r', client_address, e)
         return client_address
 
+    def _log_denied(self, client_address: Any) -> None:
+        """Log a connection refused by the whitelist (once, then once per 10 s at most)."""
+        self._denied_log.event('Connection refused, host not in allowed hosts: %(count)d connection(s) refused '
+                               '(last from %(client)r)', client=client_address)
+
     def verify_request(self, request: Any, client_address: Any) -> bool:
         # called by the main server thread, the only one that add sessions (so these checks are safe: the
         # counters can only decrease meanwhile, when a session ends); the limits are read at each call, a change by
         # the ModbusServer setters applies to the next connection
         if not self.is_allowed(client_address):
-            self._denied_log.event('Connection refused, host not in allowed hosts: %(count)d connection(s) refused '
-                                   '(last from %(client)r)', client=client_address)
+            self._log_denied(client_address)
             return False
         # each limit read once: another thread may change it (even to None) at any time
         # the limit per host first: a host at its limit is refused, it never closes the sessions of the others
@@ -297,7 +313,11 @@ class CustomThreadingTCPServer(ThreadingTCPServer):
         return True
 
     def process_request(self, request: Any, client_address: Any) -> None:
-        self._add_session(request, client_address)
+        if not self._add_session(request, client_address):
+            # the whitelist changed since verify_request(): refused like there
+            self._log_denied(client_address)
+            self.shutdown_request(request)
+            return
         try:
             super().process_request(request, client_address)
         except BaseException:

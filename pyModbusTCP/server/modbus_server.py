@@ -242,6 +242,8 @@ class ModbusServer:
             self._allowed_networks = networks
             tcp_server = self._tcp_server
             if tcp_server is not None:
+                # in this order: a session added from now on is checked against the new whitelist, one added before is
+                # in the snapshot of shutdown_disallowed_sessions() (see CustomThreadingTCPServer._add_session())
                 tcp_server.allowed_networks = networks
                 closed = tcp_server.shutdown_disallowed_sessions()
                 if closed:
