@@ -48,6 +48,11 @@ silent for --broadcast-delay (default 0.1 s): the slaves execute the request
 before the next frame. Only these write functions can be broadcast (exception
 0x01 for the others: a read has no meaning without an answer), and only if
 they are relayed (0x15 is not in the default list of --functions).
+A broadcast is checked like a slave would check it (its size, the value of
+0x05, the quantity and the byte count of 0x0F and 0x10, the end of its range
+of addresses, the format of 0x15): an invalid one gets the exception that a
+slave would answer (0x03, or 0x02 for a range beyond 65535) and is never
+written on the bus, never answered as a success.
 A few broadcasts can wait for the bus (--broadcast-buffer, default 4), each
 one in turn with the other requests of its client host. A broadcast that
 waited more than --broadcast-max-age (default 10 s) is dropped, never written:
@@ -236,6 +241,7 @@ except ModuleNotFoundError as _exc:
 
 from ..constants import (
     ENCAPSULATED_INTERFACE_TRANSPORT,
+    EXP_DATA_ADDRESS,
     EXP_DATA_VALUE,
     EXP_GATEWAY_PATH_UNAVAILABLE,
     EXP_ILLEGAL_FUNCTION,
@@ -261,7 +267,6 @@ from ..constants import (
 from ..server import (
     GatewayPathUnavailable,
     GatewayTargetFailed,
-    IllegalDataValue,
     MemoryStore,
     ModbusException,
     ModbusServer,
@@ -375,6 +380,41 @@ def request_size_ok(pdu: bytes) -> bool:
     if func_code == ENCAPSULATED_INTERFACE_TRANSPORT and pdu[1:2] == bytes([MEI_TYPE_READ_DEVICE_ID]):
         return len(pdu) == READ_DEVICE_ID_REQUEST_SIZE
     return True
+
+
+# max quantity of a broadcast of 0x0F (coils) and 0x10 (registers), as for a request of the Modbus specification
+MAX_WRITE_COILS = 0x07B0
+MAX_WRITE_REGISTERS = 0x007B
+
+
+def broadcast_error(pdu: bytes) -> int:
+    """Check the content of a broadcast request PDU, like a slave would check it: 0 if it's valid, else the code of the
+    exception that a slave would answer (no slave answers a broadcast: the gateway answers it in its place).
+
+    A broadcast is answered as a success by the gateway, before it's written on the bus: a request that every slave
+    refuses must never be answered as a success, nor written on the bus. Checked here: the size (see request_size_ok()),
+    the value of 0x05 (0x0000 or 0xFF00), the quantity of 0x0F and 0x10 (1 to 1968 coils, 1 to 123 registers) and its
+    byte count, the end of the range of addresses (65535 at most), the format of 0x15. 0x06 and 0x16 take any value.
+
+    :param pdu: broadcast request PDU (function code first, a function of BROADCAST_FUNCTIONS)
+    :returns: 0, EXP_DATA_VALUE (0x03) or EXP_DATA_ADDRESS (0x02)
+    """
+    if not request_size_ok(pdu):
+        return EXP_DATA_VALUE
+    func_code = pdu[0]
+    if func_code == WRITE_SINGLE_COIL and pdu[3:5] not in (b'\x00\x00', b'\xff\x00'):
+        return EXP_DATA_VALUE
+    if func_code in (WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS):
+        address, quantity = int.from_bytes(pdu[1:3], 'big'), int.from_bytes(pdu[3:5], 'big')
+        if func_code == WRITE_MULTIPLE_COILS:
+            valid = 1 <= quantity <= MAX_WRITE_COILS and pdu[5] == (quantity + 7) // 8
+        else:
+            valid = 1 <= quantity <= MAX_WRITE_REGISTERS and pdu[5] == 2 * quantity
+        if not valid:
+            return EXP_DATA_VALUE
+        if address + quantity > 0x10000:
+            return EXP_DATA_ADDRESS
+    return 0
 
 
 def response_matches(req_pdu: bytes, resp_pdu: bytes) -> bool:
@@ -827,15 +867,16 @@ class TcpToRtuWorker(_rtu.SerialLink):
         at once. A broadcast that waited more than broadcast_max_age is dropped by the worker (see loop()): a client
         that sends broadcasts faster than the bus can take them never builds a backlog of old writes.
         """
-        # the normal response of the function: the start of the request (checked before the bus: once queued, the
-        # broadcast is written, the client must never get an exception for it)
+        # checked before the bus, like a slave would check it: once queued, the broadcast is written and answered as a
+        # success, a request that every slave refuses must get its exception instead (and never reach the bus)
+        exp_code = broadcast_error(req.pdu)
+        if exp_code:
+            self._refused_log.event('Broadcast refused, invalid request: %(count)d request(s) (last: function '
+                                    '0x%(func_code)02X, exception 0x%(exp_code)02X, from %(client)s)',
+                                    func_code=req.pdu[0], exp_code=exp_code, client=req.ctx.client.address)
+            raise ModbusException(code=exp_code)
+        # the normal response of the function: the start of the request, or the whole request (an echo, for 0x15)
         size = BROADCAST_FUNCTIONS[req.pdu[0]]
-        if size is not None and len(req.pdu) < size:
-            raise IllegalDataValue()
-        # the echo of a whole request (0x15): its format is checked, a malformed one (like the function code alone)
-        # gave a response refused by the server ("slave device failure"), while the frame was queued for the bus
-        if size is None and not is_write_file_record(req.pdu):
-            raise IllegalDataValue()
         response = req.pdu if size is None else req.pdu[:size]
         with self._broadcast_lock:
             if self._broadcasts_waiting >= self.broadcast_buffer:

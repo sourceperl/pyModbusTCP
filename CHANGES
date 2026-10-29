@@ -21,6 +21,10 @@ Revision history for pyModbusTCP
       function, hidden behind an allowed one, like a write behind a read with --read-only, or a diagnostics 0x08 behind
       a 0x03 with the default --functions. A broadcast of a standard write with a byte missing or bytes in excess is
       no longer answered as a success.
+    - mbtcp-tcp2rtu answered as a success, and wrote on the bus, a broadcast that every slave refuses: a coil value
+      other than 0x0000 or 0xFF00 (0x05), a quantity of 0x0F or 0x10 of 0 or above the limit of the specification, or
+      that doesn't match its byte count, a range of addresses beyond 65535. It now gets the exception of a slave (0x03,
+      or 0x02 for the range) and is never written on the bus.
 
 0.4.0a4 2026-10-28 (alpha: the command line tools, their options and output, may still change before 0.4.0)
 

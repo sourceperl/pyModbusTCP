@@ -131,6 +131,9 @@ quantity for 0x0F and 0x10): a client never waits for a timeout. The bus then st
 
 A broadcast of another function (a read), or of a function out of ``--functions`` (like 0x15, not in the default
 list), is refused with exception 0x01, and a broadcast is never relayed with ``--read-only``. The response only means "queued for the bus": no slave confirms a broadcast.
+An invalid broadcast (a coil value other than 0x0000 or 0xFF00, a quantity of 0x0F or 0x10 out of range or that
+doesn't match its byte count, a range of addresses beyond 65535...) gets the exception that a slave would answer
+(0x03, or 0x02 for the range), and is never written on the bus.
 
 The response comes as soon as the broadcast is in the queue of the bus, in turn with the other requests of its client
 host (a request after a broadcast is never written before it). A few broadcasts can wait for the bus:

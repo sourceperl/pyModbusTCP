@@ -158,7 +158,10 @@ are relayed as is when `--functions` allows them: only allow them for slaves tha
 
 Broadcast requests (unit id 0, only with `--allow-broadcast`) have a small buffer: a few of them wait for the line
 (`--broadcast-buffer`, 4 by default, 8 at most: half of the queue, the other requests keep their place), the next
-ones get the exception 0x06 (slave device busy) at once. A broadcast that waited more than `--broadcast-max-age`
+ones get the exception 0x06 (slave device busy) at once. A broadcast is answered as a success before the bus, without
+any slave answer: it is checked first like a slave would check it (its size, the value of 0x05, the quantity and the
+byte count of 0x0F and 0x10, the end of its range of addresses, the format of 0x15), an invalid one gets the exception
+of a slave (0x03 or 0x02) and is never written on the bus. A broadcast that waited more than `--broadcast-max-age`
 (10 s by default) is dropped, never written. A client that sends broadcasts faster than the line can take them never
 builds a backlog of old writes, applied long after it stopped. The buffer is shared by all the client hosts: a host
 that floods it delays the broadcasts of the others (0x06), never their other requests.

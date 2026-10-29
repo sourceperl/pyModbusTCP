@@ -957,6 +957,46 @@ def test_tcp2rtu_broadcast_no_hidden_frame() -> None:
         assert [frame for _, frame in port.writes] == [rtu_frame(0, bytes.fromhex('060001000a'))]
 
 
+def test_tcp2rtu_broadcast_error() -> None:
+    """The content of a broadcast is checked like a slave would check it: 0, or the exception code of a slave."""
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools.tcp_to_rtu_gw import broadcast_error
+    cases = [
+        # write single coil: 0x0000 or 0xFF00 only
+        ('050001ff00', 0), ('0500010000', 0), ('0500001234', 0x03), ('05000100ff', 0x03), ('050001ff', 0x03),
+        # write single register, mask write register: any value
+        ('060001ffff', 0), ('16000a00ff0000', 0),
+        # write multiple coils: 1 to 1968 coils, (quantity + 7) // 8 bytes, the range in 0 to 65535
+        ('0f000000030105', 0), ('0f00007fff0105', 0x03), ('0f0000000001ff', 0x03), ('0f000000090105', 0x03),
+        ('0f000007b0f6' + 'ff' * 246, 0), ('0f000007b1f6' + 'ff' * 246, 0x03), ('0ffff8000902ffff', 0x02),
+        ('0fffff00010101', 0),
+        # write multiple registers: 1 to 123 registers, 2 bytes each, the range in 0 to 65535
+        ('10000000020400010002', 0), ('1000000003020001', 0x03), ('100000000000', 0x03),
+        ('100000007bf6' + '00' * 246, 0), ('100000007cf8' + '00' * 248, 0x03), ('10ffff00020400010002', 0x02),
+        # write file record: its format; the size of each function
+        ('150906000100000001abcd', 0), ('15', 0x03), ('1000000005', 0x03), ('060001000adeadbeef', 0x03),
+    ]
+    for pdu, expected in cases:
+        assert broadcast_error(bytes.fromhex(pdu)) == expected, pdu
+
+
+def test_tcp2rtu_broadcast_invalid_content() -> None:
+    """A broadcast that every slave would refuse gets the exception of a slave, never a success, never the bus."""
+    pytest.importorskip('serial')
+    port = TimedSerial()
+    with broadcast_gateway(port, broadcast_delay=0.0) as tcp_port:
+        with ModbusClient(host='127.0.0.1', port=tcp_port, unit_id=0, timeout=3.0) as c:
+            for pdu, exp_code in (('0500001234', 0x03), ('0f00007fff0105', 0x03), ('0f0000000001ff', 0x03),
+                                  ('1000000003020001', 0x03), ('100000000000', 0x03), ('10ffff00020400010002', 0x02)):
+                assert c.custom_request(bytes.fromhex(pdu)) is None and c.last_except == exp_code, pdu
+            # the library client never sends them: its broadcasts are valid ones
+            assert c.write_single_coil(1, True, broadcast=True)
+            assert c.write_multiple_registers(10, [1, 2], broadcast=True)
+        wait_writes(port, 2)
+        expected = [rtu_frame(0, bytes.fromhex('050001ff00')), rtu_frame(0, bytes.fromhex('10000a00020400010002'))]
+        assert [frame for _, frame in port.writes] == expected
+
+
 def test_tcp2rtu_fair_queue_round_robin() -> None:
     """The requests are served in turn by client host, each host in the order of its requests."""
     pytest.importorskip('serial')
