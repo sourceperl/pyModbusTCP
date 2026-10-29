@@ -18,6 +18,20 @@ except ModuleNotFoundError as _exc:
         raise
     raise ModuleNotFoundError(SERIAL_MISSING_MSG, name='serial') from _exc
 
+from ..constants import (
+    ENCAPSULATED_INTERFACE_TRANSPORT,
+    MASK_WRITE_REGISTER,
+    MEI_TYPE_READ_DEVICE_ID,
+    READ_COILS,
+    READ_DISCRETE_INPUTS,
+    READ_HOLDING_REGISTERS,
+    READ_INPUT_REGISTERS,
+    WRITE_MULTIPLE_COILS,
+    WRITE_MULTIPLE_REGISTERS,
+    WRITE_READ_MULTIPLE_REGISTERS,
+    WRITE_SINGLE_COIL,
+    WRITE_SINGLE_REGISTER,
+)
 from ..utils import crc16
 
 # exceptions raised by the serial port when the device is lost (explicit type,
@@ -43,7 +57,8 @@ MIN_RTU_FRAME = 4
 MIN_EOF_DELAY = 0.02
 # BROADCAST_ADDRESS (0) and MAX_SLAVE_ADDRESS (247): from _common (without pyserial, for the argparse types)
 __all__ = ['BROADCAST_ADDRESS', 'MAX_RTU_FRAME', 'MAX_SLAVE_ADDRESS', 'MIN_EOF_DELAY', 'MIN_RTU_FRAME',
-           'RECONNECT_DELAY', 'SERIAL_IO_ERRORS', 'ModbusRTUFrame', 'SerialLink', 'hexdump', 't35']
+           'RECONNECT_DELAY', 'SERIAL_IO_ERRORS', 'ModbusRTUFrame', 'SerialLink', 'hexdump', 'response_matches',
+           't35']
 
 
 def hexdump(data: bytes) -> str:
@@ -60,6 +75,69 @@ def t35(baudrate: int, bytesize: int, parity: str, stopbits: float) -> float:
         return 0.00175
     bits_per_char = 1 + bytesize + (0 if parity == PARITY_NONE else 1) + stopbits
     return 3.5 * bits_per_char / baudrate
+
+
+def _is_device_id_response(req_pdu: bytes, resp_pdu: bytes) -> bool:
+    """Check a read device identification (0x2B/0x0E) response: the MEI type and the read device id code of the
+    request echoed, then conformity level, more follows, next object id, number of objects, and exactly these objects
+    ([object id, length, value]...), nothing after the last one."""
+    if len(resp_pdu) < 7 or resp_pdu[1:3] != req_pdu[1:3]:
+        return False
+    offset = 7
+    for _ in range(resp_pdu[6]):
+        if offset + 2 > len(resp_pdu):
+            return False
+        offset += 2 + resp_pdu[offset + 1]
+    return offset == len(resp_pdu)
+
+
+def response_matches(req_pdu: bytes, resp_pdu: bytes) -> bool:
+    """Check the content of a response PDU against its request PDU (same function code, already checked).
+
+    Used by both gateways, for the responses they relay:
+
+    - mbtcp-tcp2rtu: RTU frames have no transaction id, a late reply of a slave (after the timeout of the previous
+      request) can only be told apart from the expected one by its content;
+    - mbtcp-rtu2tcp: the response of the Modbus/TCP server is written on the serial line as is, in one RTU frame with a
+      valid CRC at its end. Bytes after the fields of the response would be read as the next frame by a slave that
+      ends a frame by its size (from the function code and the byte count, not by the silence of 3.5 chars): a hidden
+      request to any slave of the bus, from the server or from anyone on the path of the TCP connection.
+
+    For the standard functions, the response has a size set by the request (functions 0x01 to 0x04, 0x17) or echoes a
+    part of it (0x05, 0x06, 0x0F, 0x10, 0x16), and a read device identification (0x2B/0x0E) has exactly its objects.
+    An exception response is the function code and the exception code, nothing else. The other functions are accepted
+    as is (their content is unknown to the gateways), and so is a request too short to be decoded (never written on
+    the serial line by mbtcp-tcp2rtu).
+
+    :param req_pdu: request PDU (function code first)
+    :param resp_pdu: response PDU (function code first)
+    :returns: True if the response may be the one of the request
+    """
+    func_code = req_pdu[0]
+    if resp_pdu[0] & 0x80:
+        # exception response: function code + exception code, nothing else
+        return len(resp_pdu) == 2
+    if func_code in (READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS,
+                     WRITE_READ_MULTIPLE_REGISTERS):
+        if len(req_pdu) < 5:
+            return True
+        quantity = int.from_bytes(req_pdu[3:5], 'big')
+        if func_code in (READ_COILS, READ_DISCRETE_INPUTS):
+            byte_count = (quantity + 7) // 8
+        else:
+            byte_count = 2 * quantity
+        return len(resp_pdu) == 2 + byte_count and resp_pdu[1] == byte_count
+    if func_code in (WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER):
+        # echo of the request
+        return len(req_pdu) < 5 or resp_pdu == req_pdu[:5]
+    if func_code in (WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS):
+        # address and quantity of the request
+        return len(req_pdu) < 5 or resp_pdu == req_pdu[:5]
+    if func_code == MASK_WRITE_REGISTER:
+        return len(req_pdu) < 7 or resp_pdu == req_pdu[:7]
+    if func_code == ENCAPSULATED_INTERFACE_TRANSPORT and req_pdu[1:2] == bytes([MEI_TYPE_READ_DEVICE_ID]):
+        return _is_device_id_response(req_pdu, resp_pdu)
+    return True
 
 
 class ModbusRTUFrame:

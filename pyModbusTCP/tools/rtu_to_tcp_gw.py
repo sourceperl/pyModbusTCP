@@ -35,8 +35,13 @@ HOW A REQUEST IS PROCESSED
    never sent to the server (see ACCESS CONTROL).
 4. The PDU (function code + data) is kept unchanged and sent to the Modbus/TCP
    server (with unit id -u).
-5. The server answer PDU is wrapped in an RTU frame (slave address in front,
-   CRC16 at the end) and written on the serial line.
+5. The server answer PDU is checked against the request (for the standard
+   functions: the size of the data read, the echo of a write, exactly the
+   objects of a read device identification, an exception of 2 bytes), then
+   wrapped in an RTU frame (slave address in front, CRC16 at the end) and
+   written on the serial line. An answer with bytes after its fields is never
+   written: a slave that ends a frame by its size would take them for a hidden
+   request (to any slave of the bus); the master gets exception 0x0B.
    A broadcast request is relayed to the server but never answered.
 
 The requests to the server are sent by a relay thread, one at a time and in
@@ -68,8 +73,9 @@ ERRORS SEEN BY THE RTU MASTER
   code is returned to the master.
 - A function out of --functions (or --read-only): exception 0x01 "Illegal
   Function", from the gateway itself.
-- The Modbus/TCP server is unreachable or doesn't answer before the timeout
-  (-t): exception 0x0B "Gateway Target Device Failed To Respond".
+- The Modbus/TCP server is unreachable, doesn't answer before the timeout
+  (-t), or its answer is not consistent with the request (see step 5):
+  exception 0x0B "Gateway Target Device Failed To Respond".
 
 SERIAL PORT FAILURE
 -------------------
@@ -84,6 +90,10 @@ LIMITATIONS
 -----------
 - The gateway acts as one single RTU slave: it answers to one address only (-a).
 - Requests are served one at a time, as the serial line is.
+- The content of an answer is only checked for the standard functions (0x01
+  to 0x06, 0x0F, 0x10, 0x16, 0x17, 0x2B/0x0E): the answer of another function
+  (diagnostics 0x08, a vendor function, with --functions) is written as is,
+  only relay them from a server that you trust with the serial line.
 
 USAGE
 -----
@@ -173,6 +183,7 @@ from ._rtu import (
     ModbusRTUFrame,
     SerialLink,
     hexdump,
+    response_matches,
 )
 
 logger = logging.getLogger("mbtcp-rtu2tcp")
@@ -327,6 +338,8 @@ class RtuToTcpWorker(SlaveSerialWorkerModel):
         self._jobs: queue.Queue[_RelayJob | None] = queue.Queue()
         self._relay_thread: Thread | None = None
         self._bcast_dropped_log = LogThrottle(logger)
+        # responses of the server refused by response_matches(): one message per 10 s at most
+        self._invalid_resp_log = LogThrottle(logger)
 
     def stop(self) -> None:
         """Ask the worker loop and the relay thread to exit."""
@@ -418,6 +431,13 @@ class RtuToTcpWorker(SlaveSerialWorkerModel):
             self._error_log.event('Unexpected error with Modbus/TCP client: %(count)d error(s)', exc_info=True)
             return None, EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
         if resp_pdu:
+            # written on the serial line as is: never bytes after the fields of the response, a slave that ends a frame
+            # by its size would take them for a hidden request (see response_matches())
+            if not response_matches(pdu, resp_pdu):
+                self._invalid_resp_log.event('Response of the Modbus/TCP server not consistent with the request, not '
+                                             'written on the serial line: %(count)d response(s) (last: function '
+                                             '0x%(func_code)02X, %(size)d bytes)', func_code=pdu[0], size=len(resp_pdu))
+                return None, EXP_GATEWAY_TARGET_DEVICE_FAILED_TO_RESPOND
             return resp_pdu, 0
         logger.warning('Modbus/TCP request failed: %s', cli.last_error_as_txt)
         # the server answered with a modbus exception: pass it as is to the master

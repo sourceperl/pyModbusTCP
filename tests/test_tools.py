@@ -1572,6 +1572,45 @@ def test_rtu2tcp_late_response_dropped(server: tuple[ModbusServer, int], caplog:
     assert any('Response dropped' in r.getMessage() for r in caplog.records)
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='needs a pseudo-terminal (POSIX only)')
+@pytest.mark.parametrize('request_pdu, response_pdu', [
+    # read 1 holding register: 2 bytes of data, then a whole RTU frame (write register 0x10 = 0x1234 on slave 5)
+    ('0300000001', '0302002a' + rtu_frame(5, bytes.fromhex('0600101234')).hex()),
+    # read 1 holding register: a byte count of 2 and 4 bytes of data
+    ('0300000001', '0302002a002b'),
+    # write single register: the echo, then a byte
+    ('0600010005', '060001000500'),
+    # read device identification: one object announced, a hidden frame after it
+    ('2b0e0100', '2b0e01810000010001' + '41' + rtu_frame(5, bytes.fromhex('0600101234')).hex()),
+])
+def test_rtu2tcp_no_hidden_frame_in_response(request_pdu: str, response_pdu: str,
+                                             caplog: pytest.LogCaptureFixture) -> None:
+    """A response of the Modbus/TCP server with bytes after its fields is never written on the serial line (a slave
+    that ends a frame by its size would take them for a hidden request): the master gets exception 0x0B."""
+    request, response = bytes.fromhex(request_pdu), bytes.fromhex(response_pdu)
+    srv = ModbusServer('127.0.0.1', 0, no_block=True, functions={request[0]: lambda _req: response})
+    _, tcp_port = srv.start()
+    try:
+        with caplog.at_level(logging.WARNING, logger='mbtcp-rtu2tcp'), \
+                rtu2tcp_gateway(tcp_port) as (master_fd, _worker):
+            os.write(master_fd, rtu_frame(30, request))
+            assert read_answer(master_fd, 3.0) == rtu_frame(30, bytes([request[0] | 0x80, 0x0B]))
+    finally:
+        srv.stop()
+    assert any('not consistent with the request' in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='needs a pseudo-terminal (POSIX only)')
+def test_rtu2tcp_device_id_response_relayed(server: tuple[ModbusServer, int]) -> None:
+    """A valid read device identification response (several objects) is still relayed as is."""
+    srv, tcp_port = server
+    srv.device_id = DeviceIdentification(vendor_name=b'ACME', product_code=b'P1', major_minor_revision=b'1.0')
+    with rtu2tcp_gateway(tcp_port) as (master_fd, _worker):
+        os.write(master_fd, rtu_frame(30, bytes.fromhex('2b0e0100')))
+        answer = read_answer(master_fd, 3.0)
+    assert answer[:3] == bytes.fromhex('1e2b0e') and b'ACME' in answer and crc16(answer) == 0
+
+
 def test_rtu2tcp_filters() -> None:
     """S10 of the audit: the gateway relays the functions of its filter only (the standard data functions by default,
     like mbtcp-tcp2rtu); an invalid function code is never relayed nor answered, a broadcast only for a write."""
@@ -1613,13 +1652,15 @@ def test_rtu2tcp_filters() -> None:
     # ignored, never sent to the server
     sent, answers = run([(30, '0300000001'), (30, '0800000000'), (30, '8302'), (30, '00'), (30, '2b0d00')])
     assert sent == ['0300000001']
-    assert answers == ['0300000001', '8801', '', '', 'ab01']
+    # (the echo of a read is not a valid response of the server: never written, exception 0x0B, see
+    # test_rtu2tcp_no_hidden_frame_in_response)
+    assert answers == ['830b', '8801', '', '', 'ab01']
     # --functions all: the diagnostic is relayed, never an invalid code
     sent, _ = run([(30, '0800000000'), (30, '8302')], functions=FunctionFilter(None))
     assert sent == ['0800000000']
     # --read-only: the reads only
     sent, answers = run([(30, '0300000001'), (30, '0600000001')], read_only=True)
-    assert (sent, answers) == (['0300000001'], ['0300000001', '8601'])
+    assert (sent, answers) == (['0300000001'], ['830b', '8601'])
     assert rtu_to_tcp_gw.RtuToTcpWorker(SilentSerial(), EchoClient(),  # type: ignore[arg-type]
                                         read_only=True).functions == READ_ONLY_FUNCTIONS
     # broadcasts (never answered): a write of the filter only, never in read-only mode
@@ -1938,7 +1979,8 @@ def test_gateway_without_pyserial(command: str) -> None:
 def test_tcp2rtu_response_matches() -> None:
     """The content of a response is checked against its request (RTU frames have no transaction id)."""
     pytest.importorskip('serial')
-    from pyModbusTCP.tools.tcp_to_rtu_gw import response_matches
+    # the check of the two gateways (mbtcp-tcp2rtu and mbtcp-rtu2tcp)
+    from pyModbusTCP.tools._rtu import response_matches
     cases = [
         # read holding registers, 1 register: 2 bytes of data, no more no less
         ('0300640001', '03021234', True), ('0300640001', '030412345678', False), ('0300640001', '0302123456', False),
@@ -1955,6 +1997,10 @@ def test_tcp2rtu_response_matches() -> None:
         ('170000000300100001020001', '1706000100020003', True), ('170000000300100001020001', '17020001', False),
         # read device identification: MEI type and read code echoed
         ('2b0e0100', '2b0e01830000010003414243', True), ('2b0e0100', '2b0e02830000010003414243', False),
+        # read device identification: exactly the objects announced, nothing after them
+        ('2b0e0100', '2b0e018300000200034142430101' + '58', True), ('2b0e0100', '2b0e01830000000000', False),
+        ('2b0e0100', '2b0e0183000001000341424344', False), ('2b0e0100', '2b0e01830000020003414243', False),
+        ('2b0e0100', '2b0e018300000100054142', False), ('2b0e0100', '2b0e0183000000', True),
         # exception: exactly the function code and the exception code
         ('0300640001', '8302', True), ('0300640001', '830200', False),
         # unknown function: accepted as is

@@ -16,6 +16,14 @@ Revision history for pyModbusTCP
 
     Fixes:
 
+    - security: mbtcp-rtu2tcp wrote the response of the Modbus/TCP server on the serial line as is. Bytes after its
+      fields (like a read of 1 register answered with 2 bytes of data and a whole RTU frame after them) were in the
+      same RTU frame: a slave that ends a frame by its size took them for the next frame, a hidden request to any
+      slave of the bus, sent by the server or by anyone on the path of the TCP connection. The response of a standard
+      function (0x01 to 0x06, 0x0F, 0x10, 0x16, 0x17, 0x2B/0x0E) must now be consistent with its request (like for
+      mbtcp-tcp2rtu), else it is never written and the master gets the exception 0x0B.
+    - mbtcp-tcp2rtu: the response of a slave to a read device identification (0x2B/0x0E) must have exactly the
+      objects it announces (it was only checked for its first 7 bytes), else it is ignored like a stray frame.
     - security: mbtcp-tcp2rtu wrote the bytes after a request on the bus, in the same RTU frame. A slave that ends a
       frame by its size (not by the silence of 3.5 chars) took them for the next frame: a request to any slave, for any
       function, hidden behind an allowed one, like a write behind a read with --read-only, or a diagnostics 0x08 behind

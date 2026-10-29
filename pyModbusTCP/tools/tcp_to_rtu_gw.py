@@ -283,6 +283,7 @@ from ._rtu import (
     MIN_EOF_DELAY,
     SERIAL_IO_ERRORS,
     hexdump,
+    response_matches,
 )
 
 logger = logging.getLogger("mbtcp-tcp2rtu")
@@ -415,47 +416,6 @@ def broadcast_error(pdu: bytes) -> int:
         if address + quantity > 0x10000:
             return EXP_DATA_ADDRESS
     return 0
-
-
-def response_matches(req_pdu: bytes, resp_pdu: bytes) -> bool:
-    """Check the content of a response PDU against its request PDU (same function code, already checked).
-
-    RTU frames have no transaction id: a late reply of a slave (after the timeout of the previous request) can only
-    be told apart from the expected one by its content. For the standard functions, the response has a size set by
-    the request (functions 0x01 to 0x04, 0x17) or echoes a part of it (0x05, 0x06, 0x0F, 0x10, 0x16, 0x2B/0x0E).
-    The other functions are accepted as is (their content is unknown to the gateway), and so is a request too short
-    to be decoded (never written on the serial line by the gateway, see request_size_ok()).
-
-    :param req_pdu: request PDU (function code first)
-    :param resp_pdu: response PDU (function code first)
-    :returns: True if the response may be the one of the request
-    """
-    func_code = req_pdu[0]
-    if resp_pdu[0] & 0x80:
-        # exception response: function code + exception code, nothing else
-        return len(resp_pdu) == 2
-    if func_code in (READ_COILS, READ_DISCRETE_INPUTS, READ_HOLDING_REGISTERS, READ_INPUT_REGISTERS,
-                     WRITE_READ_MULTIPLE_REGISTERS):
-        if len(req_pdu) < 5:
-            return True
-        quantity = int.from_bytes(req_pdu[3:5], 'big')
-        if func_code in (READ_COILS, READ_DISCRETE_INPUTS):
-            byte_count = (quantity + 7) // 8
-        else:
-            byte_count = 2 * quantity
-        return len(resp_pdu) == 2 + byte_count and resp_pdu[1] == byte_count
-    if func_code in (WRITE_SINGLE_COIL, WRITE_SINGLE_REGISTER):
-        # echo of the request
-        return len(req_pdu) < 5 or resp_pdu == req_pdu[:5]
-    if func_code in (WRITE_MULTIPLE_COILS, WRITE_MULTIPLE_REGISTERS):
-        # address and quantity of the request
-        return len(req_pdu) < 5 or resp_pdu == req_pdu[:5]
-    if func_code == MASK_WRITE_REGISTER:
-        return len(req_pdu) < 7 or resp_pdu == req_pdu[:7]
-    if func_code == ENCAPSULATED_INTERFACE_TRANSPORT and req_pdu[1:2] == bytes([MEI_TYPE_READ_DEVICE_ID]):
-        # MEI type and read device id code echoed, then conformity level, more follows, next id, number of objects
-        return len(resp_pdu) >= 7 and resp_pdu[1:3] == req_pdu[1:3]
-    return True
 
 
 def find_response(raw: bytes, request: 'CheckedRTUFrame') -> bytes:

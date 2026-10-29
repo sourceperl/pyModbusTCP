@@ -169,6 +169,18 @@ that floods it delays the broadcasts of the others (0x06), never their other req
 With N client hosts that send requests at the same time, each one gets 1/N of the serial line: many hosts can
 still slow down the others. As for the server, `--allow` and the firewall are the real protections.
 
+### RTU to TCP gateway (`mbtcp-rtu2tcp`)
+
+The response of the Modbus/TCP server is written on the serial line in one RTU frame, with a CRC at its end. A slave
+that ends a frame by its size (from the function code and the byte count, not by the silence of 3.5 chars) would take
+bytes after the fields of the response for the next frame: a hidden request to any slave of the bus, sent by the
+server or by anyone on the path of the TCP connection (Modbus/TCP has no integrity protection). The response of a
+standard function (0x01 to 0x06, 0x0F, 0x10, 0x16, 0x17, 0x2B/0x0E) is checked against its request (the size of the
+data read, the echo of a write, exactly the objects of a read device identification, an exception of 2 bytes): any
+other one is never written on the serial line, the master gets the exception 0x0B (gateway target device failed to
+respond). The responses of the other functions (diagnostics 0x08, vendor functions, only relayed with `--functions`)
+are written as is: only relay them from a server that you trust with the serial line.
+
 ### Link-local IPv6 addresses
 
 Every IPv6 interface has a link-local address (`fe80::/10`), only valid on its own link (never routed). Every
