@@ -844,6 +844,24 @@ class TestEvictIdle(_LiveServerTestCase):
     def _served(self, sock: socket.socket) -> bool:
         return len(self._request(sock)) == self.RESP_LEN
 
+    def _wait_idle(self, server: ModbusServer) -> None:
+        """Wait until no session of the server is busy.
+
+        A session is busy until the end of request_ended(), called by its thread just after the send of the response:
+        a client can get the response before (the thread is not yet scheduled again). Eviction only closes an idle
+        session: a test that connects a new client right after a response must wait for this, or the new client may
+        be refused (every session still busy).
+        """
+        tcp_server = server._tcp_server
+        assert tcp_server is not None
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            with tcp_server._sessions_lock:
+                if not any(activity[2] for activity in tcp_server._session_activity.values()):
+                    return
+            time.sleep(0.005)
+        self.fail('a session is still busy 5 s after its response')
+
     def test_never_active_session_evicted_first(self) -> None:
         """A connection without any request is closed before an older client with requests."""
         server = self._start_server(max_connections=3)
@@ -897,7 +915,7 @@ class TestEvictIdle(_LiveServerTestCase):
             return req.pdu
 
         self.addCleanup(release.set)
-        self._start_server(max_connections=1, functions={}, fallback=fallback)
+        server = self._start_server(max_connections=1, functions={}, fallback=fallback)
         busy = self._connect()
         busy.sendall(b'\x00\x01\x00\x00\x00\x03\x01\x41\x00')
         self.assertTrue(started.wait(5))
@@ -907,7 +925,9 @@ class TestEvictIdle(_LiveServerTestCase):
         release.set()
         busy.settimeout(5)
         self.assertEqual(busy.recv(9), b'\x00\x01\x00\x00\x00\x03\x01\x41\x00')
-        # once answered, the session is idle again: it makes room for the next client
+        # once answered, the session is idle again: it makes room for the next client (once its thread has ended the
+        # request, it may come just after the response)
+        self._wait_idle(server)
         with self.assertLogs('pyModbusTCP.server', level='WARNING'):
             newcomer = self._connect()
             newcomer.sendall(b'\x00\x02\x00\x00\x00\x03\x01\x41\x00')
@@ -958,6 +978,7 @@ class TestEvictIdle(_LiveServerTestCase):
         self.assertTrue(self._served(mine))
         self.assertEqual(len(server.active_sessions), 2)
         # a third host is under its limit: it takes the place of the most idle session
+        self._wait_idle(server)
         with self.assertLogs('pyModbusTCP.server', level='WARNING'):
             self.assertTrue(self._served(self._connect_from('127.0.0.3')))
         self.assertIsNotNone(self._closed_after(other, 2.0), 'the most idle session is not closed')
@@ -982,6 +1003,7 @@ class TestEvictIdle(_LiveServerTestCase):
             self.assertIsNotNone(self._closed_after(self._connect(), 2.0), 'evict_idle=False not applied')
         self.assertTrue(self._served(first))
         server.evict_idle = True
+        self._wait_idle(server)
         with self.assertLogs('pyModbusTCP.server', level='WARNING'):
             self.assertTrue(self._served(self._connect()))
         self.assertIsNotNone(self._closed_after(first, 2.0))
