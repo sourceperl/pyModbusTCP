@@ -1783,6 +1783,29 @@ def test_rtu_scan_echo(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.M
     assert 'no answer' not in out and 'bad CRC' not in out
 
 
+def test_rtu_scan_answer_size() -> None:
+    """A response is the answer of a slave only with the byte count of one value: 1 byte for a bit, 2 for a register.
+
+    A byte count of 0 was taken for an answer, and its CRC printed as the value of the register.
+    """
+    pytest.importorskip('serial')
+    from pyModbusTCP.tools import rtu_scan
+    from pyModbusTCP.tools._rtu import ModbusRTUFrame
+    cases = [
+        # (function of the probe, PDU of the response, answer?)
+        (3, '03021234', True), (4, '04021234', True), (1, '010101', True), (2, '020100', True),
+        (3, '0300', False), (3, '030112', False), (3, '030412345678', False),  # 0, 1 or 4 bytes for one register
+        (1, '0100', False), (1, '01020100', False),                            # 0 or 2 bytes for one coil
+        (3, '8302', True), (3, '830200', False), (3, '8402', False),           # an exception: of this function only
+    ]
+    for function, pdu, expected in cases:
+        scanner = rtu_scan.Scanner(SilentSerial(), function=function)  # type: ignore[arg-type]
+        frame = ModbusRTUFrame(rtu_frame(7, bytes.fromhex(pdu)))
+        assert scanner.is_answer(frame, 7) is expected, (function, pdu)
+    assert not rtu_scan.Scanner(SilentSerial()).is_answer(  # type: ignore[arg-type]
+        ModbusRTUFrame(rtu_frame(8, bytes.fromhex('03021234'))), 7)
+
+
 def test_rtu_scan_types() -> None:
     pytest.importorskip('serial')
     from pyModbusTCP.tools import rtu_scan

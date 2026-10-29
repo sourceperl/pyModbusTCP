@@ -21,6 +21,9 @@ Revision history for pyModbusTCP
       function, hidden behind an allowed one, like a write behind a read with --read-only, or a diagnostics 0x08 behind
       a 0x03 with the default --functions. A broadcast of a standard write with a byte missing or bytes in excess is
       no longer answered as a success.
+    - mbtcp-rtu-scan took a response with a byte count of 0 (or of another size than one value) for the answer of
+      a slave, and printed its CRC as the value read. A response must now have the byte count of one value: 1 byte
+      for a coil or an input, 2 for a register; another one is listed with the hints.
     - server: a threaded change listener (subscribe(threaded=True)) could get the events of two concurrent requests in
       the reverse order of their commits (queued after the lock of the store): a listener that keeps the last value of
       a register could keep the older one. They are queued in the order of the commits, as the server guide says. The

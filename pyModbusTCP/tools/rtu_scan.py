@@ -271,11 +271,17 @@ class Scanner:
         return Answer(address, frame, self.is_answer(ModbusRTUFrame(frame), address))
 
     def is_answer(self, frame: ModbusRTUFrame, address: int) -> bool:
-        """True if frame is the answer of address to the request: a response or an exception, of the right size."""
+        """True if frame is the answer of address to the request: a response or an exception, of the right size.
+
+        The request reads one coil, input or register: a response has exactly its byte (a bit) or its 2 bytes (a
+        register), with this byte count. Another one (like a byte count of 0, where describe() would read the CRC as
+        the value) is not the answer of a slave with these settings.
+        """
         if not frame.is_valid or frame.slave_address != address:
             return False
         if frame.function_code == self.function:
-            return len(frame.raw) == 5 + frame.raw[2]
+            byte_count = 1 if self.function in (1, 2) else 2
+            return frame.raw[2] == byte_count and len(frame.raw) == 5 + byte_count
         return frame.function_code == self.function | 0x80 and len(frame.raw) == 5
 
     def show_progress(self, text: str) -> None:
@@ -374,7 +380,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 def print_hints(hints: list[str]) -> None:
     if hints:
-        print('answers with a bad CRC or from another address (other settings, or a noisy line):')
+        print('answers with a bad CRC, from another address or of a wrong size (other settings, or a noisy line):')
         print('\n'.join(hints[:MAX_HINTS]))
         if len(hints) > MAX_HINTS:
             print(f'... and {len(hints) - MAX_HINTS} more')
