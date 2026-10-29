@@ -3,6 +3,7 @@
 import socket
 import sys
 import threading
+import time
 import unittest
 from typing import Any
 from unittest import mock
@@ -301,6 +302,35 @@ class TestNotifications(unittest.TestCase):
         self.assertFalse(joined.is_alive(), 'join_notifications() never returns')
         self.assertEqual(received, [1, 2])
         self.assertIn('SystemExit', '\n'.join(logs.output))
+
+    def test_threaded_listener_gets_the_events_in_the_order_of_the_commits(self) -> None:
+        """Two concurrent writes: a threaded listener gets their events in the order of the commits.
+
+        The events were queued after the lock of the store: the thread of the first commit, held by a slow listener
+        called before (here a listener of its own thread), queued its event after the one of a later commit.
+        """
+        store = MemoryStore(16)
+        slow_started = threading.Event()
+
+        def slow(event: ChangeEvent) -> None:
+            if event.changes[0].new == 1:
+                slow_started.set()
+                time.sleep(0.3)
+
+        received: list[tuple[int, int]] = []
+        # subscribed first: called before the threaded one was queued (before the fix)
+        store.subscribe(slow, app_writes=True)
+        store.subscribe(lambda event: received.extend((c.old, c.new) for c in event.changes), app_writes=True,
+                        threaded=True)
+        first = threading.Thread(target=store.app.holding_registers.write, args=(0, [1]))
+        first.start()
+        self.assertTrue(slow_started.wait(5.0))
+        # committed after the first one, while the listener of the first one runs
+        store.app.holding_registers.write(0, [2])
+        first.join(5.0)
+        store.join_notifications()
+        self.assertEqual(received, [(0, 1), (1, 2)])
+        self.assertEqual(store.app.holding_registers.read(0), [2])
 
 
 class TestMappedRanges(unittest.TestCase):

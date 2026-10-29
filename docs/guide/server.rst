@@ -188,8 +188,12 @@ reads them.
   values changed in a range at C speed, without a ``Change`` per value (``mbtcp-server --log-changes`` logs a range of
   more than 8 values as one line this way).
 - ``subscribe(..., app_writes=True)`` also notifies the writes of the application (``event.ctx`` is then ``None``).
-- By default, the listener runs in the thread of the client session: the response waits for it, keep it short. With
-  ``subscribe(..., threaded=True)``, it runs in a thread of the store, in order, and never delays the clients. The
+- By default, the listener runs in the thread of the client session: the response waits for it, keep it short. The
+  sessions of several clients run at once: so can the listener, and two events can come in another order than their
+  requests (the listener of the first one may run after the one of the second). A listener that keeps a state (like
+  the last value of each register) must be thread-safe, and should rather be threaded. With
+  ``subscribe(..., threaded=True)``, it runs in a thread of the store, one event at a time, in the order of the
+  commits, and never delays the clients. The
   events wait in a bounded queue (``MemoryStore.notify_queue_size``, 10000 events, and
   ``MemoryStore.notify_queue_values``, 200000 values written for all of them, a few MB): if the listener can't keep up,
   the events that don't fit are dropped, with a warning in the log (at most one per 10 s, with the count).

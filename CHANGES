@@ -21,6 +21,10 @@ Revision history for pyModbusTCP
       function, hidden behind an allowed one, like a write behind a read with --read-only, or a diagnostics 0x08 behind
       a 0x03 with the default --functions. A broadcast of a standard write with a byte missing or bytes in excess is
       no longer answered as a success.
+    - server: a threaded change listener (subscribe(threaded=True)) could get the events of two concurrent requests in
+      the reverse order of their commits (queued after the lock of the store): a listener that keeps the last value of
+      a register could keep the older one. They are queued in the order of the commits, as the server guide says. The
+      guide and subscribe() now say that the other listeners can be called by several threads at once, in any order.
     - server: a threaded change listener (subscribe(threaded=True)) that raised a BaseException other than an
       Exception, like sys.exit(), ended the notification thread of the store without a log: no threaded listener
       got an event afterwards, and join_notifications() never returned. It is logged like the other errors of a

@@ -205,7 +205,11 @@ class DataStore(ABC):
         :param app_writes: also notify the writes of the application (by default, only the client requests)
         :param threaded: call the listener from a thread of the store instead of the thread that committed the
             transaction (the session thread of the client: its response waits for the listener); the events wait
-            in a bounded queue, an event that doesn't fit is dropped (and logged)
+            in a bounded queue, an event that doesn't fit is dropped (and logged). A threaded listener gets the events
+            one at a time, in the order of the commits. Without it, the listener is called by the thread of each
+            transaction, without the lock of the store: by several threads at once (sessions of several clients),
+            and two events can come in another order than their commits (a listener that keeps the last value of an
+            address can keep the older one)
         :returns: a function to call to unsubscribe
         """
 
@@ -421,6 +425,8 @@ class MemoryStore(DataStore):
             # nested in the same thread (like a mapped function that uses the store): part of the same transaction
             yield current
             return
+        event: ChangeEvent | None = None
+        sync_listeners: list[_ListenerEntry] = []
         with self._lock:
             tx = _MemoryTransaction(self, ctx)
             self._local.tx = tx
@@ -431,12 +437,17 @@ class MemoryStore(DataStore):
                 raise
             finally:
                 self._local.tx = None
-        # committed: notify the listeners, without the lock (they can use the store); no listener (the usual case):
-        # no event at all
-        if self._listeners:
-            event = tx._committed_event()
-            if event is not None:
-                self._notify(event)
+            # committed; no listener (the usual case): no event at all. The threaded listeners get the event now,
+            # with the lock: their queue has the events in the order of the commits (queued after the lock, a
+            # transaction committed later could pass it)
+            if self._listeners:
+                event = tx._committed_event()
+                if event is not None:
+                    sync_listeners = self._notify_threaded(event)
+        # the other listeners: in this thread, without the lock (they can use the store)
+        if event is not None:
+            for entry in sync_listeners:
+                _call_listener(entry.listener, event, self._listener_error_log)
 
     def _segments(self, space: Space, address: int, count: int) -> list[tuple[_Mapping | None, int, int]]:
         """Split a range in memory and mapped parts: [(mapping or None, address, count), ...].
@@ -522,9 +533,14 @@ class MemoryStore(DataStore):
         if notify_queue is not None:
             notify_queue.join()
 
-    def _notify(self, event: ChangeEvent) -> None:
+    def _notify_threaded(self, event: ChangeEvent) -> list[_ListenerEntry]:
+        """Queue the event for the threaded listeners (called with the lock of the store, never blocks).
+
+        :returns: the other listeners of the event, to call in the thread of the transaction, without the lock
+        """
         with self._listeners_lock:
             entries = list(self._listeners)
+        sync_listeners: list[_ListenerEntry] = []
         for entry in entries:
             if not event.by_client and not entry.app_writes:
                 continue
@@ -535,7 +551,8 @@ class MemoryStore(DataStore):
                                             'full: %(events)d events or %(values)d values at most)',
                                             events=self.notify_queue_size, values=self.notify_queue_values)
             else:
-                _call_listener(entry.listener, event, self._listener_error_log)
+                sync_listeners.append(entry)
+        return sync_listeners
 
     def _enqueue(self, notify_queue: queue.Queue[tuple[Listener, ChangeEvent]], listener: Listener,
                  event: ChangeEvent) -> bool:
