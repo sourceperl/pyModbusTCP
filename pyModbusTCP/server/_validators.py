@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterable, Mapping
 from typing import TYPE_CHECKING, Any
 
 from ..utils import link_local_without_zone, valid_host
-from ._common import _IPNetwork
+from ._common import _IPNetwork, is_wildcard_address
 from .device_id import DeviceIdentification
 
 if TYPE_CHECKING:
@@ -33,6 +33,10 @@ def validate_host(host: str) -> str:
     if link_local_without_zone(host):
         raise ValueError(f'host {host!r} is a link-local IPv6 address: give its interface, like \'{host}%eth0\' '
                          f'(\'{host}%2\' with an interface index on Windows)')
+    # the IPv4 wildcard in its IPv4-mapped form: every IPv4 interface (on a dual-stack socket), never by mistake
+    if is_wildcard_address(host) and host.strip() not in ('0.0.0.0', '::'):
+        raise ValueError(f'host {host!r} is the wildcard address (every interface) in another form: write \'0.0.0.0\' '
+                         '(or \'::\' with ipv6=True) to listen on every interface')
     if not valid_host(host):
         raise ValueError(f'host {host!r} is not an IP address in its standard form or a hostname (a legacy IPv4 form '
                          'like \'127.1\', \'0\' or \'192.168.010.1\' is refused: write \'127.0.0.1\', \'0.0.0.0\' '

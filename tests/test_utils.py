@@ -244,8 +244,12 @@ class TestUtils(unittest.TestCase):
                      'fe80::1%eth0%eth1'):
             self.assertIs(valid_host(host), False, repr(host))
         self.assertTrue(link_local_without_zone('fe80::1'))
-        for host in ('fe80::1%eth0', '::1', '2001:db8::1', '127.0.0.1', 'plc.local'):
+        for host in ('fe80::1%eth0', '::1', '2001:db8::1', '127.0.0.1', 'plc.local', '::ffff:169.254.0.1'):
             self.assertFalse(link_local_without_zone(host), host)
+        # an IPv4-mapped link-local address is an IPv4 one, without interface: the same result on every Python release
+        # (IPv6Address.is_link_local is True for it in some releases, False in others: it isn't used)
+        self.assertIs(valid_host('::ffff:169.254.0.1'), True)
+        self.assertIs(valid_host('::ffff:169.254.0.1%eth0'), False)
 
     def test_valid_host_doesnt_depend_on_the_os(self) -> None:
         """The addresses are checked by the ipaddress module, never by socket.inet_pton(): the inet_pton() of macOS

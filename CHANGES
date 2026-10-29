@@ -21,6 +21,13 @@ Revision history for pyModbusTCP
       function, hidden behind an allowed one, like a write behind a read with --read-only, or a diagnostics 0x08 behind
       a 0x03 with the default --functions. A broadcast of a standard write with a byte missing or bytes in excess is
       no longer answered as a success.
+    - server: a host given by name that resolves to ::ffff:0.0.0.0 (the IPv4 wildcard on a dual-stack IPv6 socket:
+      every IPv4 interface on Linux) was not refused with Python 3.12.0 to 3.12.3, where
+      IPv6Address.is_unspecified is False for it. The wildcard address is now tested the same way on every Python
+      release, and the host '::ffff:0.0.0.0' (or '::0', another form of the wildcard address) is refused like '0':
+      write '0.0.0.0' or '::' to listen on every interface.
+    - utils: valid_host() no longer depends on the Python release for an IPv4-mapped link-local address
+      (::ffff:169.254.x.y): valid, without an interface (IPv6Address.is_link_local is True for it in some releases).
     - server: a new allowed_hosts set while a client was connecting (between the check of its connection and the start
       of its session) let this client in, even if the new whitelist refused it: its session was not yet among the
       sessions to close. The whitelist is checked again when the session starts.

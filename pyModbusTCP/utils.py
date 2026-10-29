@@ -347,7 +347,7 @@ def valid_host(host_str: str) -> bool:
     if sep:
         # an interface: only for a link-local IPv6 address
         ip = _ipv6_address(address)
-        return ip is not None and ip.is_link_local and bool(_RE_ZONE_ID.fullmatch(zone_id))
+        return ip is not None and _is_link_local(ip) and bool(_RE_ZONE_ID.fullmatch(zone_id))
     try:
         ipaddress.IPv4Address(host_str)
         return True
@@ -356,7 +356,7 @@ def valid_host(host_str: str) -> bool:
     ip = _ipv6_address(host_str)
     if ip is not None:
         # a link-local address needs its interface (see link_local_without_zone())
-        return not ip.is_link_local
+        return not _is_link_local(ip)
     # valid hostname ?
     # strip final dot, if present
     if host_str[-1] == '.':
@@ -376,12 +376,26 @@ def link_local_without_zone(host_str: str) -> bool:
     """Return True for a link-local IPv6 address without its interface (like "fe80::1"): refused by valid_host(),
     a caller can give a specific error message for it."""
     ip = _ipv6_address(host_str)
-    return ip is not None and ip.is_link_local
+    return ip is not None and _is_link_local(ip)
 
 
 ####################
 # internal functions
 ####################
+
+# the link-local IPv6 addresses: their interface (zone id) tells which link is meant
+_IPV6_LINK_LOCAL = ipaddress.IPv6Network('fe80::/10')
+
+
+def _is_link_local(ip: ipaddress.IPv6Address) -> bool:
+    """True for a link-local IPv6 address (fe80::/10), the only ones with a zone id.
+
+    Not IPv6Address.is_link_local: it is also True for an IPv4-mapped link-local address (::ffff:169.254.x.y) in some
+    Python releases (3.13, the last security releases of 3.10 and 3.11), False in others (3.12.0 to 3.12.3): such an
+    address is an IPv4 one, it has no zone id, and valid_host() gives the same result on every Python release.
+    """
+    return ip in _IPV6_LINK_LOCAL
+
 
 def _ipv6_address(text: str) -> ipaddress.IPv6Address | None:
     """An IPv6 address without zone id ("%..."), None if text is not one."""

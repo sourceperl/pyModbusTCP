@@ -17,6 +17,7 @@ from ._common import (
     _IPNetwork,
     client_ip,
     host_key,
+    is_wildcard_address,
     logger,
 )
 from .errors import Error, NetworkError
@@ -43,9 +44,9 @@ def named_host_address(server_address: Any, family: int) -> Any:
     never the wildcard address. An IP address (in its standard form, see the validation of ModbusServer.host) is
     returned as is.
 
-    bind() would resolve the name itself, and listen on every interface for a name that resolves to 0.0.0.0 or ::
-    (a hosts file, a DNS answer), while an empty host or "0" is refused: the result is checked, and the address checked
-    is the one bound (resolved once).
+    bind() would resolve the name itself, and listen on every interface for a name that resolves to 0.0.0.0, :: or
+    ::ffff:0.0.0.0 (a hosts file, a DNS answer), while an empty host or "0" is refused: the result is checked, and the
+    address checked is the one bound (resolved once).
 
     :raises OSError: (socket.gaierror) for an unknown name, or for a name that resolves to the wildcard address
     """
@@ -58,7 +59,7 @@ def named_host_address(server_address: Any, family: int) -> Any:
     except ValueError:
         pass
     sockaddr = socket.getaddrinfo(host, port, family, socket.SOCK_STREAM)[0][4]
-    if ipaddress.ip_address(str(sockaddr[0]).partition('%')[0]).is_unspecified:
+    if is_wildcard_address(str(sockaddr[0])):
         raise OSError(f'host {host!r} resolves to the wildcard address {sockaddr[0]} (every interface): write it as an '
                       'IP address to listen on every interface')
     return sockaddr

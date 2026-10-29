@@ -34,6 +34,17 @@ def client_ip(client_address: Any) -> ipaddress.IPv4Address | ipaddress.IPv6Addr
     return ip
 
 
+def is_wildcard_address(address: str) -> bool:
+    """Return True for the wildcard address of bind() (every interface): 0.0.0.0, ::, and ::ffff:0.0.0.0, the IPv4
+    wildcard on a dual-stack IPv6 socket (every IPv4 interface on Linux).
+
+    The IPv4-mapped form is tested as IPv4 here (see client_ip()): IPv6Address.is_unspecified is False for it in some
+    Python releases (3.12.0 to 3.12.3 for example), True in the others.
+    """
+    ip = client_ip((address,))
+    return ip is not None and ip.is_unspecified
+
+
 def host_key(client_address: Any, ipv6_prefix: int = HOST_IPV6_PREFIX) -> str:
     """Return the key used to count the connections (or requests) of a client host.
 

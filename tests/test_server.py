@@ -1,6 +1,7 @@
 """ Test of pyModbusTCP.ModbusServer """
 
 import gc
+import ipaddress
 import logging
 import signal
 import socket
@@ -151,8 +152,14 @@ class TestModbusServer(unittest.TestCase):
                      '127.0.0.1%eth0'):
             with self.subTest(host=host), self.assertRaisesRegex(ValueError, 'standard form'):
                 ModbusServer(host=host)
+        # the wildcard address in another form than 0.0.0.0 or :: (like its IPv4-mapped form, every IPv4 interface on
+        # a dual-stack socket): refused, on every Python release (IPv6Address.is_unspecified isn't used)
+        for host in ('::ffff:0.0.0.0', '::ffff:0:0', '::FFFF:0.0.0.0', '::0', '0::0', '0:0:0:0:0:0:0:0', '::0.0.0.0'):
+            with self.subTest(host=host), self.assertRaisesRegex(ValueError, 'wildcard address'):
+                ModbusServer(host=host)
         # the standard forms, the wildcard addresses written on purpose, the hostnames, a link-local IPv6 address
-        for host in ('127.0.0.1', '0.0.0.0', '::', '::1', 'localhost', 'plc-gw.local', 'fe80::1%eth0', 'fe80::1%2'):
+        for host in ('127.0.0.1', '0.0.0.0', '::', '::1', 'localhost', 'plc-gw.local', 'fe80::1%eth0', 'fe80::1%2',
+                     '::ffff:127.0.0.1'):
             with self.subTest(host=host):
                 self.assertEqual(ModbusServer(host=host).host, host)
         # a link-local IPv6 address needs its interface (it tells the link to listen on), an interface on another
@@ -500,11 +507,18 @@ class TestModbusServerLimits(_LiveServerTestCase):
         """S11 of the audit: a host given by name that resolves to 0.0.0.0 or :: is refused by start() (it listened on
         every interface); the name is resolved once, the address bound is the one checked."""
         from pyModbusTCP.server._transport import named_host_address
-        for family, wildcard in ((socket.AF_INET, ('0.0.0.0', 502)), (socket.AF_INET6, ('::', 502, 0, 0))):
+        for family, wildcard in ((socket.AF_INET, ('0.0.0.0', 502)), (socket.AF_INET6, ('::', 502, 0, 0)),
+                                 (socket.AF_INET6, ('::ffff:0.0.0.0', 502, 0, 0))):
             with self.subTest(wildcard=wildcard[0]), \
                     mock.patch('socket.getaddrinfo', return_value=[(family, socket.SOCK_STREAM, 6, '', wildcard)]), \
                     self.assertRaisesRegex(OSError, 'wildcard address'):
                 named_host_address(('plc-gw.example', 502), family)
+        # the same with the ipaddress of Python 3.12.0 to 3.12.3, where ::ffff:0.0.0.0 is not "unspecified"
+        mapped = [(socket.AF_INET6, socket.SOCK_STREAM, 6, '', ('::ffff:0.0.0.0', 502, 0, 0))]
+        with mock.patch('socket.getaddrinfo', return_value=mapped), \
+                mock.patch.object(ipaddress.IPv6Address, 'is_unspecified', property(lambda ip: ip._ip == 0)), \
+                self.assertRaisesRegex(OSError, 'wildcard address'):
+            named_host_address(('plc-gw.example', 502), socket.AF_INET6)
         sockaddr = ('192.0.2.10', 502)
         with mock.patch('socket.getaddrinfo', return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, '', sockaddr)]):
             self.assertEqual(named_host_address(('plc-gw.example', 502), socket.AF_INET), sockaddr)
