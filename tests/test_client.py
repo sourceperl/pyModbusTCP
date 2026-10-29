@@ -596,6 +596,8 @@ class FakeGateway:
         self.reply = reply
         self.frames: list[bytes] = []
         self.connections = 0
+        # how each connection ended: 'eof' (a FIN, a normal close of the client) or the name of the error (a RST...)
+        self.ends: list[str] = []
         self.sock = socket.socket()
         self.sock.bind(('127.0.0.1', 0))
         self.sock.listen(4)
@@ -617,11 +619,13 @@ class FakeGateway:
                 while True:
                     header = conn.recv(7)
                     if len(header) < 7:
+                        self.ends.append('eof')
                         return
                     frame = header + conn.recv(struct.unpack('>H', header[4:6])[0] - 1)
                     self.frames.append(frame)
                     conn.sendall(self.reply(frame))
-            except OSError:
+            except OSError as e:
+                self.ends.append(type(e).__name__)
                 return
 
     def close(self) -> None:
@@ -687,6 +691,25 @@ class TestBroadcast(unittest.TestCase):
             self.assertTrue(c.write_single_register(12, 44))
             self.assertTrue(c.is_open, 'the connection stays open')
             self.assertEqual(gw.connections, 1)
+
+    def test_close_after_broadcasts(self) -> None:
+        """close() after broadcasts answered by the gateway (replies never read): a normal close, never a reset.
+
+        A socket closed with unread data sends a RST: on Windows, the server then loses the requests it has received
+        and not yet read, like the last broadcast sent just before the close (it has no reply to wait for).
+        """
+        gw = self.gateway(lambda frame: frame)
+        c = ModbusClient(host='127.0.0.1', port=gw.port, unit_id=1, timeout=2.0)
+        self.assertTrue(c.write_single_register(10, 1, broadcast=True))
+        self.assertTrue(c.write_single_register(11, 2, broadcast=True))
+        # the replies are on the socket of the client, unread
+        time.sleep(0.2)
+        c.close()
+        deadline = time.monotonic() + 2.0
+        while not gw.ends and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(gw.ends, ['eof'])
+        self.assertEqual(len(gw.frames), 2)
 
     def test_burst_of_broadcasts(self) -> None:
         """30 broadcasts answered late (more than the 16 of the first version): the next request still succeeds."""

@@ -33,6 +33,10 @@ BROADCAST_REPLY_DELAY = 10.0
 # errors of a send/recv on a connection that the server has reset or no longer knows (it didn't read the request)
 # (exception classes, not errno values: they also match the WSAExxx codes of Windows)
 CONN_LOST_ERRORS = (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)
+# the data received and not read is dropped before a close (see _discard_pending_data()): read by blocks of this size,
+# this number of reads at most (a server that sends without end can't hold close())
+DISCARD_READ_SIZE = 4096
+DISCARD_MAX_READS = 16
 
 
 class ClientTransportMixin:
@@ -212,6 +216,7 @@ class ClientTransportMixin:
         """Close current TCP connection."""
         if self._sock is not None:
             try:
+                self._discard_pending_data()
                 self._sock.close()
             except OSError:
                 pass
@@ -219,6 +224,25 @@ class ClientTransportMixin:
                 self._sock = None
         # no late reply to a broadcast can come on a new connection
         self._broadcast_ids.clear()
+
+    def _discard_pending_data(self) -> None:
+        """Read and drop the bytes already received on the socket, without blocking: the close is then a normal one.
+
+        A socket closed with unread data (like the replies of a gateway to broadcast requests, that the client never
+        reads) sends a RST instead of a FIN. On Windows, a RST makes the server lose the data it has received but not
+        yet read: the last requests sent just before the close (a broadcast, that has no reply to wait for) would
+        never be executed. The bytes that come after this read are the reply of a request that the server has read.
+        """
+        if self._sock is None:
+            return
+        try:
+            self._sock.setblocking(False)
+            for _ in range(DISCARD_MAX_READS):
+                if not self._sock.recv(DISCARD_READ_SIZE):
+                    return
+        except OSError:
+            # nothing more to read (BlockingIOError), or a connection already reset: nothing to protect
+            pass
 
     def _set_sock_timeout(self, value: float) -> None:
         """Set the current socket timeout, but only if it differs by more than 10 ms from the current one.
