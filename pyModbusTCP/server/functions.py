@@ -111,8 +111,23 @@ def _with_byte_order(fmt: str) -> str:
 FunctionHandler = Callable[[Request], bytes]
 
 
+def _check_size(req: Request, size: int) -> None:
+    """A request of a standard function has exactly the size of its fields (function code included).
+
+    A missing byte, or a byte after the fields, is an "illegal data value" (03), never executed: a request with bytes
+    after its data is not the request of the client (a bug, a frame cut or merged by a gateway, the remains of
+    another request), and a gateway that relays it to a serial line would write them in the same RTU frame (a hidden
+    request for a slave that ends a frame by its size, see mbtcp-tcp2rtu).
+
+    :raises IllegalDataValue: if the PDU is not exactly size bytes
+    """
+    if len(req.pdu) != size:
+        raise IllegalDataValue()
+
+
 def read_bits(req: Request) -> bytes:
     """Functions Read Coils (0x01) and Read Discrete Inputs (0x02)."""
+    _check_size(req, 5)
     (address, quantity) = req.unpack('>HH', 1, 5)
     if not 0x0001 <= quantity <= 0x07D0:
         raise IllegalDataValue()
@@ -125,6 +140,7 @@ def read_bits(req: Request) -> bytes:
 
 def read_words(req: Request) -> bytes:
     """Functions Read Holding Registers (0x03) and Read Input Registers (0x04)."""
+    _check_size(req, 5)
     (address, quantity) = req.unpack('>HH', 1, 5)
     if not 0x0001 <= quantity <= 0x007D:
         raise IllegalDataValue()
@@ -136,6 +152,7 @@ def read_words(req: Request) -> bytes:
 
 def write_single_coil(req: Request) -> bytes:
     """Function Write Single Coil (0x05)."""
+    _check_size(req, 5)
     (address, value) = req.unpack('>HH', 1, 5)
     if value not in (0x0000, 0xFF00):
         raise IllegalDataValue()
@@ -146,6 +163,7 @@ def write_single_coil(req: Request) -> bytes:
 
 def write_single_register(req: Request) -> bytes:
     """Function Write Single Register (0x06)."""
+    _check_size(req, 5)
     (address, value) = req.unpack('>HH', 1, 5)
     with req.transaction() as tx:
         tx.write(Space.HOLDING_REGISTERS, address, [value])
@@ -155,8 +173,8 @@ def write_single_register(req: Request) -> bytes:
 def write_multiple_coils(req: Request) -> bytes:
     """Function Write Multiple Coils (0x0F)."""
     (address, quantity, byte_count) = req.unpack('>HHB', 1, 6)
-    # byte count must match the quantity, the data must be complete, any extra bytes after them are ignored
-    if not (0x0001 <= quantity <= 0x07B0 and byte_count == (quantity + 7) // 8 and len(req.pdu) >= 6 + byte_count):
+    # byte count must match the quantity, the data must be complete, no byte after them (see _check_size())
+    if not (0x0001 <= quantity <= 0x07B0 and byte_count == (quantity + 7) // 8 and len(req.pdu) == 6 + byte_count):
         raise IllegalDataValue()
     bits = _unpack_bits(req.pdu[6:6 + byte_count], quantity)
     with req.transaction() as tx:
@@ -167,7 +185,7 @@ def write_multiple_coils(req: Request) -> bytes:
 def write_multiple_registers(req: Request) -> bytes:
     """Function Write Multiple Registers (0x10)."""
     (address, quantity, byte_count) = req.unpack('>HHB', 1, 6)
-    if not (0x0001 <= quantity <= 0x007B and byte_count == quantity * 2 and len(req.pdu) >= 6 + byte_count):
+    if not (0x0001 <= quantity <= 0x007B and byte_count == quantity * 2 and len(req.pdu) == 6 + byte_count):
         raise IllegalDataValue()
     words = list(req.unpack(f'>{quantity}H', 6, 6 + byte_count))
     with req.transaction() as tx:
@@ -183,7 +201,7 @@ def write_read_multiple_registers(req: Request) -> bytes:
     """
     (read_address, read_quantity, write_address, write_quantity, byte_count) = req.unpack('>HHHHB', 1, 10)
     if not (0x0001 <= write_quantity <= 0x0079 and byte_count == write_quantity * 2
-            and len(req.pdu) >= 10 + byte_count and 0x0001 <= read_quantity <= 0x007D):
+            and len(req.pdu) == 10 + byte_count and 0x0001 <= read_quantity <= 0x007D):
         raise IllegalDataValue()
     words = list(req.unpack(f'>{write_quantity}H', 10, 10 + byte_count))
     with req.transaction() as tx:
@@ -201,6 +219,7 @@ def encapsulated_interface_transport(req: Request) -> bytes:
     (mei_type,) = req.unpack('B', 1, 2)
     if mei_type != MEI_TYPE_READ_DEVICE_ID:
         raise IllegalDataAddress()
+    _check_size(req, 4)
     (device_id_code, object_id) = req.unpack('BB', 2, 4)
     if device_id_code not in (1, 2, 3, 4):
         raise IllegalDataValue()

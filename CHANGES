@@ -2,6 +2,13 @@ Revision history for pyModbusTCP
 
 0.4.0a5.dev0 (not released)
 
+    Breaking changes, server:
+
+    - a request of a standard function (0x01 to 0x06, 0x0F, 0x10, 0x17, 0x2B/0x0E) with bytes after its fields gets
+      the exception 0x03 (illegal data value) and is never executed: these bytes were ignored, and the request
+      executed (like a write multiple registers 0x10 with a byte after its data, that changed the register). A client
+      that pads its requests must send them without these bytes.
+
     Breaking changes, tools:
 
     - mbtcp-tcp2rtu refuses a request of a standard function (0x01 to 0x07, 0x0B, 0x0C, 0x0F to 0x11, 0x14 to 0x18,

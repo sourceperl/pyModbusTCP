@@ -317,6 +317,11 @@ exception:
 - The response of a handler has 2 to 253 bytes and starts with the function code of the request (or this code + 0x80,
   an exception): a response with the function code alone (``req.reply()`` without field), or the one of another
   function, would be refused by the client. It is never sent, the client gets a "slave device failure" instead.
+- The standard functions refuse a request that is not exactly the size of its fields (a missing byte, or a byte
+  after them): "illegal data value", nothing is executed. A handler of the application gets the whole PDU:
+  ``req.unpack()`` decodes a part of it and ignores the bytes after this part, so a handler checks the size itself
+  (``if len(req.pdu) != 3: raise IllegalDataValue()``), above all a fallback that relays the request to a serial
+  line.
 - A standard function can be replaced, and called from the new handler (``STANDARD_FUNCTIONS[0x06](req)``).
 - ``del server.functions[code]`` removes a function ("illegal function" exception).
 - ``ModbusServer(functions={})`` starts without any function, ``fallback=handler`` handles the function codes without

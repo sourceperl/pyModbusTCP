@@ -229,8 +229,10 @@ the connections of the previous one are fully closed by the system.
   the connection, since the TCP stream can no longer be trusted.
 - The PDU of a request is checked against its function: quantities in the ranges of the specification, a byte
   count that matches the quantity for the write functions, no missing data. An invalid request gets an
-  "illegal data value" exception and the session stays in sync. Bytes after a complete and consistent request
-  are ignored.
+  "illegal data value" exception and the session stays in sync. So does a request of a standard function with
+  bytes after its fields: it's never executed (it is not the request of the client: a bug, a frame cut or merged by
+  a gateway; and a gateway that relays it to a serial line would write these bytes in the same RTU frame). A handler
+  of the application (or the fallback) gets the whole PDU: it checks its size itself (see the server guide).
 - An unexpected exception raised by user code (function handler, fallback, store wrapper, mapped range) is
   logged and answered with a "slave device failure" exception, the session is kept. Every value written by the
   request is restored (the request runs in a transaction of the data store). An exception raised by a change

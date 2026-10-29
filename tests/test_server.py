@@ -1122,16 +1122,35 @@ class TestModbusServerSpecFrames(unittest.TestCase):
         self.assertEqual(self.store.app.holding_registers.read(0, 2), [0, 0])
         self.assertEqual(self.exchange('03 0000 0001'), '03020000')
 
-    def test_extra_bytes_are_ignored(self) -> None:
-        """Bytes after a complete and consistent request are ignored (the MBAP length keeps the stream in sync)."""
+    def test_extra_bytes_are_refused(self) -> None:
+        """A byte after the fields of a request of a standard function: ILLEGAL DATA VALUE (03), nothing is written
+        (the MBAP length keeps the stream in sync, the session goes on)."""
         self.store.app.holding_registers.write(0, [0x1234])
-        self.assertEqual(self.exchange('03 0000 0001 ffff'), '03021234')
-        self.assertEqual(self.exchange('06 0001 abcd 00'), '060001abcd')
-        self.assertEqual(self.exchange('0f 0010 000a 02 ff 03 ee'), '0f0010000a')
+        bad_requests = {
+            'read coils': '01 0000 0001 ff',
+            'read discrete inputs': '02 0000 0001 ff',
+            'read holding registers': '03 0000 0001 ffff',
+            'read input registers': '04 0000 0001 ff',
+            'write single coil': '05 0001 ff00 ff',
+            'write single register': '06 0001 abcd 00',
+            'write multiple coils': '0f 0010 000a 02 ff 03 ee',
+            'write multiple registers': '10 0000 0001 02 5678 ff',
+            'write multiple registers, 2 bytes after': '10 0002 0001 02 5678 9abc',
+            'write/read multiple registers': '17 0000 0003 0003 0001 02 0042 ff',
+            'read device identification': '2b 0e 01 00 ff',
+        }
+        self.server.device_id = DeviceIdentification(vendor_name=b'V')
+        for name, pdu in bad_requests.items():
+            with self.subTest(name):
+                self.assertEqual(self.exchange(pdu), f'{bytes.fromhex(pdu)[0] | 0x80:02x}03')
+        # nothing is written, the session is still in sync, and the same requests without the extra bytes succeed
+        self.assertEqual(self.store.app.holding_registers.read(0, 5), [0x1234, 0, 0, 0, 0])
+        self.assertEqual(self.store.app.coils.read(0, 32), [False] * 32)
+        self.assertEqual(self.exchange('10 0000 0001 02 5678'), '1000000001')
+        self.assertEqual(self.exchange('0f 0010 000a 02 ff 03'), '0f0010000a')
+        self.assertEqual(self.exchange('17 0000 0001 0003 0001 02 0042'), '17025678')
+        self.assertEqual(self.store.app.holding_registers.read(0, 4), [0x5678, 0, 0, 0x42])
         self.assertEqual(self.store.app.coils.read(16, 11), [True] * 10 + [False])
-        self.assertEqual(self.exchange('10 0002 0001 02 5678 9abc'), '1000020001')
-        self.assertEqual(self.exchange('17 0000 0003 0003 0001 02 0042 ff'), '17061234abcd5678')
-        self.assertEqual(self.store.app.holding_registers.read(0, 5), [0x1234, 0xabcd, 0x5678, 0x42, 0])
 
     def test_mapped_read_without_the_right_count(self) -> None:
         """A mapped range that returns a wrong number of values is a SLAVE DEVICE FAILURE (04), never a bad frame."""
