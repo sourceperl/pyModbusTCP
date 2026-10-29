@@ -21,6 +21,10 @@ Revision history for pyModbusTCP
       function, hidden behind an allowed one, like a write behind a read with --read-only, or a diagnostics 0x08 behind
       a 0x03 with the default --functions. A broadcast of a standard write with a byte missing or bytes in excess is
       no longer answered as a success.
+    - server: a threaded change listener (subscribe(threaded=True)) that raised a BaseException other than an
+      Exception, like sys.exit(), ended the notification thread of the store without a log: no threaded listener
+      got an event afterwards, and join_notifications() never returned. It is logged like the other errors of a
+      listener, the thread goes on.
     - server: a host given by name that resolves to ::ffff:0.0.0.0 (the IPv4 wildcard on a dual-stack IPv6 socket:
       every IPv4 interface on Linux) was not refused with Python 3.12.0 to 3.12.3, where
       IPv6Address.is_unspecified is False for it. The wildcard address is now tested the same way on every Python

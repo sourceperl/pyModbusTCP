@@ -553,10 +553,17 @@ class MemoryStore(DataStore):
             return True
 
     def _notify_loop(self, notify_queue: queue.Queue[tuple[Listener, ChangeEvent]]) -> None:
+        # this thread serves every threaded listener of the store, for the life of the store: it never ends on an
+        # error of one of them. _call_listener() logs an Exception; a BaseException (like a sys.exit() in a listener)
+        # ended the thread, without a log of the store: the next events of every threaded listener were never
+        # delivered (once the queue full, dropped), and join_notifications() never returned
         while True:
             listener, event = notify_queue.get()
             try:
                 _call_listener(listener, event, self._listener_error_log)
+            except BaseException:  # noqa: BLE001
+                self._listener_error_log.event('Error in a change listener: %(count)d error(s) (last: %(listener)r)',
+                                               listener=listener, exc_info=True)
             finally:
                 with self._queued_values_lock:
                     self._queued_values -= event.size

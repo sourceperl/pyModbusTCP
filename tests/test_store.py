@@ -277,6 +277,31 @@ class TestNotifications(unittest.TestCase):
         # the transaction is committed anyway
         self.assertEqual(store.app.holding_registers.read(0), [1])
 
+    def test_threaded_listener_never_ends_the_notification_thread(self) -> None:
+        """A threaded listener that raises SystemExit: logged, the other threaded listeners still get every event.
+
+        The notification thread ended: no event was delivered after it, to any threaded listener, and
+        join_notifications() never returned.
+        """
+        store = MemoryStore(16)
+        received: list[int] = []
+
+        def exits(event: ChangeEvent) -> None:
+            sys.exit(1)
+
+        store.subscribe(exits, app_writes=True, threaded=True)
+        store.subscribe(lambda event: received.append(event.changes[0].new), app_writes=True, threaded=True)
+        with self.assertLogs('pyModbusTCP.server', level='ERROR') as logs:
+            for value in (1, 2):
+                store.app.holding_registers.write(0, [value])
+            # in a thread: never a hang of the test suite, whatever the result
+            joined = threading.Thread(target=store.join_notifications, daemon=True)
+            joined.start()
+            joined.join(5.0)
+        self.assertFalse(joined.is_alive(), 'join_notifications() never returns')
+        self.assertEqual(received, [1, 2])
+        self.assertIn('SystemExit', '\n'.join(logs.output))
+
 
 class TestMappedRanges(unittest.TestCase):
     def test_read_only_mapping(self) -> None:
