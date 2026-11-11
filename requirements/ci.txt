@@ -9,13 +9,13 @@
 # --no-isolation): its build backend is the hatchling pinned here, not the latest release.
 
 # lint and tests
-flake8==7.4.1
-pytest==9.1.1
+flake8==7.5.0
+pytest==9.2.0
 # type check (types-pyserial: type stubs of pyserial, for the gateways of pyModbusTCP.tools)
-mypy==2.4.0
-types-pyserial==3.5.0.20260712
+mypy==2.4.1
+types-pyserial==3.5.0.20261104
 # build of the two packages (build backend: hatchling, as required by both pyproject.toml)
 build==1.6.1
-hatchling==1.32.4
+hatchling==1.33.0
 # serial line of the gateways (extra serial: pyserial>=3.5,<4)
 pyserial==3.5
