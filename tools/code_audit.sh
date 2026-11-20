@@ -120,6 +120,21 @@ if ! command -v "$PYTHON" >/dev/null 2>&1; then
     exit 1
 fi
 
+# flake8 is never installed on Python 3.10 (its marker in requirements/ci.txt: its releases need 3.11): skipped with a
+# warning, like the CI on 3.10, instead of an error; the code it checks is the same on every Python release
+if contains flake8 "${CHECKS[@]}" && ! "$PYTHON" -c 'import sys; sys.exit(sys.version_info < (3, 11))'; then
+    echo "Warning: flake8 skipped, it needs Python 3.11 or later (requirements/ci.txt): use -p with a newer Python" >&2
+    kept=()
+    for check in "${CHECKS[@]}"; do
+        [[ "$check" != flake8 ]] && kept+=("$check")
+    done
+    if [[ ${#kept[@]} -eq 0 ]]; then
+        echo "Error: no check left to run" >&2
+        exit 1
+    fi
+    CHECKS=("${kept[@]}")
+fi
+
 # each tool must be a module of PYTHON: stop now with the install command, not with an error in the middle of the report
 missing=()
 for check in "${CHECKS[@]}"; do

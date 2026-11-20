@@ -86,7 +86,11 @@ jobs:
         python -m pip install --no-build-isolation ".[serial]"
         # lint and type check: here only (6 runs), not in each of the 15 runs of the job tests
         # any error stops the build (the same checks as tools/code_audit.sh)
-        flake8 . --count --max-complexity=10 --max-line-length=120 --statistics --extend-exclude=build/,docs/
+        # flake8: on Python 3.11 and later only, the releases of its marker in requirements/ci.txt (on 3.14 here, the
+        # same code as on 3.10); a flake8 missing on 3.11+ is an error (command not found), never a skipped lint
+        if python -c 'import sys; sys.exit(sys.version_info < (3, 11))'; then
+          flake8 . --count --max-complexity=10 --max-line-length=120 --statistics --extend-exclude=build/,docs/
+        fi
         ruff check --no-fix .
         mypy --strict pyModbusTCP
         # the release script itself, without the release checks (-c): build of the two packages without isolation,

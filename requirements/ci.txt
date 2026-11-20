@@ -2,14 +2,17 @@
 # of these tools never runs in the CI before a pull request of Dependabot (.github/dependabot.yml) updates it here.
 # Their own dependencies (pluggy, pycodestyle, packaging...) are not pinned: pip installs their latest compatible
 # release. The dev venv (./init_dev_venv.sh) installs them too (requirements/dev.txt).
-# Every version must support Python 3.10 to 3.14 (the matrix of the tests). pip itself is not here: the CI and the dev
+# Every version must support Python 3.10 to 3.14 (the matrix of the tests), except a linter that a marker installs
+# only on the Python releases it supports (python_version >= ...): the CI runs it only on these releases (the job
+# package of tests.yml), the code it checks is the same on every release. pip itself is not here: the CI and the dev
 # venv upgrade it to its latest release before installing these tools.
 #
 # The package itself is installed without build isolation (pip install --no-build-isolation, python -m build
 # --no-isolation): its build backend is the hatchling pinned here, not the latest release.
 
-# lint and tests
-flake8==7.4.1
+# lint (flake8 7.5 and later need Python 3.11: never installed on Python 3.10, where the CI doesn't run it)
+flake8==7.4.1; python_version >= "3.11"
+# tests
 pytest==9.1.1
 # type check (types-pyserial: type stubs of pyserial, for the gateways of pyModbusTCP.tools)
 mypy==2.4.0

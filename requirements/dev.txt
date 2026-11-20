@@ -2,7 +2,7 @@
 # checks give the results of the CI, and a release (tools/build_dist.sh, no build isolation) is built and checked by
 # known versions of build, hatchling and twine. Dependabot (.github/dependabot.yml) updates them.
 
-# the tools of the CI: flake8, pytest, mypy, types-pyserial, build, hatchling, pyserial
+# the tools of the CI: flake8 (Python 3.11 and later only), pytest, mypy, types-pyserial, build, hatchling, pyserial
 -r ci.txt
 
 # check of the packages before an upload (tools/build_dist.sh)
